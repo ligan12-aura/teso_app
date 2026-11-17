@@ -95,8 +95,7 @@ export function render(root, ctx) {
         </table></div>
         <div class="note warn" data-aviso hidden>${icon('alert', 16)}<span>Los ítems suman más que el presupuesto general: no alcanzaría para transferirlos todos.</span></div>` : emptyState('Aún no hay ministerios activos.', 'grid')}
       </article>
-      <div class="imp-actions"><button class="btn btn-primary" type="submit">Guardar presupuesto</button></div>
-      <p class="muted small">Solo el tesorero puede modificar estos montos.</p>
+      <div class="imp-actions"><p class="muted small">Solo el tesorero puede modificar estos montos.</p><button class="btn btn-primary" type="submit">Guardar presupuesto</button></div>
     </form>`;
     const form = body.querySelector('[data-pres-form]');
     const gen = form.presupuestoGeneral;

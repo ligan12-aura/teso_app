@@ -91,7 +91,16 @@ export function toast(msg, type = 'ok') {
   el.innerHTML = `${icon(type === 'err' ? 'alert' : 'checkCircle', 18)}<span>${esc(msg)}</span>`;
   host.appendChild(el);
   requestAnimationFrame(() => el.classList.add('in'));
-  setTimeout(() => { el.classList.remove('in'); setTimeout(() => el.remove(), 300); }, type === 'err' ? 5000 : 3000);
+  // El tiempo se pausa con el mouse encima o con la pestaña oculta
+  let restante = type === 'err' ? 5000 : 3000, inicio = 0, timer = 0;
+  const cerrar = () => { el.classList.remove('in'); setTimeout(() => el.remove(), 200); document.removeEventListener('visibilitychange', onVis); };
+  const correr = () => { inicio = Date.now(); timer = setTimeout(cerrar, restante); };
+  const pausar = () => { clearTimeout(timer); restante = Math.max(800, restante - (Date.now() - inicio)); };
+  const onVis = () => (document.hidden ? pausar() : correr());
+  el.addEventListener('mouseenter', pausar);
+  el.addEventListener('mouseleave', correr);
+  document.addEventListener('visibilitychange', onVis);
+  correr();
 }
 
 // ---------------- Modales ----------------
@@ -221,7 +230,11 @@ export function setupChartDefaults() {
   const C = window.Chart;
   C.defaults.font.family = "'Plus Jakarta Sans', system-ui, sans-serif";
   C.defaults.font.size = 12;
-  C.defaults.color = '#6b7280';
+  C.defaults.color = '#5f6676';
+  // Animación corta: son datos para leer, no para esperar
+  const reducir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  C.defaults.animation.duration = reducir ? 0 : 250;
+  C.defaults.animation.easing = 'easeOutQuart';
   C.defaults.plugins.legend.labels.usePointStyle = true;
   C.defaults.plugins.legend.labels.boxWidth = 8;
   C.defaults.plugins.tooltip.backgroundColor = '#1b2638';

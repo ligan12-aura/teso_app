@@ -21,7 +21,7 @@ const NAV = {
     { path: 'general', label: 'Tesorería', icon: 'wallet' },
     { path: 'ministerios', label: 'Ministerios', icon: 'grid' },
     { path: 'rendiciones', label: 'Rendiciones', icon: 'checkCircle' },
-    { path: 'admin', label: 'Configuración', icon: 'settings' }
+    { path: 'admin', label: 'Configuración', short: 'Ajustes', icon: 'settings' }
   ],
   lider: [
     { path: 'mi-ministerio', label: 'Mi ministerio', icon: 'wallet' },
@@ -173,7 +173,7 @@ function shell(active) {
   const nav = NAV[u.rol] || NAV.lider;
   const min = u.rol === 'lider' ? state.data.ministerios[0] : null;
   const initials = u.nombre.split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
-  const links = nav.map((n) => `<a href="#/${n.path}" class="nav-link ${active === n.path ? 'active' : ''}">${icon(n.icon, 20)}<span>${n.label}</span></a>`).join('');
+  const links = nav.map((n) => `<a href="#/${n.path}" class="nav-link ${active === n.path ? 'active' : ''}">${icon(n.icon, 20)}<span>${n.short ? `<span class="lbl-long">${n.label}</span><span class="lbl-short">${n.short}</span>` : n.label}</span></a>`).join('');
   return `
   <aside class="sidebar">
     <div class="brand">

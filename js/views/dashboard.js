@@ -34,7 +34,7 @@ export function render(root, ctx) {
     </div>
     <div class="head-actions">
       ${monthPicker(mes)}
-      <button class="btn btn-gold" data-culto>${icon('church')} Registrar culto</button>
+      <button class="btn btn-ghost" data-culto>${icon('church')} Registrar culto</button>
       <button class="btn btn-primary" data-nuevo>${icon('plus')} Movimiento</button>
     </div>
   </section>
