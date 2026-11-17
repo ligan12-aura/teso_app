@@ -131,7 +131,7 @@ export function demoEnv() {
 export function resetDemo() {
   localStorage.removeItem(DB_KEY);
   localStorage.removeItem(FILES_KEY);
-  localStorage.removeItem('teso_token');
+  localStorage.removeItem('teso_token_demo');
 }
 
 // ---------------- Boleta de ejemplo (SVG) ----------------

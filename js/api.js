@@ -1,8 +1,9 @@
 import { CONFIG } from './config.js';
 import { demoEnv } from './demo.js';
 
-export const isDemo = !CONFIG.API_URL;
-const TOKEN_KEY = 'teso_token';
+// Sin API_URL, o abriendo la página con ?demo, se usa el modo demostración (datos de ejemplo locales)
+export const isDemo = !CONFIG.API_URL || new URLSearchParams(location.search).has('demo');
+const TOKEN_KEY = isDemo ? 'teso_token_demo' : 'teso_token';
 let core = null;
 
 export const auth = {

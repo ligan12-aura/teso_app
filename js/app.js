@@ -10,6 +10,7 @@ import * as Rendiciones from './views/rendiciones.js';
 import * as Admin from './views/admin.js';
 import * as Perfil from './views/perfil.js';
 import { exportarExcel } from './export.js';
+import { abrirAyuda } from './views/ayuda.js';
 
 const app = document.getElementById('app');
 const state = { user: null, data: null, mes: null };
@@ -128,6 +129,10 @@ async function afterLogin() {
   const want = location.hash.replace(/^#\//, '').split('/')[0];
   if (!want || !ROUTES[want] || (ROUTES[want].role && ROUTES[want].role !== state.user.rol)) go(home());
   else route();
+  const key = `teso_guia_vista_${isDemo ? "demo_" : ""}${state.user.usuario}`;
+  let vista = true;
+  try { vista = !!localStorage.getItem(key); localStorage.setItem(key, '1'); } catch { /* */ }
+  if (!vista) setTimeout(() => abrirAyuda(state.user.rol, 'bienvenida'), 500);
 }
 
 async function forzarCambioPass() {
@@ -177,6 +182,7 @@ function shell(active) {
     </div>
     <nav class="nav">${links}</nav>
     <div class="side-foot">
+      <button class="side-action help-action" data-help>${icon('help')} Ayuda · Guía de uso</button>
       ${u.rol === 'tesorero' ? `
         ${state.data.extra?.sheetUrl ? `<a class="side-action" href="${esc(state.data.extra.sheetUrl)}" target="_blank" rel="noopener">${icon('sheet')} Abrir planilla</a>` : ''}
         <button class="side-action" data-export>${icon('download')} Descargar Excel</button>` : ''}
@@ -190,7 +196,8 @@ function shell(active) {
   <div class="main">
     <header class="topbar">
       <div class="brand mobile"><div class="brand-mark">${icon('church', 18)}</div><strong>El Redentor</strong></div>
-      ${isDemo ? `<span class="demo-pill">${icon('sparkle', 13)} Modo demo</span>` : ''}
+      ${isDemo ? `<span class="demo-pill">${icon('sparkle', 13)} <span class="dp-long">Modo</span> demo</span>` : ''}
+      <button class="help-pill mobile" data-help aria-label="Ayuda">${icon('help', 17)} Ayuda</button>
       <button class="icon-btn mobile" data-logout aria-label="Cerrar sesión">${icon('logout')}</button>
     </header>
     <main id="view" class="view"></main>
@@ -208,6 +215,7 @@ async function route() {
   const activeNav = path === 'ministerio' ? 'ministerios' : path;
   app.innerHTML = shell(activeNav);
   app.querySelectorAll('[data-logout]').forEach((b) => b.addEventListener('click', logout));
+  app.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('click', () => abrirAyuda(state.user.rol, location.hash.replace(/^#\//, '').split('/')[0])));
   app.querySelector('[data-export]')?.addEventListener('click', () => exportarExcel(state.data).catch((e) => toast(e.message, 'err')));
   const root = app.querySelector('#view');
   const ctx = {

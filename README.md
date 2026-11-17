@@ -2,7 +2,9 @@
 
 Aplicación web para llevar el control de la **tesorería general** de la iglesia y de los **fondos de cada ministerio** (Alabanza, Infantil, Jóvenes, Misiones, etc.), con rendición mensual de gastos, fotos de boletas y respaldo automático en una planilla.
 
-> **Pruébala sin instalar nada:** si `API_URL` está vacío en `js/config.js`, la app funciona en **modo demo** con datos de ejemplo guardados solo en tu navegador. Contraseña para todos los usuarios demo: `demo`.
+> **Modo demo:** agrega `?demo` al final de la dirección (ej: `https://ligan12-aura.github.io/teso_app/?demo`) para practicar con datos de ejemplo guardados solo en tu navegador, sin tocar los datos reales. Contraseña para todos los usuarios demo: `demo`. Útil para capacitar a los líderes.
+>
+> **Guía integrada:** el botón **Ayuda** explica cada función según el rol (tesorero o líder) y se abre en el tema de la pantalla actual. Se muestra automáticamente la primera vez que alguien entra.
 
 ---
 
