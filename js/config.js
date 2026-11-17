@@ -6,7 +6,7 @@
  *          guardados solo en este navegador).
  */
 export const CONFIG = {
-  API_URL: '',
+  API_URL: 'https://script.google.com/macros/s/AKfycbw4mzMOm8KSUgISiNkWHeqCrAVeaSIGAHCXH8_-MysheXowShEDGd078jkuCh0oJUGy/exec',
   NOMBRE_IGLESIA: 'Iglesia Bautista El Redentor',
   LOCALE: 'es-CL',
   MONEDA: 'CLP'
