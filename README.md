@@ -93,7 +93,14 @@ Hazlo con la **cuenta de Google de la iglesia / tesorería** (será la dueña de
 Personal y remuneraciones · Servicios básicos · Templo y mantención · Vehículo · Aportes y cooperación · Ministerios y educación · Ayuda social · Actividades y administración. Se definen en `GRUPOS` dentro de `backend/Core.js`.
 
 ### Actualizar el servidor después de un cambio
-Pega el nuevo código de `Core.js` y `Api.js` en Apps Script, ejecuta otra vez **`setup`** (no borra datos; actualiza encabezados y la hoja Resumen) y usa **Implementar → Administrar implementaciones → ✏️ → Versión: Nueva versión**. Así la URL no cambia.
+Con [clasp](https://github.com/google/clasp) (`npm i -g @google/clasp`, `clasp login`, y la API de Apps Script activada en https://script.google.com/home/usersettings). El archivo `.clasp.json` (no se sube a GitHub) apunta al proyecto y usa `backend/` como carpeta:
+```bash
+clasp push --force
+```
+```bash
+clasp deploy -i <ID_DE_LA_IMPLEMENTACIÓN> -d "descripción del cambio"
+```
+Así se publica una nueva versión con la **misma URL**. No hace falta ejecutar `setup`: si cambian las columnas, sube `SCHEMA_VERSION` en `backend/Api.js` y la planilla se actualiza sola en la siguiente solicitud.
 
 ---
 

@@ -5,3 +5,4 @@ __pycache__/
 EXCELS/
 *.xlsx
 *.xls
+.clasp.json

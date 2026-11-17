@@ -17,6 +17,10 @@
 var PROP_SHEET = 'SPREADSHEET_ID';
 var PROP_FOLDER = 'FOLDER_ID';
 var PROP_SECRET = 'TOKEN_SECRET';
+var PROP_SCHEMA = 'SCHEMA_VERSION';
+// Súbelo cada vez que cambien las columnas (TABLES) o la hoja Resumen:
+// el servidor se actualiza solo en la siguiente solicitud, sin ejecutar setup().
+var SCHEMA_VERSION = '2';
 
 // =================================================================
 // Instalación inicial — ejecutar UNA vez desde el editor
@@ -60,6 +64,7 @@ function setup() {
     Logger.log('Usuario inicial → usuario: tesorero · contraseña: ' + pass + ' (se pedirá cambiarla)');
   }
   Logger.log('Planilla: ' + ss.getUrl());
+  props.setProperty(PROP_SCHEMA, SCHEMA_VERSION);
   Logger.log('Listo. Ahora: Implementar > Nueva implementación > Aplicación web.');
 }
 
@@ -134,6 +139,7 @@ function doPost(e) {
   } catch (err) {
     return json_({ ok: false, error: 'Solicitud inválida' });
   }
+  migrarSiHaceFalta_();
   var env = buildEnv_();
   var core = TesoCore.create(env);
   var lock = null;
@@ -150,6 +156,25 @@ function doPost(e) {
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Actualiza encabezados, formatos, columna de tipo y hoja Resumen cuando cambia el esquema
+function migrarSiHaceFalta_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty(PROP_SCHEMA) === SCHEMA_VERSION || !props.getProperty(PROP_SHEET)) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try {
+    if (props.getProperty(PROP_SCHEMA) === SCHEMA_VERSION) return;
+    var ss = SpreadsheetApp.openById(props.getProperty(PROP_SHEET));
+    Object.keys(TesoCore.TABLES).forEach(function (name) { ensureSheet_(ss, name); });
+    rellenarGrupos_(ss);
+    crearResumen_(ss);
+    SpreadsheetApp.flush();
+    props.setProperty(PROP_SCHEMA, SCHEMA_VERSION);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function buildEnv_() {
