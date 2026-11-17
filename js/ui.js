@@ -4,6 +4,14 @@ import { call } from './api.js';
 // ---------------- Formato ----------------
 const nf = new Intl.NumberFormat(CONFIG.LOCALE, { style: 'currency', currency: CONFIG.MONEDA, maximumFractionDigits: 0 });
 export const money = (n) => nf.format(Math.round(Number(n) || 0));
+// Convierte lo escrito por el usuario a pesos enteros: "1.500" → 1500, "1500,5" → 1500 (la coma es decimal en Chile)
+export const pesos = (v) => Number(String(v ?? '').split(',')[0].replace(/\D/g, '')) || 0;
+// Da formato de miles mientras se escribe
+export function formatoPesos(input) {
+  const f = () => { const n = pesos(input.value); input.value = n ? n.toLocaleString('es-CL') : ''; };
+  input.addEventListener('input', f);
+  f();
+}
 export function moneyShort(n) {
   const v = Math.abs(n), s = n < 0 ? '-' : '';
   if (v >= 1e6) return `${s}$${(v / 1e6).toLocaleString(CONFIG.LOCALE, { maximumFractionDigits: 1 })}M`;

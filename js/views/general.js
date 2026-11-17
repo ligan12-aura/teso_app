@@ -1,4 +1,4 @@
-import { icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState } from '../ui.js';
+import { pesos, icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState } from '../ui.js';
 import { call } from '../api.js';
 import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe } from '../calc.js';
 import { PALETA } from '../ui.js';
@@ -28,14 +28,14 @@ export function registrarCulto(ctx) {
       const inputs = form.querySelectorAll('.input-money');
       const upd = () => {
         let t = 0;
-        inputs.forEach((i) => { const d = i.value.replace(/\D/g, ''); i.value = d ? Number(d).toLocaleString('es-CL') : ''; t += Number(d) || 0; });
+        inputs.forEach((i) => { const n = pesos(i.value); i.value = n ? n.toLocaleString('es-CL') : ''; t += n; });
         form.querySelector('[data-total]').textContent = money(t);
       };
       inputs.forEach((i) => i.addEventListener('input', upd));
     },
     async onSubmit(form) {
       const d = formData(form);
-      const items = cats.map((c, i) => ({ categoria: c, monto: Number(String(d['m' + i] || '').replace(/\D/g, '')) })).filter((x) => x.monto > 0);
+      const items = cats.map((c, i) => ({ categoria: c, monto: pesos(d['m' + i]) })).filter((x) => x.monto > 0);
       const r = await call('addMovGeneralLote', { fecha: d.fecha, medio: d.medio, descripcion: d.descripcion, items });
       toast(`${r.creados} ingreso${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}`);
       await ctx.refresh();
@@ -55,8 +55,10 @@ export function render(root, ctx) {
     .sort((a, b) => (b.fecha + b.creadoEn).localeCompare(a.fecha + a.creadoEn));
   const s = split(periodoMovs);
   const saldoFinal = filtros.periodo === 'mes' ? saldoGeneralHasta(data, mes) : saldoGeneralHasta(data, `${anio}-12`);
-  const categorias = [...new Set(periodoMovs.map((m) => m.categoria))].sort();
-  const grupos = [...new Set(periodoMovs.map((m) => grupoDe(m.tipo, m.categoria)))].sort();
+  // Se incluye el filtro activo aunque no tenga movimientos en este período, para que siempre se vea
+  const categorias = [...new Set([...periodoMovs.map((m) => m.categoria), filtros.categoria].filter(Boolean))].sort();
+  const grupos = [...new Set([...periodoMovs.map((m) => grupoDe(m.tipo, m.categoria)), filtros.grupo].filter(Boolean))].sort();
+  const hayFiltros = !!(filtros.tipo || filtros.categoria || filtros.grupo || filtros.q);
   const minName = Object.fromEntries(data.ministerios.map((m) => [m.id, m]));
 
   // saldo acumulado tras cada movimiento (orden cronológico global)
@@ -99,7 +101,7 @@ export function render(root, ctx) {
 
   <article class="card">
     <header class="card-head wrap">
-      <div><h3>Libro de movimientos</h3><p class="muted">${lista.length} movimiento${lista.length === 1 ? '' : 's'}</p></div>
+      <div><h3>Libro de movimientos</h3><p class="muted">${lista.length} movimiento${lista.length === 1 ? '' : 's'}${hayFiltros ? ` de ${periodoMovs.length} · con filtros` : ''}</p></div>
       <div class="head-actions">
         <button class="btn btn-ghost btn-sm" data-culto>${icon('church', 16)} Registrar culto</button>
         <button class="btn btn-soft-green btn-sm" data-add="ingreso">${icon('plus', 16)} Ingreso</button>
@@ -111,6 +113,7 @@ export function render(root, ctx) {
       <select data-f="tipo"><option value="">Ingresos y gastos</option><option value="ingreso" ${filtros.tipo === 'ingreso' ? 'selected' : ''}>Solo ingresos</option><option value="gasto" ${filtros.tipo === 'gasto' ? 'selected' : ''}>Solo gastos</option></select>
       <select data-f="grupo"><option value="">Todos los tipos</option>${grupos.map((g) => `<option ${g === filtros.grupo ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>
       <select data-f="categoria"><option value="">Todas las categorías</option>${categorias.map((c) => `<option ${c === filtros.categoria ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      ${hayFiltros ? `<button type="button" class="btn btn-ghost btn-sm" data-limpiar>${icon('x', 15)} Quitar filtros</button>` : ''}
     </div>
     ${lista.length ? `
     <div class="table-wrap">
@@ -127,7 +130,7 @@ export function render(root, ctx) {
             <td class="num hide-sm muted">${saldoTras.has(m.id) ? money(saldoTras.get(m.id)) : ''}</td>
             <td class="row-actions">
               ${m.archivoId ? `<button class="icon-btn sm" data-ver="${m.id}" title="Ver comprobante">${icon('receipt', 16)}</button>` : ''}
-              ${m.origen !== 'transferencia' ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="Se gestiona desde Rendiciones">${icon('lock', 15)}</span>`}
+              ${m.origen !== 'transferencia' ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="Transferencia de ítem: se anula desde el detalle del ministerio">${icon('lock', 15)}</span>`}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -152,6 +155,7 @@ export function render(root, ctx) {
   const byId = (id) => data.movGenerales.find((m) => m.id === id);
   root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => nuevoMovGeneral(ctx, null, byId(b.dataset.edit))));
   root.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => { const m = byId(b.dataset.ver); verArchivo(m.archivoId, m.descripcion || m.categoria); }));
+  root.querySelector('[data-limpiar]')?.addEventListener('click', () => { Object.assign(filtros, { tipo: '', categoria: '', grupo: '', q: '' }); ctx.setMes(mes); });
   root.querySelectorAll('[data-grupo]').forEach((b) => b.addEventListener('click', () => { filtros.grupo = b.dataset.grupo; filtros.tipo = 'gasto'; filtros.categoria = ''; ctx.setMes(mes); setTimeout(() => document.querySelector('.filters')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }));
   root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
     const m = byId(b.dataset.del);

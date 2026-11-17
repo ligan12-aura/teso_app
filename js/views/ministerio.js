@@ -1,4 +1,4 @@
-import { icon, esc, money, moneyShort, cap, mesLargo, mesNombre, mesCorto, fecha, fechaCorta, chart, PALETA, COLOR, monthPicker, bindMonthPicker, badgeEstado, ESTADOS, modal, formData, toast, confirmar, verArchivo, emptyState, nextMonth, prevMonth } from '../ui.js';
+import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesNombre, mesCorto, fecha, fechaCorta, chart, PALETA, COLOR, monthPicker, bindMonthPicker, badgeEstado, ESTADOS, modal, formData, toast, confirmar, verArchivo, emptyState, nextMonth, prevMonth } from '../ui.js';
 import { call } from '../api.js';
 import { resumenMinisterio, rendicionDe, transferenciaDe, liderDe, monthsBack, movsMinisterio, split, porCategoria, saldoMinisterio } from '../calc.js';
 import { abrirFormMovimiento } from './movform.js';
@@ -281,10 +281,11 @@ export function transferirItem(ctx, m, mes, forzar = false) {
         <label class="field"><span>Fecha de transferencia</span><input type="date" name="fecha" value="${ctx.data.hoy}" required></label>
       </div>`,
     submitLabel: 'Registrar transferencia',
+    onOpen(f) { formatoPesos(f.monto); },
     async onSubmit(f, { close }) {
       const d = formData(f);
       try {
-        await call('transferirItem', { ministerioId: m.id, mes, monto: Number(d.monto.replace(/\D/g, '')), fecha: d.fecha, forzar });
+        await call('transferirItem', { ministerioId: m.id, mes, monto: pesos(d.monto), fecha: d.fecha, forzar });
       } catch (e) {
         if (e.code === 'NEEDS_FORCE') {
           close(null);

@@ -1,4 +1,4 @@
-import { icon, esc, money, modal, formData, toast, fecha, emptyState } from '../ui.js';
+import { icon, esc, money, modal, formData, toast, fecha, emptyState, pesos, formatoPesos } from '../ui.js';
 import { call, isDemo } from '../api.js';
 import { renderImportar } from './importar.js';
 
@@ -84,10 +84,11 @@ export function render(root, ctx) {
         <p class="muted small" style="margin-top:14px">También puedes descargar una copia .xlsx en cualquier momento con el botón “Descargar Excel” del menú.</p>
       </article>
     </div>`;
+    formatoPesos(body.querySelector('[name=saldoInicial]'));
     body.querySelector('[data-config]').addEventListener('submit', async (e) => {
       e.preventDefault();
       const d = formData(e.target);
-      d.saldoInicial = Number(String(d.saldoInicial).replace(/\D/g, '')) || 0;
+      d.saldoInicial = pesos(d.saldoInicial);
       try { await call('saveConfig', d); toast('Configuración guardada'); await ctx.refresh(); } catch (er) { toast(er.message, 'err'); }
     });
   }
@@ -104,10 +105,10 @@ function editMinisterio(ctx, m = null) {
       <div class="field"><span>Ícono</span><div class="picker">${ICONOS.map((i) => `<label><input type="radio" name="icono" value="${i}" ${i === ico ? 'checked' : ''}><span>${i}</span></label>`).join('')}</div></div>
       <div class="field"><span>Color</span><div class="picker colors">${COLORES.map((c) => `<label><input type="radio" name="color" value="${c}" ${c === color ? 'checked' : ''}><span style="background:${c}"></span></label>`).join('')}</div></div>
       ${m ? `<label class="check"><input type="checkbox" name="activo" ${m.activo ? 'checked' : ''}> Ministerio activo</label>` : ''}`,
-    onOpen(f) { f.itemMensual.addEventListener('input', () => { const d = f.itemMensual.value.replace(/\D/g, ''); f.itemMensual.value = d ? Number(d).toLocaleString('es-CL') : ''; }); },
+    onOpen(f) { formatoPesos(f.itemMensual); },
     async onSubmit(f) {
       const d = formData(f);
-      d.itemMensual = Number(String(d.itemMensual).replace(/\D/g, '')) || 0;
+      d.itemMensual = pesos(d.itemMensual);
       if (m) { d.id = m.id; d.activo = f.activo.checked; }
       await call('saveMinisterio', d);
       toast('Ministerio guardado');

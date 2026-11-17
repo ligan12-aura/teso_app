@@ -32,6 +32,7 @@ function setup() {
   }
 
   Object.keys(TesoCore.TABLES).forEach(function (name) { ensureSheet_(ss, name); });
+  rellenarGrupos_(ss);
   var hoja1 = ss.getSheetByName('Hoja 1') || ss.getSheetByName('Sheet1');
   if (hoja1 && ss.getSheets().length > 1) ss.deleteSheet(hoja1);
   ss.getSheetByName('Usuarios').hideSheet();
@@ -74,6 +75,23 @@ function ensureSheet_(ss, name) {
     rng.setNumberFormat(TesoCore.NUMERIC[c] ? '#,##0' : '@');
   });
   return sh;
+}
+
+// Completa la columna "grupo" (tipo de gasto) en filas antiguas que no la tienen
+function rellenarGrupos_(ss) {
+  var t = 'MovimientosGenerales';
+  var sh = ss.getSheetByName(t);
+  var last = sh.getLastRow();
+  if (last < 2) return;
+  var cols = TesoCore.TABLES[t];
+  var iTipo = cols.indexOf('tipo'), iCat = cols.indexOf('categoria'), iGrupo = cols.indexOf('grupo');
+  var data = sh.getRange(2, 1, last - 1, cols.length).getValues();
+  var cambios = 0;
+  var out = data.map(function (r) {
+    if (r[0] !== '' && !r[iGrupo]) { cambios++; return [TesoCore.grupoDe(r[iTipo], r[iCat])]; }
+    return [r[iGrupo]];
+  });
+  if (cambios) sh.getRange(2, iGrupo + 1, out.length, 1).setValues(out);
 }
 
 function colLetter_(table, col) {
@@ -196,17 +214,28 @@ SheetStore_.prototype.rowValues_ = function (t, row) {
   });
 };
 SheetStore_.prototype.insert = function (t, row) {
-  this.sheet_(t).appendRow(this.rowValues_(t, row));
-  delete this.cache[t];
+  this.insertMany(t, [row]);
 };
 SheetStore_.prototype.insertMany = function (t, rows) {
   if (!rows.length) return;
   var self = this;
   var sh = this.sheet_(t);
   var vals = rows.map(function (r) { return self.rowValues_(t, r); });
-  sh.getRange(sh.getLastRow() + 1, 1, vals.length, vals[0].length).setValues(vals);
+  var start = sh.getLastRow() + 1;
+  // Asegura filas suficientes (las hojas nuevas traen 1000)
+  var falta = start + vals.length - 1 - sh.getMaxRows();
+  if (falta > 0) sh.insertRowsAfter(sh.getMaxRows(), falta + 200);
+  // Formato antes de escribir: texto plano (evita que Sheets convierta fechas) y miles en montos
+  formatoFilas_(sh, t, start, vals.length);
+  sh.getRange(start, 1, vals.length, vals[0].length).setValues(vals);
   delete this.cache[t];
 };
+
+function formatoFilas_(sh, t, start, n) {
+  TesoCore.TABLES[t].forEach(function (c, i) {
+    sh.getRange(start, i + 1, n, 1).setNumberFormat(TesoCore.NUMERIC[c] ? '#,##0' : '@');
+  });
+}
 SheetStore_.prototype.findRow_ = function (t, id) {
   var rows = this.read(t);
   for (var i = 0; i < rows.length; i++) if (String(rows[i].id) === String(id)) return rows[i]._row;

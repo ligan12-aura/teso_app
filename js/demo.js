@@ -201,7 +201,7 @@ function seed() {
 
   const gen = (fecha, tipo, categoria, monto, descripcion, medio = 'Transferencia', extra = {}) => {
     if (!notFuture(fecha)) return null;
-    const r = { id: id(), fecha, mes: fecha.slice(0, 7), tipo, categoria, descripcion, monto, medio, archivoId: '', ministerioId: '', origen: 'manual', refId: '', creadoPor: tesoreroId, creadoEn: now, actualizadoEn: now, ...extra };
+    const r = { id: id(), fecha, mes: fecha.slice(0, 7), tipo, categoria, descripcion, monto, medio, archivoId: '', ministerioId: '', origen: 'manual', refId: '', creadoPor: tesoreroId, creadoEn: now, actualizadoEn: now, grupo: TesoCore.grupoDe(tipo, categoria), ...extra };
     db.MovimientosGenerales.push(r);
     return r;
   };

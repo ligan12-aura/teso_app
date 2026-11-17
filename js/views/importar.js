@@ -232,6 +232,15 @@ function pintar(prev, ctx) {
   const primero = meses[0];
   const ok = (b) => b ? `<span class="ok-mark">${icon('checkCircle', 15)}</span>` : `<span class="bad-mark">${icon('alert', 15)}</span>`;
   const sugerirSaldo = primero.saldoAnterior !== null && !items.some((i) => i.yaImportado);
+  const cfg = data.config || {};
+  const saldoActual = Number(cfg.saldoInicial) || 0;
+  const saldoDistinto = sugerirSaldo && (saldoActual !== primero.saldoAnterior || (cfg.fechaSaldoInicial || '') !== `${primero.mes}-01`);
+  // Solo se marca sola si aún no hay saldo inicial configurado
+  const marcarSaldo = saldoDistinto && !saldoActual;
+  // Movimientos que ya existen en esos meses y no vienen del libro (posibles duplicados)
+  const mesesLibro = new Set(meses.map((m) => m.mes));
+  const enMeses = data.movGenerales.filter((m) => mesesLibro.has(m.mes) && m.origen !== 'importado' && m.origen !== 'transferencia');
+  const mesesConDatos = [...new Set(enMeses.map((m) => mesLargo(m.mes)))].join(', ');
   prev.innerHTML = `
   <article class="card">
     <header class="card-head wrap"><div><h3>Resumen del libro</h3><p class="muted">${items.length} líneas en ${meses.length} mes${meses.length > 1 ? 'es' : ''} · ${nuevos.length} por importar</p></div></header>
@@ -244,7 +253,8 @@ function pintar(prev, ctx) {
           <td class="num">${m.saldoFinal !== null ? `${money(m.saldoFinal)} ${ok(m.okSaldo)}` : '—'}</td>
           <td class="num">${m.filas.length}${m.filas.some((f) => f.yaImportado) ? `<br><small class="muted">${m.filas.filter((f) => f.yaImportado).length} ya importadas</small>` : ''}</td></tr>`).join('')}
       </tbody></table></div>
-    ${sugerirSaldo ? `<label class="check saldo-check"><input type="checkbox" data-saldo checked> Usar <b>${money(primero.saldoAnterior)}</b> (${esc(primero.etiquetaSaldo || 'saldo anterior')}) como saldo inicial de caja al ${fecha(primero.mes + '-01')}</label>` : ''}
+    ${enMeses.length ? `<div class="note warn" style="margin-top:14px">${icon('alert', 16)}<span>Ya hay <b>${enMeses.length} movimiento${enMeses.length > 1 ? 's' : ''}</b> en la app en ${esc(mesesConDatos)} que no vienen de este libro. Revisa que no sean los mismos antes de importar, para no duplicarlos.</span></div>` : ''}
+    ${saldoDistinto ? `<label class="check saldo-check"><input type="checkbox" data-saldo ${marcarSaldo ? 'checked' : ''}> <span>Usar <b>${money(primero.saldoAnterior)}</b> (${esc(primero.etiquetaSaldo || 'saldo anterior')}) como saldo inicial de caja al ${fecha(primero.mes + '-01')}${saldoActual ? `<br><small class="muted">Hoy está configurado ${money(saldoActual)}${cfg.fechaSaldoInicial ? ` desde el ${fecha(cfg.fechaSaldoInicial)}` : ''}. Al marcarlo se reemplaza.</small>` : ''}</span></label>` : ''}
   </article>
   ${meses.map((m) => `
   <details class="card imp-mes">
@@ -271,9 +281,10 @@ function pintar(prev, ctx) {
   }));
   prev.querySelector('[data-cancel]').addEventListener('click', () => { estado = null; prev.innerHTML = ''; });
   prev.querySelector('[data-importar]').addEventListener('click', async (e) => {
+    const btn = e.currentTarget; // se lee antes de cualquier await (después queda en null)
     const malos = meses.filter((m) => !m.okE || !m.okS);
     if (malos.length && !(await confirmar(`Los totales de ${malos.map((m) => mesLargo(m.mes)).join(', ')} no cuadran con el libro. ¿Importar de todas formas?`, { boton: 'Importar igual' }))) return;
-    const btn = e.currentTarget;
+    if (enMeses.length && !(await confirmar(`Ya hay <b>${enMeses.length} movimiento${enMeses.length > 1 ? 's' : ''}</b> registrado${enMeses.length > 1 ? 's' : ''} en la app en ${mesesConDatos} que no vienen de este libro. Si son los mismos del Excel, quedarán duplicados.<br><br>¿Importar de todas formas?`, { titulo: 'Posibles duplicados', boton: 'Importar igual' }))) return;
     btn.disabled = true; btn.classList.add('loading');
     const usarSaldo = prev.querySelector('[data-saldo]')?.checked;
     const payloadItems = nuevos.map(({ fecha: f, tipo, monto, categoria, descripcion, medio, refId }) => ({ fecha: f, tipo, monto, categoria, descripcion, medio, refId }));

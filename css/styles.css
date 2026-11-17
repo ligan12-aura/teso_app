@@ -530,7 +530,6 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------- Ayuda ---------- */
 .topbar .brand strong { white-space: nowrap; }
-@media (max-width: 420px) { .dp-long { display: none; } .topbar { gap: 6px; } .help-pill { padding: 6px 10px; } }
 .help-action { color: var(--gold-2) !important; }
 .help-pill { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--navy); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; }
 .topbar .help-pill.mobile { margin-left: auto; }
@@ -657,4 +656,13 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Celulares angostos (va al final para que prevalezca sobre las reglas de 960px) */
+@media (max-width: 420px) {
+  .dp-long { display: none; }
+  .topbar { gap: 6px; padding-left: 12px; padding-right: 12px; }
+  .topbar .brand strong { font-size: 16px; }
+  .help-pill { padding: 6px 10px; }
+  .demo-pill { padding: 4px 8px; }
 }

@@ -1,4 +1,4 @@
-import { icon, esc, modal, formData, fileToPayload, toast, verArchivo } from '../ui.js';
+import { icon, esc, modal, formData, fileToPayload, toast, verArchivo, pesos, formatoPesos } from '../ui.js';
 import { call, isDemo } from '../api.js';
 
 /**
@@ -63,9 +63,7 @@ export function abrirFormMovimiento(opts) {
         otra.hidden = true;
       }));
       sel.addEventListener('change', () => { otra.hidden = sel.value !== '__otra'; if (!otra.hidden) form.categoriaOtra.focus(); });
-      const money = form.monto;
-      const fmt = () => { const d = money.value.replace(/\D/g, ''); money.value = d ? Number(d).toLocaleString('es-CL') : ''; };
-      money.addEventListener('input', fmt); fmt();
+      formatoPesos(form.monto);
       const file = form.archivo;
       const prev = form.querySelector('.upload-preview');
       file.addEventListener('change', async () => {
@@ -83,7 +81,7 @@ export function abrirFormMovimiento(opts) {
     },
     async onSubmit(form) {
       const d = formData(form);
-      d.monto = Number(String(d.monto).replace(/\D/g, ''));
+      d.monto = pesos(d.monto);
       if (d.categoria === '__otra') d.categoria = d.categoriaOtra;
       delete d.categoriaOtra;
       if (!d.monto) throw new Error('Ingresa un monto');

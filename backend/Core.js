@@ -65,6 +65,7 @@ var TesoCore = (function () {
   var MEDIOS = ['Efectivo', 'Transferencia', 'Depósito', 'Cheque', 'Tarjeta'];
   var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var MAX_ARCHIVO_B64 = 11 * 1024 * 1024; // ~8 MB reales
+  var MAX_MONTO = 1000000000;
 
   // ---------------------------------------------------------------
   // Utilidades puras
@@ -247,8 +248,11 @@ var TesoCore = (function () {
       var tipo = p.tipo;
       if (tipo !== 'ingreso' && tipo !== 'gasto') throw TesoError('Tipo de movimiento inválido');
       if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
+      if (p.fecha > env.today()) throw TesoError('La fecha no puede ser futura');
+      if (p.fecha < '2000-01-01') throw TesoError('Fecha inválida');
       var monto = Math.round(Number(p.monto));
       if (!(monto > 0)) throw TesoError('El monto debe ser mayor a 0');
+      if (monto > MAX_MONTO) throw TesoError('El monto es demasiado grande (máx. $1.000.000.000)');
       var cat = String(p.categoria || '').trim();
       if (!cat) throw TesoError('Selecciona una categoría');
       if (cat === RESERVADAS[ambito] && !permitirReservada) throw TesoError('La categoría "' + cat + '" se registra automáticamente al transferir el ítem.');
@@ -279,7 +283,7 @@ var TesoCore = (function () {
       var mov = find('MovimientosMinisterios', id);
       if (!mov) throw TesoError('Movimiento no encontrado');
       if (user.rol !== 'tesorero' && mov.ministerioId !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
-      if (mov.origen === 'transferencia') throw TesoError('El ítem mensual se gestiona desde Rendiciones (anular transferencia).');
+      if (mov.origen === 'transferencia') throw TesoError('El ítem mensual se registra al transferirlo; si hubo un error, anúlalo desde el panel de rendición del ministerio (botón Anular).');
       return mov;
     }
     function updateMovMinisterio(user, p) {
@@ -354,6 +358,7 @@ var TesoCore = (function () {
       }
       var monto = Math.round(Number(p.monto !== undefined && p.monto !== '' ? p.monto : m.itemMensual));
       if (!(monto > 0)) throw TesoError('El monto a transferir debe ser mayor a 0');
+      if (monto > MAX_MONTO) throw TesoError('El monto es demasiado grande');
       var prev = prevMonth(mes);
       if (!p.forzar) {
         var tieneHistoria = transf.some(function (t) { return t.ministerioId === m.id && t.mes < mes; }) ||
@@ -362,7 +367,7 @@ var TesoCore = (function () {
           throw TesoError('La rendición de ' + labelMes(prev) + ' de ' + m.nombre + ' aún no está aprobada.', 'NEEDS_FORCE');
         }
       }
-      var fecha = isDate(p.fecha) ? p.fecha : env.today();
+      var fecha = isDate(p.fecha) && p.fecha <= env.today() ? p.fecha : env.today();
       var now = env.now();
       var tid = uid(), gid = uid(), mmid = uid();
       insert('MovimientosGenerales', {
@@ -416,7 +421,7 @@ var TesoCore = (function () {
     function movGeneralManual(id) {
       var mov = find('MovimientosGenerales', id);
       if (!mov) throw TesoError('Movimiento no encontrado');
-      if (mov.origen === 'transferencia') throw TesoError('Este movimiento corresponde a la transferencia de un ítem; anúlalo desde Rendiciones.');
+      if (mov.origen === 'transferencia') throw TesoError('Este movimiento es la transferencia de un ítem; anúlalo desde el detalle del ministerio (botón Anular en el panel de rendición).');
       return mov;
     }
     function updateMovGeneral(user, p) {
@@ -484,7 +489,7 @@ var TesoCore = (function () {
         nombre: nombre,
         color: /^#[0-9a-fA-F]{6}$/.test(p.color) ? p.color : '#3a6ea5',
         icono: String(p.icono || '⛪').slice(0, 4),
-        itemMensual: Math.max(0, Math.round(Number(p.itemMensual) || 0)),
+        itemMensual: Math.min(MAX_MONTO, Math.max(0, Math.round(Number(p.itemMensual) || 0))),
         activo: p.activo === undefined ? true : toBool(p.activo)
       };
       if (p.id) return update('Ministerios', p.id, d);
