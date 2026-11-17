@@ -18,7 +18,7 @@ var TesoCore = (function () {
   var TABLES = {
     Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn'],
     Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn'],
-    MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn'],
+    MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo'],
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn'],
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
@@ -27,15 +27,38 @@ var TesoCore = (function () {
   var NUMERIC = { monto: 1, itemMensual: 1 };
   var BOOL = { activo: 1, debeCambiarPass: 1 };
 
+  // Tipos de gasto/ingreso de la tesorería general: cada grupo reúne varias categorías
+  var GRUPOS = {
+    gasto: [
+      ['Personal y remuneraciones', ['Sueldo pastoral', 'Imposiciones y previsión', 'Asignación familiar', 'Fondo de indemnización', 'Guardatemplo', 'Aguinaldos y bonos']],
+      ['Servicios básicos', ['Luz', 'Agua', 'Gas', 'Internet y teléfono']],
+      ['Templo y mantención', ['Arriendo', 'Aseo y limpieza', 'Mantención templo', 'Equipamiento y mobiliario']],
+      ['Vehículo', ['Mantención vehículo', 'Combustible', 'Seguro y permisos vehículo']],
+      ['Aportes y cooperación', ['Aportes a la denominación', 'Aportes a instituciones']],
+      ['Ministerios y educación', ['Asignación ministerios', 'Escuela dominical', 'Misiones']],
+      ['Ayuda social', ['Ayuda social', 'Ofrendas solidarias', 'Condolencias']],
+      ['Actividades y administración', ['Reuniones y directorio', 'Eventos y celebraciones', 'Gastos bancarios', 'Gastos varios', 'Otros gastos']]
+    ],
+    ingreso: [
+      ['Diezmos y ofrendas', ['Diezmos', 'Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo']],
+      ['Ofrendas especiales', ['Ofrendas solidarias', 'Donaciones']],
+      ['Otros ingresos', ['Actividades', 'Reintegros', 'Otros ingresos']]
+    ]
+  };
+  var SIN_GRUPO = 'Sin clasificar';
+  function aplanar(lista) { return lista.reduce(function (a, g) { return a.concat(g[1]); }, []); }
+  function grupoDe(tipo, categoria) {
+    var lista = GRUPOS[tipo] || [];
+    for (var i = 0; i < lista.length; i++) if (lista[i][1].indexOf(categoria) >= 0) return lista[i][0];
+    return SIN_GRUPO;
+  }
+
   var CATEGORIAS = {
     ministerio: {
       ingreso: ['Ítem mensual', 'Venta / actividad', 'Ofrenda especial', 'Donación', 'Otro ingreso'],
       gasto: ['Materiales', 'Alimentación', 'Transporte', 'Equipamiento', 'Decoración', 'Impresiones', 'Regalos / premios', 'Ayuda social', 'Actividad / evento', 'Otro gasto']
     },
-    general: {
-      ingreso: ['Diezmos', 'Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo', 'Donaciones', 'Actividades', 'Otros ingresos'],
-      gasto: ['Asignación ministerios', 'Arriendo', 'Luz', 'Agua', 'Gas', 'Internet y teléfono', 'Honorarios pastorales', 'Mantención templo', 'Aseo y limpieza', 'Ayuda social', 'Misiones', 'Gastos bancarios', 'Otros gastos']
-    }
+    general: { ingreso: aplanar(GRUPOS.ingreso), gasto: aplanar(GRUPOS.gasto) }
   };
   // Categorías que solo se crean automáticamente al transferir un ítem
   var RESERVADAS = { ministerio: 'Ítem mensual', general: 'Asignación ministerios' };
@@ -102,6 +125,12 @@ var TesoCore = (function () {
       return null;
     }
     function insert(t, row) { var r = normalize(t, row); store.insert(t, r); return r; }
+    function insertMany(t, rows) {
+      var rs = rows.map(function (row) { return normalize(t, row); });
+      if (store.insertMany) store.insertMany(t, rs);
+      else rs.forEach(function (r) { store.insert(t, r); });
+      return rs;
+    }
     function update(t, id, patch) {
       var cur = find(t, id);
       if (!cur) throw TesoError('Registro no encontrado');
@@ -162,6 +191,7 @@ var TesoCore = (function () {
         user: publicUser(user),
         config: config(),
         categorias: CATEGORIAS,
+        grupos: GRUPOS,
         reservadas: RESERVADAS,
         medios: MEDIOS,
         hoy: env.today(),
@@ -213,7 +243,7 @@ var TesoCore = (function () {
         throw TesoError('La rendición de ' + labelMes(mes) + ' ya fue enviada o aprobada; no se puede modificar.');
       }
     }
-    function validarMov(p, ambito) {
+    function validarMov(p, ambito, permitirReservada) {
       var tipo = p.tipo;
       if (tipo !== 'ingreso' && tipo !== 'gasto') throw TesoError('Tipo de movimiento inválido');
       if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
@@ -221,7 +251,7 @@ var TesoCore = (function () {
       if (!(monto > 0)) throw TesoError('El monto debe ser mayor a 0');
       var cat = String(p.categoria || '').trim();
       if (!cat) throw TesoError('Selecciona una categoría');
-      if (cat === RESERVADAS[ambito]) throw TesoError('La categoría "' + cat + '" se registra automáticamente al transferir el ítem.');
+      if (cat === RESERVADAS[ambito] && !permitirReservada) throw TesoError('La categoría "' + cat + '" se registra automáticamente al transferir el ítem.');
       return { fecha: p.fecha, tipo: tipo, categoria: cat, descripcion: String(p.descripcion || '').trim().slice(0, 300), monto: monto };
     }
     function guardarArchivo(archivo, carpeta) {
@@ -337,7 +367,7 @@ var TesoCore = (function () {
       var tid = uid(), gid = uid(), mmid = uid();
       insert('MovimientosGenerales', {
         id: gid, fecha: fecha, mes: fecha.slice(0, 7), tipo: 'gasto', categoria: RESERVADAS.general,
-        descripcion: 'Ítem ' + labelMes(mes) + ' · ' + m.nombre, monto: monto, medio: 'Transferencia',
+        descripcion: 'Ítem ' + labelMes(mes) + ' · ' + m.nombre, monto: monto, medio: 'Transferencia', grupo: grupoDe('gasto', RESERVADAS.general),
         ministerioId: m.id, origen: 'transferencia', refId: tid, creadoPor: user.id, creadoEn: now, actualizadoEn: now
       });
       insert('MovimientosMinisterios', {
@@ -359,8 +389,9 @@ var TesoCore = (function () {
     }
 
     // ---------------- Tesorería general ----------------
-    function datosGeneral(p) {
-      var d = validarMov(p, 'general');
+    function datosGeneral(p, permitirReservada) {
+      var d = validarMov(p, 'general', permitirReservada);
+      d.grupo = grupoDe(d.tipo, d.categoria);
       var medio = String(p.medio || '').trim();
       d.medio = medio;
       d.mes = d.fecha.slice(0, 7);
@@ -390,7 +421,7 @@ var TesoCore = (function () {
     }
     function updateMovGeneral(user, p) {
       var mov = movGeneralManual(p.id);
-      var d = datosGeneral(p);
+      var d = datosGeneral(p, mov.origen === 'importado');
       var archivoId = mov.archivoId;
       if (p.archivo && p.archivo.base64) {
         var nuevo = guardarArchivo(p.archivo, ['Comprobantes tesorería', d.mes]);
@@ -407,6 +438,31 @@ var TesoCore = (function () {
       borrarArchivo(mov.archivoId);
       remove('MovimientosGenerales', mov.id);
       return { id: mov.id };
+    }
+
+    // Importación masiva (p. ej. desde el libro Excel histórico).
+    // Cada fila trae un refId único: si ya existe, se omite (no duplica).
+    function importarMovimientos(user, p) {
+      var items = p.items || [];
+      if (!items.length) throw TesoError('No hay movimientos para importar');
+      if (items.length > 1500) throw TesoError('Importa como máximo 1500 movimientos por vez');
+      var existentes = {};
+      all('MovimientosGenerales').forEach(function (m) { if (m.refId) existentes[m.refId] = 1; });
+      var now = env.now(), nuevos = [], omitidos = 0;
+      items.forEach(function (it, i) {
+        var ref = String(it.refId || '');
+        if (!ref) throw TesoError('Fila ' + (i + 1) + ': falta el identificador de origen');
+        if (existentes[ref]) { omitidos++; return; }
+        var d;
+        try { d = datosGeneral(it, true); } catch (e) { throw TesoError('Fila ' + (i + 1) + ' (' + (it.descripcion || '') + '): ' + e.message); }
+        existentes[ref] = 1;
+        nuevos.push(Object.assign(d, { id: uid(), archivoId: '', origen: 'importado', refId: ref, creadoPor: user.id, creadoEn: now, actualizadoEn: now }));
+      });
+      if (nuevos.length) insertMany('MovimientosGenerales', nuevos);
+      if (p.saldoInicial !== undefined && p.saldoInicial !== null && p.saldoInicial !== '') {
+        saveConfig(user, { saldoInicial: p.saldoInicial, fechaSaldoInicial: p.fechaSaldoInicial || '' });
+      }
+      return { importados: nuevos.length, omitidos: omitidos };
     }
 
     // ---------------- Archivos (boletas) ----------------
@@ -491,6 +547,7 @@ var TesoCore = (function () {
       addMovGeneralLote: { fn: addMovGeneralLote, role: T, write: true },
       updateMovGeneral: { fn: updateMovGeneral, role: T, write: true },
       deleteMovGeneral: { fn: deleteMovGeneral, role: T, write: true },
+      importarMovimientos: { fn: importarMovimientos, role: T, write: true },
       saveMinisterio: { fn: saveMinisterio, role: T, write: true },
       saveUsuario: { fn: saveUsuario, role: T, write: true },
       saveConfig: { fn: saveConfig, role: T, write: true }
@@ -516,6 +573,9 @@ var TesoCore = (function () {
     TABLES: TABLES,
     NUMERIC: NUMERIC,
     CATEGORIAS: CATEGORIAS,
+    GRUPOS: GRUPOS,
+    SIN_GRUPO: SIN_GRUPO,
+    grupoDe: grupoDe,
     RESERVADAS: RESERVADAS,
     MEDIOS: MEDIOS,
     hashPassword: hashPassword,

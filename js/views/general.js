@@ -1,9 +1,10 @@
 import { icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState } from '../ui.js';
 import { call } from '../api.js';
-import { split, saldoGeneralHasta, monthsBack, serieGeneral } from '../calc.js';
+import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe } from '../calc.js';
+import { PALETA } from '../ui.js';
 import { abrirFormMovimiento } from './movform.js';
 
-const filtros = { periodo: 'mes', tipo: '', categoria: '', q: '' };
+const filtros = { periodo: 'mes', tipo: '', categoria: '', grupo: '', q: '' };
 
 export const nuevoMovGeneral = (ctx, tipo = 'ingreso', mov = null) =>
   abrirFormMovimiento({ ctx, ambito: 'general', tipo, mov, action: mov ? 'updateMovGeneral' : 'addMovGeneral', titulo: mov ? 'Editar movimiento' : 'Nuevo movimiento · Tesorería general' });
@@ -49,12 +50,13 @@ export function render(root, ctx) {
   const periodoMovs = data.movGenerales.filter(enPeriodo);
   const q = filtros.q.toLowerCase();
   const lista = periodoMovs
-    .filter((m) => (!filtros.tipo || m.tipo === filtros.tipo) && (!filtros.categoria || m.categoria === filtros.categoria))
+    .filter((m) => (!filtros.tipo || m.tipo === filtros.tipo) && (!filtros.categoria || m.categoria === filtros.categoria) && (!filtros.grupo || grupoDe(m.tipo, m.categoria) === filtros.grupo))
     .filter((m) => !q || `${m.categoria} ${m.descripcion} ${m.medio}`.toLowerCase().includes(q))
     .sort((a, b) => (b.fecha + b.creadoEn).localeCompare(a.fecha + a.creadoEn));
   const s = split(periodoMovs);
   const saldoFinal = filtros.periodo === 'mes' ? saldoGeneralHasta(data, mes) : saldoGeneralHasta(data, `${anio}-12`);
   const categorias = [...new Set(periodoMovs.map((m) => m.categoria))].sort();
+  const grupos = [...new Set(periodoMovs.map((m) => grupoDe(m.tipo, m.categoria)))].sort();
   const minName = Object.fromEntries(data.ministerios.map((m) => [m.id, m]));
 
   // saldo acumulado tras cada movimiento (orden cronológico global)
@@ -93,6 +95,8 @@ export function render(root, ctx) {
     <div class="chart-box"><canvas id="ch-gen"></canvas></div>
   </article>
 
+  ${tarjetaTipos(periodoMovs, s.gastos, filtros.periodo === 'mes' ? mesLargo(mes) : `año ${anio}`)}
+
   <article class="card">
     <header class="card-head wrap">
       <div><h3>Libro de movimientos</h3><p class="muted">${lista.length} movimiento${lista.length === 1 ? '' : 's'}</p></div>
@@ -105,6 +109,7 @@ export function render(root, ctx) {
     <div class="filters">
       <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar…" value="${esc(filtros.q)}" data-f="q"></div>
       <select data-f="tipo"><option value="">Ingresos y gastos</option><option value="ingreso" ${filtros.tipo === 'ingreso' ? 'selected' : ''}>Solo ingresos</option><option value="gasto" ${filtros.tipo === 'gasto' ? 'selected' : ''}>Solo gastos</option></select>
+      <select data-f="grupo"><option value="">Todos los tipos</option>${grupos.map((g) => `<option ${g === filtros.grupo ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>
       <select data-f="categoria"><option value="">Todas las categorías</option>${categorias.map((c) => `<option ${c === filtros.categoria ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
     </div>
     ${lista.length ? `
@@ -115,14 +120,14 @@ export function render(root, ctx) {
           ${lista.map((m) => `
           <tr>
             <td class="nowrap">${fecha(m.fecha)}</td>
-            <td><span class="cat-pill ${m.tipo}">${esc(m.categoria)}</span></td>
+            <td><span class="cat-pill ${m.tipo}">${esc(m.categoria)}</span><small class="grp">${esc(grupoDe(m.tipo, m.categoria))}</small></td>
             <td class="desc">${esc(m.descripcion)}${m.origen === 'transferencia' && minName[m.ministerioId] ? ` <a class="tag" href="#/ministerio/${m.ministerioId}">${esc(minName[m.ministerioId].icono)} Ítem</a>` : ''}</td>
             <td class="hide-sm muted">${esc(m.medio)}</td>
             <td class="num ${m.tipo} strong">${m.tipo === 'ingreso' ? '+' : '−'}${money(m.monto)}</td>
             <td class="num hide-sm muted">${saldoTras.has(m.id) ? money(saldoTras.get(m.id)) : ''}</td>
             <td class="row-actions">
               ${m.archivoId ? `<button class="icon-btn sm" data-ver="${m.id}" title="Ver comprobante">${icon('receipt', 16)}</button>` : ''}
-              ${m.origen === 'manual' ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="Se gestiona desde Rendiciones">${icon('lock', 15)}</span>`}
+              ${m.origen !== 'transferencia' ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="Se gestiona desde Rendiciones">${icon('lock', 15)}</span>`}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -133,7 +138,7 @@ export function render(root, ctx) {
   // Eventos
   bindMonthPicker(root, mes, ctx.setMes);
   root.querySelectorAll('[data-y]').forEach((b) => b.addEventListener('click', () => ctx.setMes(`${+anio + +b.dataset.y}${mes.slice(4)}`)));
-  root.querySelectorAll('[name=periodo]').forEach((r) => r.addEventListener('change', () => { filtros.periodo = r.value; filtros.categoria = ''; ctx.setMes(mes); }));
+  root.querySelectorAll('[name=periodo]').forEach((r) => r.addEventListener('change', () => { filtros.periodo = r.value; filtros.categoria = ''; filtros.grupo = ''; ctx.setMes(mes); }));
   root.querySelectorAll('[data-f]').forEach((el) => {
     const ev = el.tagName === 'INPUT' ? 'input' : 'change';
     el.addEventListener(ev, () => {
@@ -147,6 +152,7 @@ export function render(root, ctx) {
   const byId = (id) => data.movGenerales.find((m) => m.id === id);
   root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => nuevoMovGeneral(ctx, null, byId(b.dataset.edit))));
   root.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => { const m = byId(b.dataset.ver); verArchivo(m.archivoId, m.descripcion || m.categoria); }));
+  root.querySelectorAll('[data-grupo]').forEach((b) => b.addEventListener('click', () => { filtros.grupo = b.dataset.grupo; filtros.tipo = 'gasto'; filtros.categoria = ''; ctx.setMes(mes); setTimeout(() => document.querySelector('.filters')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }));
   root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
     const m = byId(b.dataset.del);
     if (!(await confirmar(`Se eliminará <b>${esc(m.categoria)}</b> por <b>${money(m.monto)}</b> del ${fecha(m.fecha)}.`, { boton: 'Eliminar', danger: true }))) return;
@@ -200,4 +206,24 @@ export function render(root, ctx) {
       }
     });
   }
+}
+
+function tarjetaTipos(movs, totalGastos, etiqueta) {
+  const grupos = porGrupo(movs, 'gasto');
+  if (!grupos.length) return '';
+  const max = grupos[0][1];
+  return `<article class="card">
+    <header class="card-head"><div><h3>Gastos por tipo</h3><p class="muted">${etiqueta} · toca un tipo para ver sus movimientos</p></div></header>
+    <ul class="tipos">
+      ${grupos.map(([g, v, cats], i) => `
+      <li>
+        <button type="button" class="tipo-row" data-grupo="${esc(g)}">
+          <span class="tipo-name"><i style="background:${PALETA[i % PALETA.length]}"></i>${esc(g)}</span>
+          <span class="tipo-bar"><span style="width:${Math.max(2, (v / max) * 100)}%;background:${PALETA[i % PALETA.length]}"></span></span>
+          <b>${money(v)}</b><small>${Math.round((v / totalGastos) * 100)}%</small>
+        </button>
+        <div class="tipo-cats">${cats.map(([c, cv]) => `<span>${esc(c)} <b>${money(cv)}</b></span>`).join('')}</div>
+      </li>`).join('')}
+    </ul>
+  </article>`;
 }

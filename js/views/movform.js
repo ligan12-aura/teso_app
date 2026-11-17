@@ -15,11 +15,15 @@ export function abrirFormMovimiento(opts) {
   const hoy = data.hoy;
   const esGeneral = ambito === 'general';
 
+  const opt = (c, sel) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`;
   const catOptions = (tipo, sel) => {
     const list = cats[tipo].filter((c) => c !== reservada);
     const custom = sel && !list.includes(sel);
-    return list.map((c) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('') +
-      (custom ? `<option selected>${esc(sel)}</option>` : '') + '<option value="__otra">Otra…</option>';
+    const gr = esGeneral && data.grupos ? data.grupos[tipo] : null;
+    const body = gr
+      ? gr.map(([g, cs]) => { const v = cs.filter((c) => c !== reservada); return v.length ? `<optgroup label="${esc(g)}">${v.map((c) => opt(c, sel)).join('')}</optgroup>` : ''; }).join('')
+      : list.map((c) => opt(c, sel)).join('');
+    return body + (custom ? `<option selected>${esc(sel)}</option>` : '') + '<option value="__otra">Otra…</option>';
   };
 
   const body = `

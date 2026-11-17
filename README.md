@@ -86,8 +86,14 @@ Hazlo con la **cuenta de Google de la iglesia / tesorería** (será la dueña de
 3. **Configuración → Ministerios**: crea cada ministerio con su ítem mensual.
 4. **Configuración → Usuarios**: crea un usuario por líder con una contraseña temporal y envíasela.
 
+### Importar el libro Excel histórico
+**Configuración → Importar Excel**: elige el libro “Entradas y salidas” (una hoja por mes, ej. “Enero 2026”). La app clasifica cada línea por tipo de gasto, compara los totales con los del libro y no duplica lo ya importado. El archivo se lee en el navegador y no se sube a GitHub (la carpeta `EXCELS/` está excluida).
+
+### Tipos de gasto
+Personal y remuneraciones · Servicios básicos · Templo y mantención · Vehículo · Aportes y cooperación · Ministerios y educación · Ayuda social · Actividades y administración. Se definen en `GRUPOS` dentro de `backend/Core.js`.
+
 ### Actualizar el servidor después de un cambio
-Pega el nuevo código en Apps Script y usa **Implementar → Administrar implementaciones → ✏️ → Versión: Nueva versión**. Así la URL no cambia.
+Pega el nuevo código de `Core.js` y `Api.js` en Apps Script, ejecuta otra vez **`setup`** (no borra datos; actualiza encabezados y la hoja Resumen) y usa **Implementar → Administrar implementaciones → ✏️ → Versión: Nueva versión**. Así la URL no cambia.
 
 ---
 

@@ -63,6 +63,19 @@ const TEMAS = {
         <li>La columna <b>Saldo</b> muestra cuánto había en caja después de cada movimiento.</li>
         <li>${icon('receipt', 13)} ver comprobante · ${icon('edit', 13)} editar · ${icon('trash', 13)} eliminar.</li>
       </ul>
+      <h4>Tipos de gasto</h4>
+      <p>Cada categoría pertenece a un <b>tipo</b>, para ver de un vistazo en qué se usa el dinero:</p>
+      <ul class="hp-list">
+        <li><b>Personal y remuneraciones:</b> sueldo pastoral, imposiciones, asignación familiar, fondo de indemnización, guardatemplo, aguinaldos.</li>
+        <li><b>Servicios básicos:</b> luz, agua, gas, internet y teléfono.</li>
+        <li><b>Templo y mantención:</b> aseo, reparaciones, arriendo, equipamiento.</li>
+        <li><b>Vehículo:</b> mantención del furgón, combustible, seguro y permisos.</li>
+        <li><b>Aportes y cooperación:</b> UNIBA, UBACH, convención, Hogar Bautista, fundaciones.</li>
+        <li><b>Ministerios y educación:</b> ítems de ministerios, escuela dominical, misiones.</li>
+        <li><b>Ayuda social:</b> ayudas a familias, ofrendas solidarias, condolencias.</li>
+        <li><b>Actividades y administración:</b> reuniones, celebraciones, gastos bancarios y varios.</li>
+      </ul>
+      <p>La tarjeta <b>Gastos por tipo</b> muestra cuánto se gastó en cada uno; toca un tipo para filtrar el libro.</p>
       ${tip(`Los movimientos con ${icon('lock', 13)} son transferencias de ítems a ministerios. No se editan aquí: si hubo un error, se anulan desde el ministerio.`, 'warn')}`
     },
     {
@@ -101,6 +114,8 @@ const TEMAS = {
       <h4>Usuarios (líderes)</h4>
       ${pasos(`Presiona ${btn('plus', 'Nuevo usuario')}.`, 'Escribe el nombre, un usuario corto (ej: <code>alabanza</code>), el rol <b>Líder</b> y su ministerio.', 'Inventa una <b>contraseña temporal</b> y envíasela junto con el enlace de la página.', 'Al entrar por primera vez, el líder deberá crear su propia contraseña.')}
       ${tip('Si un líder olvida su contraseña, edita su usuario y escribe una nueva contraseña temporal.')}
+      <h4>Importar Excel</h4>
+      <p>Carga el libro de entradas y salidas (una hoja por mes). La app clasifica cada línea, compara los totales con los del libro y no duplica lo que ya importaste, así que puedes volver a usarlo cuando el libro tenga meses nuevos.</p>
       <h4>General</h4>
       <p>Define el <b>saldo inicial de caja</b>: el dinero que tenía la iglesia el día que empezaste a usar la app, y esa fecha.</p>`
     },

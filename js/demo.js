@@ -218,7 +218,7 @@ function seed() {
       if (d <= 7) gen(f, 'ingreso', 'Ofrenda misionera', between(60000, 120000), 'Primer domingo', 'Efectivo');
     }
     gen(dateIn(mm, 5), 'ingreso', 'Diezmos', between(150000, 300000), 'Diezmos por transferencia');
-    gen(dateIn(mm, 3), 'gasto', 'Honorarios pastorales', 950000, 'Sostén pastoral');
+    gen(dateIn(mm, 3), 'gasto', 'Sueldo pastoral', 950000, 'Sueldo pastor');
     gen(dateIn(mm, 10), 'gasto', 'Luz', between(55000, 95000), 'Cuenta de luz');
     gen(dateIn(mm, 12), 'gasto', 'Agua', between(18000, 32000), 'Cuenta de agua');
     gen(dateIn(mm, 14), 'gasto', 'Internet y teléfono', 32990, 'Plan internet templo');

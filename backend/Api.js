@@ -87,6 +87,7 @@ function crearResumen_(ss) {
   var sh = ss.getSheetByName('Resumen') || ss.insertSheet('Resumen', 0);
   sh.clear();
   var G = 'MovimientosGenerales', M = 'MovimientosMinisterios';
+  var gGrupo = colLetter_(G, 'grupo');
   var gMes = colLetter_(G, 'mes'), gTipo = colLetter_(G, 'tipo'), gMonto = colLetter_(G, 'monto'), gCat = colLetter_(G, 'categoria');
   var mMes = colLetter_(M, 'mes'), mTipo = colLetter_(M, 'tipo'), mMonto = colLetter_(M, 'monto'), mMin = colLetter_(M, 'ministerioId');
   sh.getRange('A1').setValue('Resumen automático · se actualiza solo').setFontWeight('bold').setFontSize(14);
@@ -94,6 +95,8 @@ function crearResumen_(ss) {
   sh.getRange('A4').setFormula('=IFERROR(QUERY(' + G + '!A:Z,"select ' + gMes + ', sum(' + gMonto + ') where ' + gMes + ' is not null and ' + gMes + ' <> \'mes\' group by ' + gMes + ' pivot ' + gTipo + ' order by ' + gMes + ' desc",1),"Sin datos aún")');
   sh.getRange('F3').setValue('Gastos generales por categoría').setFontWeight('bold');
   sh.getRange('F4').setFormula('=IFERROR(QUERY(' + G + '!A:Z,"select ' + gCat + ', sum(' + gMonto + ') where ' + gTipo + ' = \'gasto\' group by ' + gCat + ' order by sum(' + gMonto + ') desc",1),"Sin datos aún")');
+  sh.getRange('A30').setValue('Gastos por tipo y mes').setFontWeight('bold');
+  sh.getRange('A31').setFormula('=IFERROR(QUERY(' + G + '!A:Z,"select ' + gGrupo + ', sum(' + gMonto + ') where ' + gTipo + ' = \'gasto\' and ' + gGrupo + ' is not null group by ' + gGrupo + ' pivot ' + gMes + '",1),"Sin datos aún")');
   sh.getRange('J3').setValue('Ministerios (id) por mes').setFontWeight('bold');
   sh.getRange('J4').setFormula('=IFERROR(QUERY(' + M + '!A:Z,"select ' + mMin + ', ' + mMes + ', sum(' + mMonto + ') where ' + mMes + ' is not null and ' + mMes + ' <> \'mes\' group by ' + mMin + ', ' + mMes + ' pivot ' + mTipo + '",1),"Sin datos aún")');
   sh.getRange('A:Z').setNumberFormat('#,##0');
@@ -194,6 +197,14 @@ SheetStore_.prototype.rowValues_ = function (t, row) {
 };
 SheetStore_.prototype.insert = function (t, row) {
   this.sheet_(t).appendRow(this.rowValues_(t, row));
+  delete this.cache[t];
+};
+SheetStore_.prototype.insertMany = function (t, rows) {
+  if (!rows.length) return;
+  var self = this;
+  var sh = this.sheet_(t);
+  var vals = rows.map(function (r) { return self.rowValues_(t, r); });
+  sh.getRange(sh.getLastRow() + 1, 1, vals.length, vals[0].length).setValues(vals);
   delete this.cache[t];
 };
 SheetStore_.prototype.findRow_ = function (t, id) {

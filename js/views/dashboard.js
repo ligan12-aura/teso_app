@@ -1,5 +1,5 @@
 import { icon, esc, money, moneyShort, cap, mesLargo, mesCorto, mesNombre, fechaCorta, chart, PALETA, COLOR, ring, sparkline, badgeEstado, monthPicker, bindMonthPicker, prevMonth, emptyState } from '../ui.js';
-import { monthsBack, serieGeneral, saldoGeneralHasta, movsGeneralesMes, split, porCategoria, resumenMinisterio, estadoDe, transferenciaDe } from '../calc.js';
+import { monthsBack, serieGeneral, saldoGeneralHasta, movsGeneralesMes, split, porCategoria, porGrupo, resumenMinisterio, estadoDe, transferenciaDe } from '../calc.js';
 import { nuevoMovGeneral, registrarCulto } from './general.js';
 
 export function render(root, ctx) {
@@ -18,7 +18,7 @@ export function render(root, ctx) {
   const delta = (a, b) => (b ? (a - b) / b : 0);
   const pct = (v) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`;
   const ingCat = porCategoria(movsMes, 'ingreso');
-  const gasCat = porCategoria(movsMes, 'gasto');
+  const gasCat = porGrupo(movsMes, 'gasto').map(([g, v]) => [g, v]);
   const ultimos = [...data.movGenerales].sort((a, b) => (b.fecha + b.creadoEn).localeCompare(a.fecha + a.creadoEn)).slice(0, 7);
   const hora = new Date().getHours();
   const saludo = hora < 12 ? 'Buenos días' : hora < 20 ? 'Buenas tardes' : 'Buenas noches';
@@ -88,8 +88,8 @@ export function render(root, ctx) {
       ${ingCat.length ? `<div class="donut-wrap"><div class="chart-box donut"><canvas id="ch-ing"></canvas><div class="donut-center"><span>Total</span><strong>${moneyShort(actual.ingresos)}</strong></div></div>${legend(ingCat, actual.ingresos)}</div>` : emptyState('Sin ingresos este mes')}
     </article>
     <article class="card">
-      <header class="card-head"><div><h3>¿A dónde va?</h3><p class="muted">Gastos de ${mesNombre(mes)}</p></div></header>
-      ${gasCat.length ? `<div class="donut-wrap"><div class="chart-box donut"><canvas id="ch-gas"></canvas><div class="donut-center"><span>Total</span><strong>${moneyShort(actual.gastos)}</strong></div></div>${legend(gasCat, actual.gastos, 4)}</div>` : emptyState('Sin gastos este mes')}
+      <header class="card-head"><div><h3>¿A dónde va?</h3><p class="muted">Gastos de ${mesNombre(mes)} por tipo</p></div></header>
+      ${gasCat.length ? `<div class="donut-wrap"><div class="chart-box donut"><canvas id="ch-gas"></canvas><div class="donut-center"><span>Total</span><strong>${moneyShort(actual.gastos)}</strong></div></div>${legend(gasCat, actual.gastos, 5)}</div>` : emptyState('Sin gastos este mes')}
     </article>
     <article class="card">
       <header class="card-head"><div><h3>Ministerios este mes</h3><p class="muted">Uso de fondos disponibles · ${money(itemsTotal)} en ítems</p></div></header>
@@ -145,7 +145,7 @@ export function render(root, ctx) {
     options: { cutout: '70%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${c.label}: ${money(c.raw)}` } } } }
   }); };
   if (ingCat.length) donut('#ch-ing', ingCat, 5);
-  if (gasCat.length) donut('#ch-gas', gasCat, 4);
+  if (gasCat.length) donut('#ch-gas', gasCat, 5);
   const sorted = [...ministerios].sort((a, b) => b.itemMensual - a.itemMensual);
   chart(root.querySelector('#ch-items'), {
     type: 'bar',

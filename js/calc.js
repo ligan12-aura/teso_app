@@ -21,6 +21,20 @@ export function porCategoria(movs, tipo) {
   return [...map.entries()].sort((a, b) => b[1] - a[1]);
 }
 
+// Agrupa por tipo de gasto/ingreso (grupo) → [[grupo, total, [[categoria, total], ...]], ...]
+export function porGrupo(movs, tipo) {
+  const map = new Map();
+  movs.filter((m) => m.tipo === tipo).forEach((m) => {
+    const g = TesoCore.grupoDe(tipo, m.categoria);
+    if (!map.has(g)) map.set(g, { total: 0, cats: new Map() });
+    const e = map.get(g);
+    e.total += m.monto;
+    e.cats.set(m.categoria, (e.cats.get(m.categoria) || 0) + m.monto);
+  });
+  return [...map.entries()].map(([g, e]) => [g, e.total, [...e.cats.entries()].sort((a, b) => b[1] - a[1])]).sort((a, b) => b[1] - a[1]);
+}
+export const grupoDe = (tipo, cat) => TesoCore.grupoDe(tipo, cat);
+
 // ---------------- Tesorería general ----------------
 function movsVigentes(data) {
   const desde = data.config.fechaSaldoInicial || '';

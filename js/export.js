@@ -1,6 +1,6 @@
 // Descarga una copia .xlsx con toda la información (usa SheetJS bajo demanda)
 import { toast } from './ui.js';
-import { serieGeneral, resumenMinisterio } from './calc.js';
+import { serieGeneral, resumenMinisterio, porGrupo, grupoDe } from './calc.js';
 
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 
@@ -32,10 +32,19 @@ export async function exportarExcel(data) {
   add('Resumen mensual', serieGeneral(data, meses).map((s) => ({ Mes: s.mes, Ingresos: s.ingresos, Gastos: s.gastos, Resultado: s.neto, 'Saldo al cierre': s.saldo })), [10, 14, 14, 14, 16]);
 
   add('Tesorería general', [...data.movGenerales].sort(byFecha).map((m) => ({
-    Fecha: m.fecha, Mes: m.mes, Tipo: m.tipo, Categoría: m.categoria, Descripción: m.descripcion, Medio: m.medio,
+    Fecha: m.fecha, Mes: m.mes, Tipo: m.tipo, 'Tipo de gasto/ingreso': grupoDe(m.tipo, m.categoria), Categoría: m.categoria, Descripción: m.descripcion, Medio: m.medio,
     Ingreso: m.tipo === 'ingreso' ? m.monto : '', Gasto: m.tipo === 'gasto' ? m.monto : '',
     Ministerio: min[m.ministerioId] || '', Comprobante: m.archivoId ? 'Sí' : '', 'Registrado por': usr[m.creadoPor] || ''
-  })), [11, 8, 8, 22, 34, 13, 12, 12, 14, 12, 18]);
+  })), [11, 8, 8, 26, 22, 34, 13, 12, 12, 14, 12, 18]);
+
+  const filasTipo = [];
+  porGrupo(data.movGenerales, 'gasto').forEach(([g, , cats]) => {
+    const fila = { 'Tipo de gasto': g };
+    meses.forEach((mes) => { fila[mes] = data.movGenerales.filter((m) => m.tipo === 'gasto' && m.mes === mes && grupoDe('gasto', m.categoria) === g).reduce((a, m) => a + m.monto, 0); });
+    fila.Total = meses.reduce((a, mes) => a + fila[mes], 0);
+    filasTipo.push(fila);
+  });
+  add('Gastos por tipo', filasTipo, [28, ...meses.map(() => 12), 14]);
 
   add('Ministerios', [...data.movMinisterios].sort(byFecha).map((m) => ({
     Ministerio: min[m.ministerioId] || '', Fecha: m.fecha, Mes: m.mes, Tipo: m.tipo, Categoría: m.categoria, Descripción: m.descripcion,

@@ -1,5 +1,6 @@
 import { icon, esc, money, modal, formData, toast, fecha, emptyState } from '../ui.js';
 import { call, isDemo } from '../api.js';
+import { renderImportar } from './importar.js';
 
 let tab = 'ministerios';
 const ICONOS = ['🎵', '🧸', '🔥', '🌎', '🌷', '🤝', '📖', '🙏', '🎤', '🍞', '💒', '👨‍👩‍👧', '🎨', '⚽', '🕊️', '⛪'];
@@ -11,7 +12,7 @@ export function render(root, ctx) {
   root.innerHTML = `
   <section class="page-head"><div><span class="eyebrow">Administración</span><h1>Configuración</h1></div></section>
   <div class="tabs">
-    ${[['ministerios', 'Ministerios', 'grid'], ['usuarios', 'Usuarios', 'user'], ['general', 'General', 'settings']].map(([k, l, i]) => `<button class="tab ${tab === k ? 'active' : ''}" data-tab="${k}">${icon(i, 16)} ${l}</button>`).join('')}
+    ${[['ministerios', 'Ministerios', 'grid'], ['usuarios', 'Usuarios', 'user'], ['general', 'General', 'settings'], ['importar', 'Importar Excel', 'sheet']].map(([k, l, i]) => `<button class="tab ${tab === k ? 'active' : ''}" data-tab="${k}">${icon(i, 16)} ${l}</button>`).join('')}
   </div>
   <div id="tab-body"></div>`;
   root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; render(root, ctx); }));
@@ -59,6 +60,8 @@ export function render(root, ctx) {
     body.querySelector('[data-new]').addEventListener('click', () => editUsuario(ctx));
     body.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editUsuario(ctx, data.usuarios.find((u) => u.id === b.dataset.edit))));
   }
+
+  if (tab === 'importar') renderImportar(body, ctx);
 
   if (tab === 'general') {
     const c = data.config;
