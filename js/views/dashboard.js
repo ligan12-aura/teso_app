@@ -1,5 +1,5 @@
 import { icon, esc, money, moneyShort, cap, mesLargo, mesCorto, mesNombre, fechaCorta, chart, PALETA, COLOR, ring, sparkline, badgeEstado, monthPicker, bindMonthPicker, prevMonth, emptyState } from '../ui.js';
-import { monthsBack, serieGeneral, saldoGeneralHasta, movsGeneralesMes, split, porCategoria, porGrupo, resumenMinisterio, estadoDe, transferenciaDe } from '../calc.js';
+import { presupuestoGeneralMensual, monthsBack, serieGeneral, saldoGeneralHasta, movsGeneralesMes, split, porCategoria, porGrupo, resumenMinisterio, estadoDe, transferenciaDe } from '../calc.js';
 import { nuevoMovGeneral, registrarCulto } from './general.js';
 
 export function render(root, ctx) {
@@ -14,6 +14,7 @@ export function render(root, ctx) {
   const asignado = movsMes.filter((m) => m.origen === 'transferencia').reduce((a, m) => a + m.monto, 0);
   const ministerios = data.ministerios.filter((m) => m.activo);
   const itemsTotal = ministerios.reduce((a, m) => a + m.itemMensual, 0);
+  const presTotal = presupuestoGeneralMensual(data);
   const mesRend = prevMonth(mes);
   const delta = (a, b) => (b ? (a - b) / b : 0);
   const pct = (v) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`;
@@ -55,6 +56,7 @@ export function render(root, ctx) {
     <article class="kpi">
       <span class="kpi-label"><i class="dot" style="background:${COLOR.gasto}"></i> Gastos de ${mesNombre(mes)}</span>
       <strong class="kpi-value">${money(actual.gastos)}</strong>
+      ${presTotal ? `<div class="pres-mini"><div class="progress"><span style="width:${Math.min(100, (actual.gastos / presTotal) * 100)}%;${actual.gastos > presTotal ? 'background:var(--rose)' : ''}"></span></div><small>${Math.round((actual.gastos / presTotal) * 100)}% del presupuesto (${moneyShort(presTotal)})</small></div>` : ''}
       <span class="trend ${actual.gastos <= anterior.gastos ? 'up' : 'down'}">${icon(actual.gastos >= anterior.gastos ? 'up' : 'down', 14)} ${pct(delta(actual.gastos, anterior.gastos))} vs ${mesNombre(anterior.mes)}</span>
     </article>
     <article class="kpi">
@@ -92,11 +94,11 @@ export function render(root, ctx) {
       ${gasCat.length ? `<div class="donut-wrap"><div class="chart-box donut"><canvas id="ch-gas"></canvas><div class="donut-center"><span>Total</span><strong>${moneyShort(actual.gastos)}</strong></div></div>${legend(gasCat, actual.gastos, 5)}</div>` : emptyState('Sin gastos este mes')}
     </article>
     <article class="card">
-      <header class="card-head"><div><h3>Ministerios este mes</h3><p class="muted">Uso de fondos disponibles · ${money(itemsTotal)} en ítems</p></div></header>
+      <header class="card-head"><div><h3>Ministerios este mes</h3><p class="muted">Uso del presupuesto · ${money(itemsTotal)} en ítems</p></div></header>
       <div class="min-rings">
         ${ministerios.map((m) => {
           const r = resumenMinisterio(data, m.id, mes);
-          return `<a class="min-ring" href="#/ministerio/${m.id}">${ring(r.uso, m.color, 58, 6)}<span>${esc(m.icono)} ${esc(m.nombre)}</span><small>${moneyShort(r.gastos)} de ${moneyShort(r.saldoInicial + r.ingresos)}</small></a>`;
+          return `<a class="min-ring" href="#/ministerio/${m.id}">${ring(r.uso, m.color, 58, 6)}<span>${esc(m.icono)} ${esc(m.nombre)}</span><small>${moneyShort(r.gastos)} de ${moneyShort(r.presupuesto)}</small></a>`;
         }).join('')}
       </div>
     </article>

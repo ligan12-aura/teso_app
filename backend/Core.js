@@ -89,6 +89,11 @@ var TesoCore = (function () {
     if (mo === 13) { y++; mo = 1; }
     return y + '-' + pad(mo);
   }
+  function pesos(n) {
+    var v = Math.round(Number(n) || 0), neg = v < 0;
+    var t = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (neg ? '-$' : '$') + t;
+  }
   function labelMes(m) { return MESES[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4); }
   function normalize(table, row) {
     var out = {};
@@ -182,8 +187,11 @@ var TesoCore = (function () {
 
     // ---------------- Lectura ----------------
     function config() {
-      var c = { nombreIglesia: 'Iglesia Bautista El Redentor', saldoInicial: 0, fechaSaldoInicial: '' };
-      all('Config').forEach(function (r) { c[r.id] = r.id === 'saldoInicial' ? Number(r.valor) || 0 : r.valor; });
+      var c = { nombreIglesia: 'Iglesia Bautista El Redentor', saldoInicial: 0, fechaSaldoInicial: '', presupuestoGeneral: 0 };
+      all('Config').forEach(function (r) {
+        if (r.id === 'saldoInicial' || r.id === 'presupuestoGeneral') c[r.id] = Number(r.valor) || 0;
+        else if (r.id !== 'presupuesto') c[r.id] = r.valor;
+      });
       return c;
     }
 
@@ -258,6 +266,47 @@ var TesoCore = (function () {
       if (cat === RESERVADAS[ambito] && !permitirReservada) throw TesoError('La categoría "' + cat + '" se registra automáticamente al transferir el ítem.');
       return { fecha: p.fecha, tipo: tipo, categoria: cat, descripcion: String(p.descripcion || '').trim().slice(0, 300), monto: monto };
     }
+    // ---------------- Presupuestos ----------------
+    // Ministerio: lo gastado en el mes no puede superar su ítem mensual (presupuesto)
+    // más los ingresos adicionales que el mismo ministerio registró ese mes.
+    function presupuestoMinisterio(m, mes, excluirId) {
+      var movs = all('MovimientosMinisterios').filter(function (x) { return x.ministerioId === m.id && x.mes === mes && x.id !== excluirId; });
+      var extra = 0, gastado = 0;
+      movs.forEach(function (x) {
+        if (x.tipo === 'gasto') gastado += x.monto;
+        else if (x.origen !== 'transferencia') extra += x.monto;
+      });
+      var limite = m.itemMensual + extra;
+      return { limite: limite, gastado: gastado, disponible: limite - gastado, extra: extra };
+    }
+    function exigirPresupuestoMinisterio(m, mes, monto, excluirId) {
+      var b = presupuestoMinisterio(m, mes, excluirId);
+      if (b.gastado + monto > b.limite) {
+        throw TesoError('Este gasto supera el presupuesto de ' + m.nombre + ' para ' + labelMes(mes) + '. ' +
+          'Presupuesto: ' + pesos(b.limite) + (b.extra ? ' (ítem ' + pesos(m.itemMensual) + ' + ingresos extra ' + pesos(b.extra) + ')' : '') +
+          ' · ya gastado: ' + pesos(b.gastado) + ' · disponible: ' + pesos(Math.max(0, b.disponible)) + '.', 'PRESUPUESTO');
+      }
+    }
+    // Tesorería general: un presupuesto fijo mensual para TODOS sus gastos
+    // (incluye las transferencias de ítems a los ministerios). 0 = sin límite.
+    function presupuestoGeneral(mes, excluirId) {
+      var limite = config().presupuestoGeneral || 0;
+      var gastado = 0;
+      all('MovimientosGenerales').forEach(function (x) {
+        if (x.mes === mes && x.tipo === 'gasto' && x.id !== excluirId) gastado += x.monto;
+      });
+      return { limite: limite, gastado: gastado, disponible: limite - gastado };
+    }
+    function exigirPresupuestoGeneral(mes, monto, excluirId) {
+      var b = presupuestoGeneral(mes, excluirId);
+      if (!b.limite) return;
+      if (b.gastado + monto > b.limite) {
+        throw TesoError('Este gasto supera el presupuesto mensual de la tesorería general para ' + labelMes(mes) + '. ' +
+          'Presupuesto: ' + pesos(b.limite) + ' · ya gastado: ' + pesos(b.gastado) + ' · disponible: ' + pesos(Math.max(0, b.disponible)) +
+          '. Si el gasto es necesario, el tesorero debe ajustar el presupuesto en Configuración → Presupuesto.', 'PRESUPUESTO');
+      }
+    }
+
     function guardarArchivo(archivo, carpeta) {
       if (!archivo || !archivo.base64) return '';
       if (archivo.base64.length > MAX_ARCHIVO_B64) throw TesoError('El archivo es demasiado grande (máx. 8 MB)');
@@ -273,6 +322,7 @@ var TesoCore = (function () {
       var d = validarMov(p, 'ministerio');
       var mes = d.fecha.slice(0, 7);
       exigirEditable(user, m.id, mes);
+      if (d.tipo === 'gasto') exigirPresupuestoMinisterio(m, mes, d.monto);
       var archivoId = guardarArchivo(p.archivo, ['Boletas ministerios', m.nombre, mes]);
       var now = env.now();
       return insert('MovimientosMinisterios', Object.assign(d, {
@@ -293,6 +343,7 @@ var TesoCore = (function () {
       exigirEditable(user, mov.ministerioId, mov.mes);
       exigirEditable(user, mov.ministerioId, mes);
       var m = getMinisterio(mov.ministerioId);
+      if (d.tipo === 'gasto') exigirPresupuestoMinisterio(m, mes, d.monto, mov.id);
       var archivoId = mov.archivoId;
       if (p.archivo && p.archivo.base64) {
         var nuevo = guardarArchivo(p.archivo, ['Boletas ministerios', m.nombre, mes]);
@@ -359,6 +410,8 @@ var TesoCore = (function () {
       var monto = Math.round(Number(p.monto !== undefined && p.monto !== '' ? p.monto : m.itemMensual));
       if (!(monto > 0)) throw TesoError('El monto a transferir debe ser mayor a 0');
       if (monto > MAX_MONTO) throw TesoError('El monto es demasiado grande');
+      if (!(m.itemMensual > 0)) throw TesoError('Primero define el ítem mensual (presupuesto) de ' + m.nombre + ' en Configuración → Ministerios.');
+      if (monto > m.itemMensual) throw TesoError('La transferencia no puede superar el presupuesto mensual (ítem) de ' + m.nombre + ': ' + pesos(m.itemMensual) + '.', 'PRESUPUESTO');
       var prev = prevMonth(mes);
       if (!p.forzar) {
         var tieneHistoria = transf.some(function (t) { return t.ministerioId === m.id && t.mes < mes; }) ||
@@ -368,6 +421,7 @@ var TesoCore = (function () {
         }
       }
       var fecha = isDate(p.fecha) && p.fecha <= env.today() ? p.fecha : env.today();
+      exigirPresupuestoGeneral(fecha.slice(0, 7), monto);
       var now = env.now();
       var tid = uid(), gid = uid(), mmid = uid();
       insert('MovimientosGenerales', {
@@ -405,6 +459,7 @@ var TesoCore = (function () {
     }
     function addMovGeneral(user, p) {
       var d = datosGeneral(p);
+      if (d.tipo === 'gasto') exigirPresupuestoGeneral(d.mes, d.monto);
       var now = env.now();
       d.archivoId = guardarArchivo(p.archivo, ['Comprobantes tesorería', d.mes]);
       return insert('MovimientosGenerales', Object.assign(d, { id: uid(), origen: 'manual', creadoPor: user.id, creadoEn: now, actualizadoEn: now }));
@@ -427,6 +482,7 @@ var TesoCore = (function () {
     function updateMovGeneral(user, p) {
       var mov = movGeneralManual(p.id);
       var d = datosGeneral(p, mov.origen === 'importado');
+      if (mov.origen !== 'importado' && d.tipo === 'gasto') exigirPresupuestoGeneral(d.mes, d.monto, mov.id);
       var archivoId = mov.archivoId;
       if (p.archivo && p.archivo.base64) {
         var nuevo = guardarArchivo(p.archivo, ['Comprobantes tesorería', d.mes]);
@@ -523,12 +579,19 @@ var TesoCore = (function () {
       return publicUser(r);
     }
     function saveConfig(user, p) {
-      ['nombreIglesia', 'saldoInicial', 'fechaSaldoInicial'].forEach(function (k) {
-        if (p[k] === undefined) return;
-        var v = k === 'saldoInicial' ? String(Math.round(Number(p[k]) || 0)) : String(p[k]);
+      var guardar = function (k, v) {
         if (find('Config', k)) update('Config', k, { valor: v });
         else insert('Config', { id: k, valor: v });
+      };
+      ['nombreIglesia', 'saldoInicial', 'fechaSaldoInicial'].forEach(function (k) {
+        if (p[k] === undefined) return;
+        guardar(k, k === 'saldoInicial' ? String(Math.round(Number(p[k]) || 0)) : String(p[k]));
       });
+      if (p.presupuestoGeneral !== undefined) {
+        var v = Math.round(Number(p.presupuestoGeneral) || 0);
+        if (v < 0 || v > MAX_MONTO) throw TesoError('Presupuesto general inválido');
+        guardar('presupuestoGeneral', String(v));
+      }
       return config();
     }
 
@@ -571,7 +634,24 @@ var TesoCore = (function () {
       }
     }
 
-    return { handle: handle, isWrite: function (a) { return !!(ACTIONS[a] && ACTIONS[a].write); } };
+    return {
+      handle: handle,
+      isWrite: function (a) { return !!(ACTIONS[a] && ACTIONS[a].write); },
+      // Uso interno del servidor (no accesible desde la página)
+      interno: {
+        resumen: function () {
+          var porMes = {};
+          all('MovimientosGenerales').forEach(function (m) { var k = m.mes + ' ' + m.origen; porMes[k] = (porMes[k] || 0) + 1; });
+          var c = config();
+          return { porMes: porMes, saldoInicial: c.saldoInicial, fechaSaldoInicial: c.fechaSaldoInicial, tesoreros: all('Usuarios').filter(function (u) { return u.rol === 'tesorero'; }).length };
+        },
+        importarComoTesorero: function (p) {
+          var u = all('Usuarios').filter(function (x) { return x.rol === 'tesorero' && x.activo; })[0];
+          if (!u) throw TesoError('No hay tesorero activo');
+          return importarMovimientos(u, p);
+        }
+      }
+    };
   }
 
   return {
@@ -587,6 +667,7 @@ var TesoCore = (function () {
     prevMonth: prevMonth,
     nextMonth: nextMonth,
     labelMes: labelMes,
+    pesos: pesos,
     create: create
   };
 })();

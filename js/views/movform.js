@@ -1,5 +1,6 @@
 import { icon, esc, modal, formData, fileToPayload, toast, verArchivo, pesos, formatoPesos } from '../ui.js';
 import { call, isDemo } from '../api.js';
+import { presupuestoMinisterio, presupuestoGeneral } from '../calc.js';
 
 /**
  * Formulario de movimiento (ingreso/gasto) compartido entre
@@ -36,6 +37,7 @@ export function abrirFormMovimiento(opts) {
       <label class="field"><span>Fecha</span><input type="date" name="fecha" value="${mov?.fecha || hoy}" max="${hoy}" required></label>
     </div>
     <label class="field"><span>Categoría</span><select name="categoria">${catOptions(tipo0, mov?.categoria)}</select></label>
+    <div class="pres-hint" data-pres hidden></div>
     <label class="field" data-otra hidden><span>Nombre de la categoría</span><input name="categoriaOtra" maxlength="40"></label>
     ${esGeneral ? `<label class="field"><span>Medio</span><select name="medio">${data.medios.map((m) => `<option ${m === (mov?.medio || 'Efectivo') ? 'selected' : ''}>${m}</option>`).join('')}</select></label>` : ''}
     <label class="field"><span>Descripción</span><input name="descripcion" maxlength="300" placeholder="${esGeneral ? 'Ej: Culto dominical, cuenta de luz…' : 'Ej: Colación ensayo, materiales…'}" value="${esc(mov?.descripcion || '')}"></label>
@@ -64,6 +66,31 @@ export function abrirFormMovimiento(opts) {
       }));
       sel.addEventListener('change', () => { otra.hidden = sel.value !== '__otra'; if (!otra.hidden) form.categoriaOtra.focus(); });
       formatoPesos(form.monto);
+      // Muestra cuánto queda del presupuesto del mes y avisa si el gasto lo supera
+      const hint = form.querySelector('[data-pres]');
+      const midForm = opts.ministerioId || ctx.user.ministerioId;
+      const actualizarHint = () => {
+        const tipo = form.tipo.value, fechaV = form.fecha.value, cat = form.categoria.value;
+        const monto = pesos(form.monto.value);
+        if (tipo !== 'gasto' || !fechaV) { hint.hidden = true; return; }
+        const mesF = fechaV.slice(0, 7);
+        let lim, gastado, etiqueta;
+        if (esGeneral) {
+          const p = presupuestoGeneral(data, mesF, mov?.id);
+          if (!p.limite) { hint.hidden = true; return; }
+          lim = p.limite; gastado = p.gastado; etiqueta = 'la tesorería';
+        } else {
+          const p = presupuestoMinisterio(data, midForm, mesF, mov?.id);
+          lim = p.limite; gastado = p.gastado; etiqueta = 'tu ministerio';
+        }
+        const disp = lim - gastado;
+        const excede = monto > disp;
+        hint.hidden = false;
+        hint.className = `pres-hint ${excede ? 'over' : ''}`;
+        hint.innerHTML = `${icon(excede ? 'alert' : 'wallet', 14)} ${excede ? `<b>Supera el presupuesto.</b> ` : ''}Disponible para ${etiqueta} en ${mesF.slice(5, 7)}/${mesF.slice(0, 4)}: <b>${Math.max(0, disp).toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })}</b> de ${lim.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })}`;
+      };
+      ['input', 'change'].forEach((ev) => form.addEventListener(ev, actualizarHint));
+      actualizarHint();
       const file = form.archivo;
       const prev = form.querySelector('.upload-preview');
       file.addEventListener('change', async () => {

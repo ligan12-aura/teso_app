@@ -1,6 +1,6 @@
 import { pesos, icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState } from '../ui.js';
 import { call } from '../api.js';
-import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe } from '../calc.js';
+import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe, presupuestoGeneralMensual } from '../calc.js';
 import { PALETA } from '../ui.js';
 import { abrirFormMovimiento } from './movform.js';
 
@@ -96,6 +96,8 @@ export function render(root, ctx) {
     <header class="card-head"><div><h3>${filtros.periodo === 'mes' ? `Pulso de ${mesLargo(mes)}` : `Año ${anio} mes a mes`}</h3><p class="muted">${filtros.periodo === 'mes' ? 'Movimientos por día y saldo de caja' : 'Ingresos, gastos y saldo al cierre de cada mes'}</p></div></header>
     <div class="chart-box"><canvas id="ch-gen"></canvas></div>
   </article>
+
+  ${franjaPresupuesto(data, s.gastos, filtros.periodo === 'mes' ? `de ${mesLargo(mes)}` : `del año ${anio}`, filtros.periodo === 'mes' ? 1 : 12)}
 
   ${tarjetaTipos(periodoMovs, s.gastos, filtros.periodo === 'mes' ? mesLargo(mes) : `año ${anio}`)}
 
@@ -210,6 +212,23 @@ export function render(root, ctx) {
       }
     });
   }
+}
+
+function franjaPresupuesto(data, gastado, etiqueta, factor) {
+  const lim = presupuestoGeneralMensual(data) * factor;
+  if (!lim) {
+    return `<section class="pres-strip"><div class="ps-txt"><span>${icon('wallet', 16)} Presupuesto ${etiqueta}</span><strong>Sin definir</strong><small>no hay límite de gasto</small></div>
+      <div class="ps-bar"><p class="muted">Define el presupuesto mensual de la tesorería en Configuración → Presupuesto.</p><a class="btn btn-ghost btn-sm" href="#/admin" style="align-self:flex-start">${icon('settings', 15)} Definir presupuesto</a></div></section>`;
+  }
+  const pct = gastado / lim;
+  const cls = pct > 1 ? 'over' : pct >= 0.9 ? 'near' : '';
+  return `<section class="pres-strip ${cls}">
+    <div class="ps-txt"><span>${icon('wallet', 16)} Presupuesto ${etiqueta}</span><strong>${money(lim)}</strong><small>todos los gastos, incluidos los ítems</small></div>
+    <div class="ps-bar">
+      <div class="progress"><span style="width:${Math.min(100, pct * 100)}%"></span></div>
+      <div class="ps-nums"><span>Gastado <b>${money(gastado)}</b> (${Math.round(pct * 100)}%)</span><span>${lim >= gastado ? `Disponible <b>${money(lim - gastado)}</b>` : `<b class="gasto">Excedido en ${money(gastado - lim)}</b>`}</span></div>
+    </div>
+  </section>`;
 }
 
 function tarjetaTipos(movs, totalGastos, etiqueta) {

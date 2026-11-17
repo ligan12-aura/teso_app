@@ -198,6 +198,7 @@ function seed() {
   db.Config.push({ id: 'nombreIglesia', valor: 'Iglesia Bautista El Redentor' });
   db.Config.push({ id: 'saldoInicial', valor: '1250000' });
   db.Config.push({ id: 'fechaSaldoInicial', valor: months[0] + '-01' });
+  db.Config.push({ id: 'presupuestoGeneral', valor: '2600000' });
 
   const gen = (fecha, tipo, categoria, monto, descripcion, medio = 'Transferencia', extra = {}) => {
     if (!notFuture(fecha)) return null;

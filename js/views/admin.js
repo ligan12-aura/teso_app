@@ -1,18 +1,21 @@
 import { icon, esc, money, modal, formData, toast, fecha, emptyState, pesos, formatoPesos } from '../ui.js';
 import { call, isDemo } from '../api.js';
 import { renderImportar } from './importar.js';
+import { gastoGeneralPromedio, totalItems, presupuestoGeneralMensual } from '../calc.js';
+import { mesLargo, prevMonth } from '../ui.js';
 
-let tab = 'ministerios';
+let tab = 'presupuesto';
 const ICONOS = ['🎵', '🧸', '🔥', '🌎', '🌷', '🤝', '📖', '🙏', '🎤', '🍞', '💒', '👨‍👩‍👧', '🎨', '⚽', '🕊️', '⛪'];
 const COLORES = ['#7c5cbf', '#e9883a', '#2f9e8f', '#3a6ea5', '#c2577a', '#7a8b3a', '#23395d', '#c99a3b', '#d4515f', '#4f7cac', '#8a5a44', '#5c6b7a'];
 
 export function render(root, ctx) {
   const { data } = ctx;
+  try { const t = sessionStorage.getItem('teso_admin_tab'); if (t) { tab = t; sessionStorage.removeItem('teso_admin_tab'); } } catch { /* */ }
   const minName = Object.fromEntries(data.ministerios.map((m) => [m.id, m]));
   root.innerHTML = `
   <section class="page-head"><div><span class="eyebrow">Administración</span><h1>Configuración</h1></div></section>
   <div class="tabs">
-    ${[['ministerios', 'Ministerios', 'grid'], ['usuarios', 'Usuarios', 'user'], ['general', 'General', 'settings'], ['importar', 'Importar Excel', 'sheet']].map(([k, l, i]) => `<button class="tab ${tab === k ? 'active' : ''}" data-tab="${k}">${icon(i, 16)} ${l}</button>`).join('')}
+    ${[['presupuesto', 'Presupuesto', 'wallet'], ['ministerios', 'Ministerios', 'grid'], ['usuarios', 'Usuarios', 'user'], ['general', 'General', 'settings'], ['importar', 'Importar historial', 'sheet']].map(([k, l, i]) => `<button class="tab ${tab === k ? 'active' : ''}" data-tab="${k}">${icon(i, 16)} ${l}</button>`).join('')}
   </div>
   <div id="tab-body"></div>`;
   root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; render(root, ctx); }));
@@ -62,6 +65,65 @@ export function render(root, ctx) {
   }
 
   if (tab === 'importar') renderImportar(body, ctx);
+
+  if (tab === 'presupuesto') {
+    const hoyMes = data.hoy.slice(0, 7);
+    const ult = [prevMonth(hoyMes), prevMonth(prevMonth(hoyMes)), prevMonth(prevMonth(prevMonth(hoyMes)))];
+    const prom = gastoGeneralPromedio(data, ult);
+    const general = presupuestoGeneralMensual(data);
+    const activos = data.ministerios.filter((m) => m.activo);
+    body.innerHTML = `
+    <form data-pres-form class="stack">
+      <article class="card">
+        <header class="card-head"><div><h3>Presupuesto mensual de la tesorería general</h3><p class="muted">Monto máximo para <b>todos</b> los gastos de cada mes (sueldos, servicios, aportes, ítems de ministerios, etc.). Déjalo en 0 para no limitar.</p></div></header>
+        <div class="pres-general">
+          <label class="field"><span>Presupuesto mensual ($)</span><input name="presupuestoGeneral" inputmode="numeric" class="input-money" value="${general ? general.toLocaleString('es-CL') : ''}" placeholder="Sin límite"></label>
+          <div class="pres-ref">
+            <span>Gasto promedio de los últimos 3 meses</span>
+            <strong>${money(prom)}</strong>
+            ${prom ? `<button type="button" class="link-btn" data-usar="${prom}">Usar este monto</button>` : ''}
+          </div>
+        </div>
+      </article>
+      <article class="card">
+        <header class="card-head"><div><h3>Presupuesto de cada ministerio (ítem mensual)</h3><p class="muted">El líder no puede gastar más que su ítem del mes (más los ingresos extra que registre) y el tesorero no puede transferir más que el ítem.</p></div></header>
+        ${activos.length ? `<div class="table-wrap"><table class="table pres-table">
+          <thead><tr><th>Ministerio</th><th class="num">Ítem mensual</th></tr></thead>
+          <tbody>${activos.map((m) => `<tr><td><span class="min-dot" style="background:${m.color}">${esc(m.icono)}</span> <b>${esc(m.nombre)}</b></td>
+            <td class="num"><input class="pres-input" data-item="${m.id}" inputmode="numeric" value="${m.itemMensual ? m.itemMensual.toLocaleString('es-CL') : ''}" placeholder="0"></td></tr>`).join('')}</tbody>
+          <tfoot><tr><td><b>Total ítems</b></td><td class="num"><b data-total-items></b></td></tr></tfoot>
+        </table></div>
+        <div class="note warn" data-aviso hidden>${icon('alert', 16)}<span>Los ítems suman más que el presupuesto general: no alcanzaría para transferirlos todos.</span></div>` : emptyState('Aún no hay ministerios activos.', 'grid')}
+      </article>
+      <div class="imp-actions"><button class="btn btn-primary" type="submit">Guardar presupuesto</button></div>
+      <p class="muted small">Solo el tesorero puede modificar estos montos.</p>
+    </form>`;
+    const form = body.querySelector('[data-pres-form]');
+    const gen = form.presupuestoGeneral;
+    const items = [...form.querySelectorAll('[data-item]')];
+    const recalcular = () => {
+      const t = items.reduce((a, i) => a + pesos(i.value), 0);
+      const tot = form.querySelector('[data-total-items]'); if (tot) tot.textContent = money(t);
+      const av = form.querySelector('[data-aviso]'); if (av) av.hidden = !(pesos(gen.value) && t > pesos(gen.value));
+    };
+    [gen, ...items].forEach((i) => { formatoPesos(i); i.addEventListener('input', recalcular); });
+    form.querySelector('[data-usar]')?.addEventListener('click', (e) => { gen.value = Number(e.currentTarget.dataset.usar).toLocaleString('es-CL'); recalcular(); });
+    recalcular();
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = form.querySelector('[type=submit]'); btn.disabled = true; btn.classList.add('loading');
+      try {
+        await call('saveConfig', { presupuestoGeneral: pesos(gen.value) });
+        for (const i of items) {
+          const m = activos.find((x) => x.id === i.dataset.item);
+          const v = pesos(i.value);
+          if (m && v !== m.itemMensual) await call('saveMinisterio', { id: m.id, nombre: m.nombre, color: m.color, icono: m.icono, itemMensual: v, activo: m.activo });
+        }
+        toast('Presupuesto guardado');
+        await ctx.refresh();
+      } catch (er) { toast(er.message, 'err'); btn.disabled = false; btn.classList.remove('loading'); }
+    });
+  }
 
   if (tab === 'general') {
     const c = data.config;

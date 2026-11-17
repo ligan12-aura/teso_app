@@ -61,6 +61,32 @@ export function movsGeneralesMes(data, mes) {
 export function movsMinisterio(data, mid) {
   return data.movMinisterios.filter((m) => m.ministerioId === mid);
 }
+// ---------------- Presupuestos ----------------
+// Ministerio: presupuesto del mes = ítem mensual + ingresos extra del mismo mes
+export function presupuestoMinisterio(data, mid, mes, excluirId = '') {
+  const m = data.ministerios.find((x) => x.id === mid);
+  let extra = 0, gastado = 0;
+  data.movMinisterios.forEach((x) => {
+    if (x.ministerioId !== mid || x.mes !== mes || x.id === excluirId) return;
+    if (x.tipo === 'gasto') gastado += x.monto;
+    else if (x.origen !== 'transferencia') extra += x.monto;
+  });
+  const item = m ? m.itemMensual : 0;
+  const limite = item + extra;
+  return { item, extra, limite, gastado, disponible: limite - gastado };
+}
+// Tesorería general: un presupuesto mensual para todos sus gastos, incluidos los ítems (0 = sin límite)
+export const presupuestoGeneralMensual = (data) => Number(data.config.presupuestoGeneral) || 0;
+export function presupuestoGeneral(data, mes, excluirId = '') {
+  const limite = presupuestoGeneralMensual(data);
+  const gastado = data.movGenerales.reduce((a, x) => (x.mes === mes && x.tipo === 'gasto' && x.id !== excluirId ? a + x.monto : a), 0);
+  return { limite, gastado, disponible: limite - gastado };
+}
+export const totalItems = (data) => data.ministerios.filter((m) => m.activo).reduce((a, m) => a + m.itemMensual, 0);
+export function gastoGeneralPromedio(data, meses) {
+  return Math.round(meses.reduce((a, mm) => a + data.movGenerales.reduce((b, x) => (x.mes === mm && x.tipo === 'gasto' ? b + x.monto : b), 0), 0) / (meses.length || 1));
+}
+
 export function resumenMinisterio(data, mid, mes) {
   const movs = movsMinisterio(data, mid);
   const antes = movs.filter((m) => m.mes < mes);
@@ -70,11 +96,12 @@ export function resumenMinisterio(data, mid, mes) {
   const item = sum(delMes.filter((m) => m.origen === 'transferencia'));
   const sinBoleta = delMes.filter((m) => m.tipo === 'gasto' && !m.archivoId).length;
   const boletas = delMes.filter((m) => m.archivoId).length;
-  const disponible = saldoInicial + s.ingresos;
+  const p = presupuestoMinisterio(data, mid, mes);
   return {
     movs: delMes, saldoInicial, ...s, item, sinBoleta, boletas,
     saldoFinal: saldoInicial + s.neto,
-    uso: disponible > 0 ? s.gastos / disponible : (s.gastos > 0 ? 1.01 : 0)
+    presupuesto: p.limite, disponiblePres: p.disponible,
+    uso: p.limite > 0 ? s.gastos / p.limite : (s.gastos > 0 ? 1.01 : 0)
   };
 }
 export function saldoMinisterio(data, mid) {

@@ -1,6 +1,6 @@
 import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesNombre, mesCorto, fecha, fechaCorta, chart, PALETA, COLOR, monthPicker, bindMonthPicker, badgeEstado, ESTADOS, modal, formData, toast, confirmar, verArchivo, emptyState, nextMonth, prevMonth } from '../ui.js';
 import { call } from '../api.js';
-import { resumenMinisterio, rendicionDe, transferenciaDe, liderDe, monthsBack, movsMinisterio, split, porCategoria, saldoMinisterio } from '../calc.js';
+import { presupuestoMinisterio, resumenMinisterio, rendicionDe, transferenciaDe, liderDe, monthsBack, movsMinisterio, split, porCategoria, saldoMinisterio } from '../calc.js';
 import { abrirFormMovimiento } from './movform.js';
 
 export function render(root, ctx) {
@@ -47,6 +47,8 @@ export function render(root, ctx) {
 
   ${pendientesLider()}
   ${panelRendicion()}
+
+  ${franjaPresupuesto()}
 
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label">Saldo inicial</span><strong class="kpi-value">${money(r.saldoInicial)}</strong><span class="kpi-sub">arrastre de meses anteriores</span></article>
@@ -102,6 +104,24 @@ export function render(root, ctx) {
       </article>
     </div>
   </section>`;
+
+  // ---------- Presupuesto del mes ----------
+  function franjaPresupuesto() {
+    const p = presupuestoMinisterio(data, m.id, mes);
+    const pct = p.limite > 0 ? p.gastado / p.limite : (p.gastado > 0 ? 1.01 : 0);
+    const cls = pct > 1 ? 'over' : pct >= 0.9 ? 'near' : '';
+    return `<section class="pres-strip ${cls}">
+      <div class="ps-txt">
+        <span>${icon('wallet', 16)} Presupuesto de ${mesNombre(mes)}</span>
+        <strong>${money(p.limite)}</strong>
+        <small>${p.extra ? `ítem ${money(p.item)} + ingresos extra ${money(p.extra)}` : 'ítem mensual'}</small>
+      </div>
+      <div class="ps-bar">
+        <div class="progress"><span style="width:${Math.min(100, pct * 100)}%"></span></div>
+        <div class="ps-nums"><span>Gastado <b>${money(p.gastado)}</b> (${Math.round(pct * 100)}%)</span><span>${p.disponible >= 0 ? `Disponible <b>${money(p.disponible)}</b>` : `<b class="gasto">Excedido en ${money(-p.disponible)}</b>`}</span></div>
+      </div>
+    </section>`;
+  }
 
   // ---------- Avisos para el líder: meses anteriores sin cerrar ----------
   function pendientesLider() {
@@ -276,6 +296,7 @@ export function transferirItem(ctx, m, mes, forzar = false) {
     title: `Transferir ítem · ${m.nombre}`,
     body: `<p class="muted">Registra que transferiste el ítem de <b>${mesLargo(mes)}</b> al líder. Se crea un egreso en tesorería general y un ingreso en el ministerio.</p>
       ${forzar ? `<div class="note warn">${icon('alert', 16)} La rendición del mes anterior no está aprobada. Se transferirá igualmente.</div>` : ''}
+      <div class="note">${icon('wallet', 16)}<span>El presupuesto mensual (ítem) de ${esc(m.nombre)} es <b>${money(m.itemMensual)}</b>. La transferencia no puede superarlo.</span></div>
       <div class="form-row">
         <label class="field"><span>Monto</span><input name="monto" inputmode="numeric" value="${m.itemMensual.toLocaleString('es-CL')}" required></label>
         <label class="field"><span>Fecha de transferencia</span><input type="date" name="fecha" value="${ctx.data.hoy}" required></label>
@@ -284,6 +305,7 @@ export function transferirItem(ctx, m, mes, forzar = false) {
     onOpen(f) { formatoPesos(f.monto); },
     async onSubmit(f, { close }) {
       const d = formData(f);
+      if (pesos(d.monto) > m.itemMensual) throw new Error(`No puede superar el presupuesto mensual (ítem) de ${money(m.itemMensual)}.`);
       try {
         await call('transferirItem', { ministerioId: m.id, mes, monto: pesos(d.monto), fecha: d.fecha, forzar });
       } catch (e) {
