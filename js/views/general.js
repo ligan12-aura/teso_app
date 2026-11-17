@@ -1,0 +1,203 @@
+import { icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState } from '../ui.js';
+import { call } from '../api.js';
+import { split, saldoGeneralHasta, monthsBack, serieGeneral } from '../calc.js';
+import { abrirFormMovimiento } from './movform.js';
+
+const filtros = { periodo: 'mes', tipo: '', categoria: '', q: '' };
+
+export const nuevoMovGeneral = (ctx, tipo = 'ingreso', mov = null) =>
+  abrirFormMovimiento({ ctx, ambito: 'general', tipo, mov, action: mov ? 'updateMovGeneral' : 'addMovGeneral', titulo: mov ? 'Editar movimiento' : 'Nuevo movimiento · Tesorería general' });
+
+export function registrarCulto(ctx) {
+  const cats = ['Diezmos', 'Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo'];
+  return modal({
+    title: 'Registrar culto',
+    body: `<p class="muted">Ingresa lo recaudado en un culto. Se crea un ingreso por cada monto.</p>
+      <div class="form-row">
+        <label class="field"><span>Fecha del culto</span><input type="date" name="fecha" value="${ctx.data.hoy}" max="${ctx.data.hoy}" required></label>
+        <label class="field"><span>Medio</span><select name="medio">${ctx.data.medios.map((m) => `<option>${m}</option>`).join('')}</select></label>
+      </div>
+      <div class="culto-grid">
+        ${cats.map((c, i) => `<label class="field"><span>${c}</span><input name="m${i}" inputmode="numeric" class="input-money" placeholder="0"></label>`).join('')}
+      </div>
+      <label class="field"><span>Descripción</span><input name="descripcion" value="Culto dominical"></label>
+      <div class="culto-total">Total: <strong data-total>$0</strong></div>`,
+    submitLabel: 'Registrar ingresos',
+    onOpen(form) {
+      const inputs = form.querySelectorAll('.input-money');
+      const upd = () => {
+        let t = 0;
+        inputs.forEach((i) => { const d = i.value.replace(/\D/g, ''); i.value = d ? Number(d).toLocaleString('es-CL') : ''; t += Number(d) || 0; });
+        form.querySelector('[data-total]').textContent = money(t);
+      };
+      inputs.forEach((i) => i.addEventListener('input', upd));
+    },
+    async onSubmit(form) {
+      const d = formData(form);
+      const items = cats.map((c, i) => ({ categoria: c, monto: Number(String(d['m' + i] || '').replace(/\D/g, '')) })).filter((x) => x.monto > 0);
+      const r = await call('addMovGeneralLote', { fecha: d.fecha, medio: d.medio, descripcion: d.descripcion, items });
+      toast(`${r.creados} ingreso${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}`);
+      await ctx.refresh();
+    }
+  });
+}
+
+export function render(root, ctx) {
+  const { data, mes } = ctx;
+  const anio = mes.slice(0, 4);
+  const enPeriodo = (m) => (filtros.periodo === 'mes' ? m.mes === mes : m.mes.startsWith(anio));
+  const periodoMovs = data.movGenerales.filter(enPeriodo);
+  const q = filtros.q.toLowerCase();
+  const lista = periodoMovs
+    .filter((m) => (!filtros.tipo || m.tipo === filtros.tipo) && (!filtros.categoria || m.categoria === filtros.categoria))
+    .filter((m) => !q || `${m.categoria} ${m.descripcion} ${m.medio}`.toLowerCase().includes(q))
+    .sort((a, b) => (b.fecha + b.creadoEn).localeCompare(a.fecha + a.creadoEn));
+  const s = split(periodoMovs);
+  const saldoFinal = filtros.periodo === 'mes' ? saldoGeneralHasta(data, mes) : saldoGeneralHasta(data, `${anio}-12`);
+  const categorias = [...new Set(periodoMovs.map((m) => m.categoria))].sort();
+  const minName = Object.fromEntries(data.ministerios.map((m) => [m.id, m]));
+
+  // saldo acumulado tras cada movimiento (orden cronológico global)
+  const saldoTras = new Map();
+  {
+    let acc = Number(data.config.saldoInicial) || 0;
+    const desde = data.config.fechaSaldoInicial || '';
+    [...data.movGenerales].sort((a, b) => (a.fecha + a.creadoEn).localeCompare(b.fecha + b.creadoEn)).forEach((m) => {
+      if (desde && m.fecha < desde) return;
+      acc += m.tipo === 'ingreso' ? m.monto : -m.monto;
+      saldoTras.set(m.id, acc);
+    });
+  }
+
+  root.innerHTML = `
+  <section class="page-head">
+    <div><span class="eyebrow">Iglesia</span><h1>Tesorería general</h1></div>
+    <div class="head-actions">
+      <div class="seg seg-sm">
+        <label><input type="radio" name="periodo" value="mes" ${filtros.periodo === 'mes' ? 'checked' : ''}><span>Mes</span></label>
+        <label><input type="radio" name="periodo" value="anio" ${filtros.periodo === 'anio' ? 'checked' : ''}><span>Año</span></label>
+      </div>
+      ${filtros.periodo === 'mes' ? monthPicker(mes) : `<div class="month-picker"><button class="icon-btn" data-y="-1">${icon('chevL')}</button><span class="mp-label">Año ${anio}</span><button class="icon-btn" data-y="1">${icon('chevR')}</button></div>`}
+    </div>
+  </section>
+
+  <section class="kpis kpis-4">
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${COLOR.ingreso}"></i> Ingresos</span><strong class="kpi-value">${money(s.ingresos)}</strong></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${COLOR.gasto}"></i> Gastos</span><strong class="kpi-value">${money(s.gastos)}</strong></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${COLOR.gold}"></i> Resultado</span><strong class="kpi-value ${s.neto < 0 ? 'neg' : 'pos'}">${s.neto < 0 ? '−' : '+'}${money(Math.abs(s.neto))}</strong></article>
+    <article class="kpi kpi-dark"><span class="kpi-label">${icon('wallet', 15)} Saldo al cierre</span><strong class="kpi-value">${money(saldoFinal)}</strong></article>
+  </section>
+
+  <article class="card">
+    <header class="card-head"><div><h3>${filtros.periodo === 'mes' ? `Pulso de ${mesLargo(mes)}` : `Año ${anio} mes a mes`}</h3><p class="muted">${filtros.periodo === 'mes' ? 'Movimientos por día y saldo de caja' : 'Ingresos, gastos y saldo al cierre de cada mes'}</p></div></header>
+    <div class="chart-box"><canvas id="ch-gen"></canvas></div>
+  </article>
+
+  <article class="card">
+    <header class="card-head wrap">
+      <div><h3>Libro de movimientos</h3><p class="muted">${lista.length} movimiento${lista.length === 1 ? '' : 's'}</p></div>
+      <div class="head-actions">
+        <button class="btn btn-ghost btn-sm" data-culto>${icon('church', 16)} Registrar culto</button>
+        <button class="btn btn-soft-green btn-sm" data-add="ingreso">${icon('plus', 16)} Ingreso</button>
+        <button class="btn btn-soft-rose btn-sm" data-add="gasto">${icon('plus', 16)} Gasto</button>
+      </div>
+    </header>
+    <div class="filters">
+      <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar…" value="${esc(filtros.q)}" data-f="q"></div>
+      <select data-f="tipo"><option value="">Ingresos y gastos</option><option value="ingreso" ${filtros.tipo === 'ingreso' ? 'selected' : ''}>Solo ingresos</option><option value="gasto" ${filtros.tipo === 'gasto' ? 'selected' : ''}>Solo gastos</option></select>
+      <select data-f="categoria"><option value="">Todas las categorías</option>${categorias.map((c) => `<option ${c === filtros.categoria ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+    </div>
+    ${lista.length ? `
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th class="hide-sm">Medio</th><th class="num">Monto</th><th class="num hide-sm">Saldo</th><th></th></tr></thead>
+        <tbody>
+          ${lista.map((m) => `
+          <tr>
+            <td class="nowrap">${fecha(m.fecha)}</td>
+            <td><span class="cat-pill ${m.tipo}">${esc(m.categoria)}</span></td>
+            <td class="desc">${esc(m.descripcion)}${m.origen === 'transferencia' && minName[m.ministerioId] ? ` <a class="tag" href="#/ministerio/${m.ministerioId}">${esc(minName[m.ministerioId].icono)} Ítem</a>` : ''}</td>
+            <td class="hide-sm muted">${esc(m.medio)}</td>
+            <td class="num ${m.tipo} strong">${m.tipo === 'ingreso' ? '+' : '−'}${money(m.monto)}</td>
+            <td class="num hide-sm muted">${saldoTras.has(m.id) ? money(saldoTras.get(m.id)) : ''}</td>
+            <td class="row-actions">
+              ${m.archivoId ? `<button class="icon-btn sm" data-ver="${m.id}" title="Ver comprobante">${icon('receipt', 16)}</button>` : ''}
+              ${m.origen === 'manual' ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="Se gestiona desde Rendiciones">${icon('lock', 15)}</span>`}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` : emptyState('No hay movimientos con estos filtros', 'search')}
+  </article>`;
+
+  // Eventos
+  bindMonthPicker(root, mes, ctx.setMes);
+  root.querySelectorAll('[data-y]').forEach((b) => b.addEventListener('click', () => ctx.setMes(`${+anio + +b.dataset.y}${mes.slice(4)}`)));
+  root.querySelectorAll('[name=periodo]').forEach((r) => r.addEventListener('change', () => { filtros.periodo = r.value; filtros.categoria = ''; ctx.setMes(mes); }));
+  root.querySelectorAll('[data-f]').forEach((el) => {
+    const ev = el.tagName === 'INPUT' ? 'input' : 'change';
+    el.addEventListener(ev, () => {
+      filtros[el.dataset.f] = el.value;
+      if (el.tagName === 'INPUT') { clearTimeout(el._t); el._t = setTimeout(() => { ctx.setMes(mes); const s2 = document.querySelector('[data-f=q]'); s2?.focus(); s2?.setSelectionRange(s2.value.length, s2.value.length); }, 300); }
+      else ctx.setMes(mes);
+    });
+  });
+  root.querySelector('[data-culto]').addEventListener('click', () => registrarCulto(ctx));
+  root.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => nuevoMovGeneral(ctx, b.dataset.add)));
+  const byId = (id) => data.movGenerales.find((m) => m.id === id);
+  root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => nuevoMovGeneral(ctx, null, byId(b.dataset.edit))));
+  root.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => { const m = byId(b.dataset.ver); verArchivo(m.archivoId, m.descripcion || m.categoria); }));
+  root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+    const m = byId(b.dataset.del);
+    if (!(await confirmar(`Se eliminará <b>${esc(m.categoria)}</b> por <b>${money(m.monto)}</b> del ${fecha(m.fecha)}.`, { boton: 'Eliminar', danger: true }))) return;
+    try { await call('deleteMovGeneral', { id: m.id }); toast('Movimiento eliminado'); await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
+  }));
+
+  // Gráfico
+  const canvas = root.querySelector('#ch-gen');
+  if (filtros.periodo === 'mes') {
+    const dias = new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate();
+    const ing = Array(dias).fill(0), gas = Array(dias).fill(0);
+    periodoMovs.forEach((m) => { const d = +m.fecha.slice(8, 10) - 1; (m.tipo === 'ingreso' ? ing : gas)[d] += m.monto; });
+    let acc = saldoGeneralHasta(data, TesoCore.prevMonth(mes));
+    const hoy = data.hoy;
+    const saldo = ing.map((v, i) => { acc += v - gas[i]; return `${mes}-${String(i + 1).padStart(2, '0')}` > hoy ? null : acc; });
+    chart(canvas, {
+      data: {
+        labels: Array.from({ length: dias }, (_, i) => i + 1),
+        datasets: [
+          { type: 'bar', label: 'Ingresos', data: ing, backgroundColor: COLOR.ingreso, borderRadius: 4, maxBarThickness: 14 },
+          { type: 'bar', label: 'Gastos', data: gas.map((v) => -v), backgroundColor: COLOR.gasto, borderRadius: 4, maxBarThickness: 14 },
+          { type: 'line', label: 'Saldo', data: saldo, borderColor: COLOR.gold, tension: 0.3, pointRadius: 0, borderWidth: 2.5, yAxisID: 'y1' }
+        ]
+      },
+      options: {
+        interaction: { mode: 'index', intersect: false },
+        plugins: { tooltip: { callbacks: { title: (c) => `Día ${c[0].label}`, label: (c) => ` ${c.dataset.label}: ${money(Math.abs(c.raw))}` } } },
+        scales: {
+          x: { stacked: true, grid: { display: false } },
+          y: { stacked: true, ticks: { callback: (v) => moneyShort(v) }, grid: { color: '#eef0f3' }, border: { display: false } },
+          y1: { position: 'right', ticks: { callback: (v) => moneyShort(v) }, grid: { display: false }, border: { display: false } }
+        }
+      }
+    });
+  } else {
+    const meses = Array.from({ length: 12 }, (_, i) => `${anio}-${String(i + 1).padStart(2, '0')}`);
+    const serie = serieGeneral(data, meses);
+    chart(canvas, {
+      data: {
+        labels: meses.map(mesCorto),
+        datasets: [
+          { type: 'bar', label: 'Ingresos', data: serie.map((x) => x.ingresos), backgroundColor: COLOR.ingreso, borderRadius: 6, maxBarThickness: 22 },
+          { type: 'bar', label: 'Gastos', data: serie.map((x) => x.gastos), backgroundColor: COLOR.gasto, borderRadius: 6, maxBarThickness: 22 },
+          { type: 'line', label: 'Saldo', data: serie.map((x) => x.saldo), borderColor: COLOR.gold, tension: 0.3, pointRadius: 3, yAxisID: 'y1' }
+        ]
+      },
+      options: {
+        interaction: { mode: 'index', intersect: false },
+        plugins: { tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${money(c.raw)}` } } },
+        scales: { x: { grid: { display: false } }, y: { ticks: { callback: (v) => moneyShort(v) }, grid: { color: '#eef0f3' }, border: { display: false } }, y1: { position: 'right', ticks: { callback: (v) => moneyShort(v) }, grid: { display: false }, border: { display: false } } }
+      }
+    });
+  }
+}

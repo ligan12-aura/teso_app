@@ -1,0 +1,527 @@
+/**
+ * Tesorería · Iglesia Bautista El Redentor
+ * ------------------------------------------------------------------
+ * Lógica de negocio COMPARTIDA.
+ *  - En producción se ejecuta dentro de Google Apps Script (Api.js).
+ *  - En el modo demo se ejecuta en el navegador (js/demo.js).
+ * Así ambas versiones se comportan exactamente igual.
+ *
+ * No usa APIs propias de ninguno de los dos entornos: todo lo externo
+ * (almacenamiento, archivos, criptografía, fecha) llega en `env`.
+ */
+var TesoCore = (function () {
+  'use strict';
+
+  // ---------------------------------------------------------------
+  // Esquema de datos (cada tabla = una hoja del Excel/Google Sheet)
+  // ---------------------------------------------------------------
+  var TABLES = {
+    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn'],
+    Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn'],
+    MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn'],
+    MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn'],
+    Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
+    Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
+    Config: ['id', 'valor']
+  };
+  var NUMERIC = { monto: 1, itemMensual: 1 };
+  var BOOL = { activo: 1, debeCambiarPass: 1 };
+
+  var CATEGORIAS = {
+    ministerio: {
+      ingreso: ['Ítem mensual', 'Venta / actividad', 'Ofrenda especial', 'Donación', 'Otro ingreso'],
+      gasto: ['Materiales', 'Alimentación', 'Transporte', 'Equipamiento', 'Decoración', 'Impresiones', 'Regalos / premios', 'Ayuda social', 'Actividad / evento', 'Otro gasto']
+    },
+    general: {
+      ingreso: ['Diezmos', 'Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo', 'Donaciones', 'Actividades', 'Otros ingresos'],
+      gasto: ['Asignación ministerios', 'Arriendo', 'Luz', 'Agua', 'Gas', 'Internet y teléfono', 'Honorarios pastorales', 'Mantención templo', 'Aseo y limpieza', 'Ayuda social', 'Misiones', 'Gastos bancarios', 'Otros gastos']
+    }
+  };
+  // Categorías que solo se crean automáticamente al transferir un ítem
+  var RESERVADAS = { ministerio: 'Ítem mensual', general: 'Asignación ministerios' };
+  var MEDIOS = ['Efectivo', 'Transferencia', 'Depósito', 'Cheque', 'Tarjeta'];
+  var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var MAX_ARCHIVO_B64 = 11 * 1024 * 1024; // ~8 MB reales
+
+  // ---------------------------------------------------------------
+  // Utilidades puras
+  // ---------------------------------------------------------------
+  function TesoError(msg, code) {
+    var e = new Error(msg);
+    e.code = code || 'ERR';
+    return e;
+  }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function toBool(v) { return v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true'; }
+  function isDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s)); }
+  function isMonth(s) { return /^\d{4}-\d{2}$/.test(String(s)); }
+  function prevMonth(m) {
+    var y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1;
+    if (mo === 0) { y--; mo = 12; }
+    return y + '-' + pad(mo);
+  }
+  function nextMonth(m) {
+    var y = +m.slice(0, 4), mo = +m.slice(5, 7) + 1;
+    if (mo === 13) { y++; mo = 1; }
+    return y + '-' + pad(mo);
+  }
+  function labelMes(m) { return MESES[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4); }
+  function normalize(table, row) {
+    var out = {};
+    TABLES[table].forEach(function (k) {
+      var v = row[k];
+      if (v === undefined || v === null) v = '';
+      if (NUMERIC[k]) v = v === '' ? 0 : Number(v) || 0;
+      else if (BOOL[k]) v = toBool(v);
+      else v = String(v);
+      out[k] = v;
+    });
+    return out;
+  }
+  function hashPassword(pass, salt, sha256Hex) {
+    var h = salt + '|' + pass;
+    for (var i = 0; i < 200; i++) h = sha256Hex(h + salt);
+    return h;
+  }
+  function publicUser(u) {
+    return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
+  }
+
+  // ---------------------------------------------------------------
+  // Instancia con un entorno concreto
+  // env = { store, files, crypto:{sha256Hex,hmacHex}, uuid(), now(), today(), secret, extra }
+  // ---------------------------------------------------------------
+  function create(env) {
+    var store = env.store;
+    var files = env.files;
+
+    function all(t) { return store.read(t).map(function (r) { return normalize(t, r); }); }
+    function find(t, id) {
+      var rows = all(t);
+      for (var i = 0; i < rows.length; i++) if (rows[i].id === String(id)) return rows[i];
+      return null;
+    }
+    function insert(t, row) { var r = normalize(t, row); store.insert(t, r); return r; }
+    function update(t, id, patch) {
+      var cur = find(t, id);
+      if (!cur) throw TesoError('Registro no encontrado');
+      var r = normalize(t, Object.assign({}, cur, patch, { id: cur.id }));
+      store.update(t, cur.id, r);
+      return r;
+    }
+    function remove(t, id) { store.remove(t, String(id)); }
+    function uid() { return String(env.uuid()).replace(/-/g, '').slice(0, 14); }
+
+    // ---------------- Autenticación ----------------
+    function signToken(u) {
+      var exp = Date.now() + 7 * 24 * 3600 * 1000; // 7 días
+      var p = u.id + '.' + exp + '.' + u.hash.slice(0, 10);
+      return p + '.' + env.crypto.hmacHex(p, env.secret);
+    }
+    function verifyToken(tok) {
+      var parts = String(tok || '').split('.');
+      if (parts.length !== 4) throw TesoError('Debes iniciar sesión', 'AUTH');
+      var p = parts.slice(0, 3).join('.');
+      if (env.crypto.hmacHex(p, env.secret) !== parts[3]) throw TesoError('Sesión inválida', 'AUTH');
+      if (+parts[1] < Date.now()) throw TesoError('Tu sesión expiró, vuelve a ingresar', 'AUTH');
+      var u = find('Usuarios', parts[0]);
+      if (!u || !u.activo) throw TesoError('Usuario no habilitado', 'AUTH');
+      if (u.hash.slice(0, 10) !== parts[2]) throw TesoError('Tu contraseña cambió, vuelve a ingresar', 'AUTH');
+      return u;
+    }
+
+    function login(_, p) {
+      var usuario = String(p.usuario || '').trim().toLowerCase();
+      var u = all('Usuarios').filter(function (x) { return x.usuario === usuario; })[0];
+      if (!u || !u.activo || hashPassword(String(p.password || ''), u.salt, env.crypto.sha256Hex) !== u.hash) {
+        throw TesoError('Usuario o contraseña incorrectos');
+      }
+      return { token: signToken(u), user: publicUser(u) };
+    }
+
+    function me(user) { return { user: publicUser(user) }; }
+
+    function cambiarPassword(user, p) {
+      if (hashPassword(String(p.actual || ''), user.salt, env.crypto.sha256Hex) !== user.hash) throw TesoError('La contraseña actual no es correcta');
+      var nueva = String(p.nueva || '');
+      if (nueva.length < 6) throw TesoError('La nueva contraseña debe tener al menos 6 caracteres');
+      var salt = uid();
+      var u = update('Usuarios', user.id, { salt: salt, hash: hashPassword(nueva, salt, env.crypto.sha256Hex), debeCambiarPass: false });
+      return { token: signToken(u), user: publicUser(u) };
+    }
+
+    // ---------------- Lectura ----------------
+    function config() {
+      var c = { nombreIglesia: 'Iglesia Bautista El Redentor', saldoInicial: 0, fechaSaldoInicial: '' };
+      all('Config').forEach(function (r) { c[r.id] = r.id === 'saldoInicial' ? Number(r.valor) || 0 : r.valor; });
+      return c;
+    }
+
+    function getData(user) {
+      var base = {
+        user: publicUser(user),
+        config: config(),
+        categorias: CATEGORIAS,
+        reservadas: RESERVADAS,
+        medios: MEDIOS,
+        hoy: env.today(),
+        extra: env.extra || {}
+      };
+      if (user.rol === 'tesorero') {
+        base.ministerios = all('Ministerios');
+        base.usuarios = all('Usuarios').map(publicUser);
+        base.movMinisterios = all('MovimientosMinisterios');
+        base.movGenerales = all('MovimientosGenerales');
+        base.rendiciones = all('Rendiciones');
+        base.transferencias = all('Transferencias');
+      } else {
+        var mid = user.ministerioId;
+        var own = function (r) { return r.ministerioId === mid; };
+        base.ministerios = all('Ministerios').filter(function (m) { return m.id === mid; });
+        base.usuarios = [publicUser(user)];
+        base.movMinisterios = all('MovimientosMinisterios').filter(own);
+        base.movGenerales = [];
+        base.rendiciones = all('Rendiciones').filter(own);
+        base.transferencias = all('Transferencias').filter(own);
+        base.extra = {};
+      }
+      return base;
+    }
+
+    // ---------------- Helpers de dominio ----------------
+    function getMinisterio(id) {
+      var m = find('Ministerios', id);
+      if (!m) throw TesoError('Ministerio no encontrado');
+      return m;
+    }
+    function ministerioDe(user, p) {
+      if (user.rol === 'tesorero') return getMinisterio(p.ministerioId);
+      if (!user.ministerioId) throw TesoError('Tu usuario no tiene un ministerio asignado. Habla con el tesorero.');
+      return getMinisterio(user.ministerioId);
+    }
+    function rendicion(mid, mes) {
+      return all('Rendiciones').filter(function (r) { return r.ministerioId === mid && r.mes === mes; })[0] || null;
+    }
+    function estadoRendicion(mid, mes) { var r = rendicion(mid, mes); return r ? r.estado : 'abierta'; }
+    function puedeEditarMes(user, mid, mes) {
+      if (user.rol === 'tesorero') return true;
+      var e = estadoRendicion(mid, mes);
+      return e === 'abierta' || e === 'observada';
+    }
+    function exigirEditable(user, mid, mes) {
+      if (!puedeEditarMes(user, mid, mes)) {
+        throw TesoError('La rendición de ' + labelMes(mes) + ' ya fue enviada o aprobada; no se puede modificar.');
+      }
+    }
+    function validarMov(p, ambito) {
+      var tipo = p.tipo;
+      if (tipo !== 'ingreso' && tipo !== 'gasto') throw TesoError('Tipo de movimiento inválido');
+      if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
+      var monto = Math.round(Number(p.monto));
+      if (!(monto > 0)) throw TesoError('El monto debe ser mayor a 0');
+      var cat = String(p.categoria || '').trim();
+      if (!cat) throw TesoError('Selecciona una categoría');
+      if (cat === RESERVADAS[ambito]) throw TesoError('La categoría "' + cat + '" se registra automáticamente al transferir el ítem.');
+      return { fecha: p.fecha, tipo: tipo, categoria: cat, descripcion: String(p.descripcion || '').trim().slice(0, 300), monto: monto };
+    }
+    function guardarArchivo(archivo, carpeta) {
+      if (!archivo || !archivo.base64) return '';
+      if (archivo.base64.length > MAX_ARCHIVO_B64) throw TesoError('El archivo es demasiado grande (máx. 8 MB)');
+      var mime = String(archivo.mime || '');
+      if (!/^image\//.test(mime) && mime !== 'application/pdf') throw TesoError('Solo se aceptan imágenes o PDF');
+      return files.save({ nombre: String(archivo.nombre || 'boleta'), mime: mime, base64: archivo.base64, carpeta: carpeta });
+    }
+    function borrarArchivo(id) { if (id) { try { files.remove(id); } catch (e) { /* ignorar */ } } }
+
+    // ---------------- Movimientos de ministerios ----------------
+    function addMovMinisterio(user, p) {
+      var m = ministerioDe(user, p);
+      var d = validarMov(p, 'ministerio');
+      var mes = d.fecha.slice(0, 7);
+      exigirEditable(user, m.id, mes);
+      var archivoId = guardarArchivo(p.archivo, ['Boletas ministerios', m.nombre, mes]);
+      var now = env.now();
+      return insert('MovimientosMinisterios', Object.assign(d, {
+        id: uid(), ministerioId: m.id, mes: mes, archivoId: archivoId, origen: 'manual', creadoPor: user.id, creadoEn: now, actualizadoEn: now
+      }));
+    }
+    function movMinisterioPropio(user, id) {
+      var mov = find('MovimientosMinisterios', id);
+      if (!mov) throw TesoError('Movimiento no encontrado');
+      if (user.rol !== 'tesorero' && mov.ministerioId !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
+      if (mov.origen === 'transferencia') throw TesoError('El ítem mensual se gestiona desde Rendiciones (anular transferencia).');
+      return mov;
+    }
+    function updateMovMinisterio(user, p) {
+      var mov = movMinisterioPropio(user, p.id);
+      var d = validarMov(p, 'ministerio');
+      var mes = d.fecha.slice(0, 7);
+      exigirEditable(user, mov.ministerioId, mov.mes);
+      exigirEditable(user, mov.ministerioId, mes);
+      var m = getMinisterio(mov.ministerioId);
+      var archivoId = mov.archivoId;
+      if (p.archivo && p.archivo.base64) {
+        var nuevo = guardarArchivo(p.archivo, ['Boletas ministerios', m.nombre, mes]);
+        borrarArchivo(archivoId);
+        archivoId = nuevo;
+      } else if (p.quitarArchivo) {
+        borrarArchivo(archivoId);
+        archivoId = '';
+      }
+      return update('MovimientosMinisterios', mov.id, Object.assign(d, { mes: mes, archivoId: archivoId, actualizadoEn: env.now() }));
+    }
+    function deleteMovMinisterio(user, p) {
+      var mov = movMinisterioPropio(user, p.id);
+      exigirEditable(user, mov.ministerioId, mov.mes);
+      borrarArchivo(mov.archivoId);
+      remove('MovimientosMinisterios', mov.id);
+      return { id: mov.id };
+    }
+
+    // ---------------- Rendiciones ----------------
+    function upsertRendicion(mid, mes, patch) {
+      var r = rendicion(mid, mes);
+      if (r) return update('Rendiciones', r.id, patch);
+      return insert('Rendiciones', Object.assign({ id: uid(), ministerioId: mid, mes: mes, estado: 'abierta' }, patch));
+    }
+    function enviarRendicion(user, p) {
+      var m = ministerioDe(user, p);
+      if (!isMonth(p.mes)) throw TesoError('Mes inválido');
+      var e = estadoRendicion(m.id, p.mes);
+      if (e === 'enviada') throw TesoError('Esta rendición ya fue enviada y está en revisión.');
+      if (e === 'aprobada') throw TesoError('Esta rendición ya fue aprobada.');
+      return upsertRendicion(m.id, p.mes, {
+        estado: 'enviada', comentarioLider: String(p.comentario || '').slice(0, 500), fechaEnvio: env.now()
+      });
+    }
+    function retirarRendicion(user, p) {
+      var m = ministerioDe(user, p);
+      if (estadoRendicion(m.id, p.mes) !== 'enviada') throw TesoError('Solo puedes retirar una rendición que esté en revisión.');
+      return upsertRendicion(m.id, p.mes, { estado: 'abierta', fechaEnvio: '' });
+    }
+    function revisarRendicion(user, p) {
+      var m = getMinisterio(p.ministerioId);
+      if (!isMonth(p.mes)) throw TesoError('Mes inválido');
+      if (p.decision !== 'aprobada' && p.decision !== 'observada') throw TesoError('Decisión inválida');
+      var e = estadoRendicion(m.id, p.mes);
+      if (p.decision === 'aprobada' && e !== 'enviada' && !p.forzar) {
+        throw TesoError('El líder aún no ha confirmado la rendición de ' + labelMes(p.mes) + '.', 'NEEDS_FORCE');
+      }
+      if (p.decision === 'observada' && !String(p.comentario || '').trim()) throw TesoError('Escribe qué debe corregir el líder.');
+      return upsertRendicion(m.id, p.mes, {
+        estado: p.decision, comentarioTesorero: String(p.comentario || '').slice(0, 500), fechaRevision: env.now(), revisadoPor: user.id
+      });
+    }
+
+    // ---------------- Transferencia del ítem ----------------
+    function transferirItem(user, p) {
+      var m = getMinisterio(p.ministerioId);
+      var mes = p.mes;
+      if (!isMonth(mes)) throw TesoError('Mes inválido');
+      var transf = all('Transferencias');
+      if (transf.some(function (t) { return t.ministerioId === m.id && t.mes === mes; })) {
+        throw TesoError('El ítem de ' + labelMes(mes) + ' ya fue transferido a ' + m.nombre + '.');
+      }
+      var monto = Math.round(Number(p.monto !== undefined && p.monto !== '' ? p.monto : m.itemMensual));
+      if (!(monto > 0)) throw TesoError('El monto a transferir debe ser mayor a 0');
+      var prev = prevMonth(mes);
+      if (!p.forzar) {
+        var tieneHistoria = transf.some(function (t) { return t.ministerioId === m.id && t.mes < mes; }) ||
+          all('MovimientosMinisterios').some(function (x) { return x.ministerioId === m.id && x.mes < mes; });
+        if (tieneHistoria && estadoRendicion(m.id, prev) !== 'aprobada') {
+          throw TesoError('La rendición de ' + labelMes(prev) + ' de ' + m.nombre + ' aún no está aprobada.', 'NEEDS_FORCE');
+        }
+      }
+      var fecha = isDate(p.fecha) ? p.fecha : env.today();
+      var now = env.now();
+      var tid = uid(), gid = uid(), mmid = uid();
+      insert('MovimientosGenerales', {
+        id: gid, fecha: fecha, mes: fecha.slice(0, 7), tipo: 'gasto', categoria: RESERVADAS.general,
+        descripcion: 'Ítem ' + labelMes(mes) + ' · ' + m.nombre, monto: monto, medio: 'Transferencia',
+        ministerioId: m.id, origen: 'transferencia', refId: tid, creadoPor: user.id, creadoEn: now, actualizadoEn: now
+      });
+      insert('MovimientosMinisterios', {
+        id: mmid, ministerioId: m.id, fecha: fecha, mes: mes, tipo: 'ingreso', categoria: RESERVADAS.ministerio,
+        descripcion: 'Ítem mensual ' + labelMes(mes), monto: monto, origen: 'transferencia', refId: tid,
+        creadoPor: user.id, creadoEn: now, actualizadoEn: now
+      });
+      return insert('Transferencias', {
+        id: tid, ministerioId: m.id, mes: mes, monto: monto, fecha: fecha, movGeneralId: gid, movMinisterioId: mmid, creadoPor: user.id, creadoEn: now
+      });
+    }
+    function anularTransferencia(user, p) {
+      var t = find('Transferencias', p.id);
+      if (!t) throw TesoError('Transferencia no encontrada');
+      remove('MovimientosGenerales', t.movGeneralId);
+      remove('MovimientosMinisterios', t.movMinisterioId);
+      remove('Transferencias', t.id);
+      return { id: t.id };
+    }
+
+    // ---------------- Tesorería general ----------------
+    function datosGeneral(p) {
+      var d = validarMov(p, 'general');
+      var medio = String(p.medio || '').trim();
+      d.medio = medio;
+      d.mes = d.fecha.slice(0, 7);
+      d.ministerioId = p.ministerioId ? String(p.ministerioId) : '';
+      return d;
+    }
+    function addMovGeneral(user, p) {
+      var d = datosGeneral(p);
+      var now = env.now();
+      d.archivoId = guardarArchivo(p.archivo, ['Comprobantes tesorería', d.mes]);
+      return insert('MovimientosGenerales', Object.assign(d, { id: uid(), origen: 'manual', creadoPor: user.id, creadoEn: now, actualizadoEn: now }));
+    }
+    function addMovGeneralLote(user, p) {
+      if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
+      var items = (p.items || []).filter(function (it) { return Number(it.monto) > 0; });
+      if (!items.length) throw TesoError('Ingresa al menos un monto');
+      var creados = items.map(function (it) {
+        return addMovGeneral(user, { fecha: p.fecha, tipo: 'ingreso', categoria: it.categoria, monto: it.monto, medio: it.medio || p.medio, descripcion: it.descripcion || p.descripcion });
+      });
+      return { creados: creados.length };
+    }
+    function movGeneralManual(id) {
+      var mov = find('MovimientosGenerales', id);
+      if (!mov) throw TesoError('Movimiento no encontrado');
+      if (mov.origen === 'transferencia') throw TesoError('Este movimiento corresponde a la transferencia de un ítem; anúlalo desde Rendiciones.');
+      return mov;
+    }
+    function updateMovGeneral(user, p) {
+      var mov = movGeneralManual(p.id);
+      var d = datosGeneral(p);
+      var archivoId = mov.archivoId;
+      if (p.archivo && p.archivo.base64) {
+        var nuevo = guardarArchivo(p.archivo, ['Comprobantes tesorería', d.mes]);
+        borrarArchivo(archivoId);
+        archivoId = nuevo;
+      } else if (p.quitarArchivo) {
+        borrarArchivo(archivoId);
+        archivoId = '';
+      }
+      return update('MovimientosGenerales', mov.id, Object.assign(d, { archivoId: archivoId, actualizadoEn: env.now() }));
+    }
+    function deleteMovGeneral(user, p) {
+      var mov = movGeneralManual(p.id);
+      borrarArchivo(mov.archivoId);
+      remove('MovimientosGenerales', mov.id);
+      return { id: mov.id };
+    }
+
+    // ---------------- Archivos (boletas) ----------------
+    function getArchivo(user, p) {
+      var id = String(p.id || '');
+      if (!id) throw TesoError('Archivo inválido');
+      if (user.rol !== 'tesorero') {
+        var ok = all('MovimientosMinisterios').some(function (m) { return m.archivoId === id && m.ministerioId === user.ministerioId; });
+        if (!ok) throw TesoError('No tienes permiso para ver este archivo', 'FORBIDDEN');
+      }
+      return files.get(id);
+    }
+
+    // ---------------- Administración ----------------
+    function saveMinisterio(user, p) {
+      var nombre = String(p.nombre || '').trim();
+      if (!nombre) throw TesoError('El ministerio necesita un nombre');
+      var d = {
+        nombre: nombre,
+        color: /^#[0-9a-fA-F]{6}$/.test(p.color) ? p.color : '#3a6ea5',
+        icono: String(p.icono || '⛪').slice(0, 4),
+        itemMensual: Math.max(0, Math.round(Number(p.itemMensual) || 0)),
+        activo: p.activo === undefined ? true : toBool(p.activo)
+      };
+      if (p.id) return update('Ministerios', p.id, d);
+      return insert('Ministerios', Object.assign(d, { id: uid(), creadoEn: env.now() }));
+    }
+    function saveUsuario(user, p) {
+      var usuario = String(p.usuario || '').trim().toLowerCase();
+      if (!/^[a-z0-9._-]{3,30}$/.test(usuario)) throw TesoError('El usuario debe tener 3-30 caracteres (letras, números, punto o guion)');
+      var nombre = String(p.nombre || '').trim();
+      if (!nombre) throw TesoError('Ingresa el nombre');
+      var rol = p.rol === 'tesorero' ? 'tesorero' : 'lider';
+      var ministerioId = rol === 'lider' ? String(p.ministerioId || '') : '';
+      if (rol === 'lider' && !ministerioId) throw TesoError('Asigna un ministerio al líder');
+      var dup = all('Usuarios').some(function (u) { return u.usuario === usuario && u.id !== p.id; });
+      if (dup) throw TesoError('Ese nombre de usuario ya existe');
+      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, email: String(p.email || '').trim(), activo: p.activo === undefined ? true : toBool(p.activo) };
+      if (p.id === user.id && (!d.activo || d.rol !== 'tesorero')) throw TesoError('No puedes quitarte a ti mismo el rol de tesorero ni desactivarte');
+      var pass = String(p.password || '');
+      if (pass) {
+        if (pass.length < 6) throw TesoError('La contraseña debe tener al menos 6 caracteres');
+        d.salt = uid();
+        d.hash = hashPassword(pass, d.salt, env.crypto.sha256Hex);
+        d.debeCambiarPass = true;
+      }
+      var r;
+      if (p.id) r = update('Usuarios', p.id, d);
+      else {
+        if (!pass) throw TesoError('Define una contraseña inicial');
+        r = insert('Usuarios', Object.assign(d, { id: uid(), creadoEn: env.now() }));
+      }
+      return publicUser(r);
+    }
+    function saveConfig(user, p) {
+      ['nombreIglesia', 'saldoInicial', 'fechaSaldoInicial'].forEach(function (k) {
+        if (p[k] === undefined) return;
+        var v = k === 'saldoInicial' ? String(Math.round(Number(p[k]) || 0)) : String(p[k]);
+        if (find('Config', k)) update('Config', k, { valor: v });
+        else insert('Config', { id: k, valor: v });
+      });
+      return config();
+    }
+
+    // ---------------- Router ----------------
+    var T = 'tesorero';
+    var ACTIONS = {
+      login: { fn: login, pub: true },
+      me: { fn: me, pending: true },
+      cambiarPassword: { fn: cambiarPassword, pending: true },
+      getData: { fn: getData },
+      addMovMinisterio: { fn: addMovMinisterio, write: true },
+      updateMovMinisterio: { fn: updateMovMinisterio, write: true },
+      deleteMovMinisterio: { fn: deleteMovMinisterio, write: true },
+      enviarRendicion: { fn: enviarRendicion, write: true },
+      retirarRendicion: { fn: retirarRendicion, write: true },
+      getArchivo: { fn: getArchivo },
+      revisarRendicion: { fn: revisarRendicion, role: T, write: true },
+      transferirItem: { fn: transferirItem, role: T, write: true },
+      anularTransferencia: { fn: anularTransferencia, role: T, write: true },
+      addMovGeneral: { fn: addMovGeneral, role: T, write: true },
+      addMovGeneralLote: { fn: addMovGeneralLote, role: T, write: true },
+      updateMovGeneral: { fn: updateMovGeneral, role: T, write: true },
+      deleteMovGeneral: { fn: deleteMovGeneral, role: T, write: true },
+      saveMinisterio: { fn: saveMinisterio, role: T, write: true },
+      saveUsuario: { fn: saveUsuario, role: T, write: true },
+      saveConfig: { fn: saveConfig, role: T, write: true }
+    };
+
+    function handle(action, payload, token) {
+      try {
+        var a = ACTIONS[action];
+        if (!a) throw TesoError('Acción desconocida: ' + action);
+        var user = a.pub ? null : verifyToken(token);
+        if (user && user.debeCambiarPass && !a.pending) throw TesoError('Debes cambiar tu contraseña antes de continuar', 'CHANGE_PASS');
+        if (a.role && user.rol !== a.role) throw TesoError('No tienes permiso para esta acción', 'FORBIDDEN');
+        return { ok: true, data: a.fn(user, payload || {}) };
+      } catch (e) {
+        return { ok: false, error: e && e.message ? e.message : String(e), code: (e && e.code) || 'ERR' };
+      }
+    }
+
+    return { handle: handle, isWrite: function (a) { return !!(ACTIONS[a] && ACTIONS[a].write); } };
+  }
+
+  return {
+    TABLES: TABLES,
+    NUMERIC: NUMERIC,
+    CATEGORIAS: CATEGORIAS,
+    RESERVADAS: RESERVADAS,
+    MEDIOS: MEDIOS,
+    hashPassword: hashPassword,
+    prevMonth: prevMonth,
+    nextMonth: nextMonth,
+    labelMes: labelMes,
+    create: create
+  };
+})();
