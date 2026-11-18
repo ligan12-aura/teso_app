@@ -132,7 +132,7 @@ function editarIntegrante(ctx, m, it = null) {
       ${puedeEnlazar ? `<label class="field"><span>¿Es miembro de la iglesia?</span>
         <select name="miembroId"><option value="">No es miembro (sin bautizar u otra iglesia)</option>${opciones.map((x) => `<option value="${x.id}" ${enlazado && x.id === it?.miembroId ? 'selected' : ''}>Sí · ${esc(x.nombre)}</option>`).join('')}</select>
         <small class="hint">Si es miembro, elígelo: sus datos se toman de su ficha en Miembros y no se registra dos veces.</small></label>`
-        : `<input type="hidden" name="miembroId" value="${enlazado ? esc(it.miembroId) : ''}">${!it ? `<p class="muted small">Si es miembro de la iglesia, pídele al tesorero que lo enlace a su ficha de Miembros.</p>` : ''}`}
+        : `<input type="hidden" name="miembroId" value="${enlazado ? esc(it.miembroId) : ''}">${!it ? `<p class="muted small">Si se hace miembro de la iglesia, al registrarlo en Miembros con el mismo nombre queda enlazado solo.</p>` : ''}`}
       <div class="note" data-nota-miembro hidden>${icon('church', 16)}<span>${puedeEnlazar ? 'Nombre, contacto y fecha de nacimiento se toman de la ficha de Miembros (los actualiza secretaría o tesorería).' : 'Está enlazado a su ficha de Miembros: sus datos personales los administra secretaría o tesorería.'}</span></div>
       <div data-propios>
         <label class="field"><span>Nombre y apellidos</span><input name="nombre" maxlength="80" value="${esc(it && !it.esMiembro ? it.nombre : '')}"></label>
@@ -163,8 +163,7 @@ function editarIntegrante(ctx, m, it = null) {
     },
     async onSubmit(f) {
       const d = formData(f);
-      if (d.miembroId) { d.nombre = ''; d.celular = ''; d.email = ''; d.fechaNacimiento = ''; }
-      else if (!d.nombre) throw new Error('Escribe el nombre');
+      if (!d.miembroId && !d.nombre) throw new Error('Escribe el nombre');
       d.ministerioId = m.id;
       if (it) { d.id = it.id; d.activo = f.activo.checked; }
       await call('saveIntegrante', d);

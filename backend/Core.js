@@ -516,8 +516,16 @@ var TesoCore = (function () {
       var email = String(p.email || '').trim();
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw TesoError('El correo no parece válido');
       var now = env.now();
+      var celular = String(p.celular || '').trim().slice(0, 30);
+      // enlazado a su ficha: los datos propios que no vengan se conservan como respaldo
+      if (mb && actual) {
+        if (!celular) celular = actual.celular || '';
+        if (!email) email = actual.email || '';
+        if (!fn) fn = actual.fechaNacimiento || '';
+        if (!String(p.nombre || '').trim()) nombre = actual.nombre || nombre;
+      }
       var d = {
-        ministerioId: m.id, nombre: nombre, celular: String(p.celular || '').trim().slice(0, 30), email: email.slice(0, 120),
+        ministerioId: m.id, nombre: nombre, celular: celular, email: email.slice(0, 120),
         fechaNacimiento: fn, miembroId: miembroId, notas: String(p.notas || '').trim().slice(0, 300),
         activo: p.activo === undefined ? (actual ? actual.activo : true) : toBool(p.activo), actualizadoEn: now
       };
@@ -959,7 +967,45 @@ var TesoCore = (function () {
         r = insert('Miembros', Object.assign(d, { id: uid(), creadoEn: now, actualizadoEn: now, conyugeId: '' }));
       }
       if (p.conyugeId !== undefined) r = vincularConyuge(r.id, p.conyugeId);
-      return r;
+      var enl = enlazarIntegrantes(user, r, p.integranteId, !p.id);
+      if (enl.completar) r = update('Miembros', r.id, enl.completar);
+      return Object.assign({}, r, { enlazados: enl.nombres });
+    }
+    // Al registrar a alguien como miembro, queda enlazado solo a su ficha en los listados de los
+    // ministerios (p. ej. Jóvenes): el elegido en el formulario, o el que tenga exactamente su mismo
+    // nombre (solo si es el único con ese nombre en ese ministerio). Los datos que falten en la ficha
+    // de Miembros se completan con los del listado.
+    function enlazarIntegrantes(user, mb, integranteId, esNuevo) {
+      var integ = all('Integrantes');
+      var ya = {};
+      integ.forEach(function (i) { if (i.miembroId === mb.id) ya[i.ministerioId] = true; });
+      var elegidos = [];
+      integranteId = esAdmin(user) ? String(integranteId || '') : '';
+      if (integranteId) {
+        var it = find('Integrantes', integranteId);
+        if (!it) throw TesoError('Esa persona ya no está en el listado del ministerio');
+        if (it.miembroId && it.miembroId !== mb.id && find('Miembros', it.miembroId)) throw TesoError(it.nombre + ' ya está enlazado a otra ficha de Miembros');
+        if (it.miembroId !== mb.id) {
+          if (ya[it.ministerioId]) throw TesoError(mb.nombre + ' ya está enlazado en ese listado');
+          elegidos.push(it);
+        }
+      } else if (esNuevo) {
+        var clave = normalNombre(mb.nombre);
+        var porMin = {};
+        integ.forEach(function (i) {
+          if (normalNombre(i.nombre) !== clave) return;
+          if (i.miembroId && find('Miembros', i.miembroId)) return;
+          (porMin[i.ministerioId] = porMin[i.ministerioId] || []).push(i);
+        });
+        Object.keys(porMin).forEach(function (mid) { if (porMin[mid].length === 1 && !ya[mid]) elegidos.push(porMin[mid][0]); });
+      }
+      var completar = {};
+      elegidos.forEach(function (i) {
+        update('Integrantes', i.id, { miembroId: mb.id, actualizadoEn: env.now() });
+        ['celular', 'email', 'fechaNacimiento'].forEach(function (k) { if (!mb[k] && !completar[k] && i[k]) completar[k] = i[k]; });
+      });
+      if (Object.keys(completar).length) completar.actualizadoEn = env.now();
+      return { nombres: elegidos.map(function (i) { return i.nombre; }), completar: Object.keys(completar).length ? completar : null };
     }
     function deleteMiembro(user, p) {
       var mb = find('Miembros', p.id);

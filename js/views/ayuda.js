@@ -226,7 +226,7 @@ const TEMAS = {
       <h4>Listado de jóvenes</h4>
       <ul class="hp-list">
         <li>Registra nombre, celular, correo y fecha de nacimiento de cada joven, sea o no miembro de la iglesia.</li>
-        <li>Si el joven <b>es miembro</b> de la iglesia, pídele al tesorero que lo enlace a su ficha de Miembros: así no se registra dos veces.</li>
+        <li>Si un joven <b>se hace miembro</b> de la iglesia, no lo agregues de nuevo: cuando secretaría o tesorería lo registre en Miembros con el mismo nombre, queda enlazado solo y conserva su historial de actividades.</li>
         <li>Si ya no participa, desmarca <b>Activo</b> en vez de eliminarlo.</li>
       </ul>
       <h4>Actividades con cuota</h4>

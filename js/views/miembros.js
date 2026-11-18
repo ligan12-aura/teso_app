@@ -1,5 +1,5 @@
 // Registro de miembros de la iglesia (solo tesorero): estado y datos de contacto
-import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha } from '../ui.js';
+import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha, esAdmin } from '../ui.js';
 import { call } from '../api.js';
 import { cargarExcelJS } from '../planillaDescarga.js';
 
@@ -97,9 +97,17 @@ export function render(root, ctx) {
 }
 
 export function editarMiembro(ctx, m = null) {
+  // Personas de los listados de ministerios (p. ej. Jóvenes) que aún no son miembros: al elegir una,
+  // queda enlazada a esta ficha y no hay que ir a cambiarla al listado
+  const minNom = Object.fromEntries((ctx.data.ministerios || []).map((x) => [x.id, x.nombre]));
+  const yaEnlazado = new Set((ctx.data.integrantes || []).filter((i) => m && i.esMiembro && i.miembroId === m.id).map((i) => i.ministerioId));
+  const candidatos = (ctx.data.integrantes || []).filter((i) => !i.esMiembro && !yaEnlazado.has(i.ministerioId)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const enlazadoEn = (ctx.data.integrantes || []).filter((i) => m && i.esMiembro && i.miembroId === m.id).map((i) => minNom[i.ministerioId]).filter(Boolean);
   return modal({
     title: m ? 'Ficha del miembro' : 'Nuevo miembro',
     body: `
+      ${candidatos.length && esAdmin(ctx.user) ? `<label class="field"><span>¿Ya está en un listado de ministerio? <small class="muted">(opcional)</small></span><select name="integranteId"><option value="">— No —</option>${candidatos.map((i) => `<option value="${i.id}">${esc(i.nombre)} · ${esc(minNom[i.ministerioId] || '')}</option>`).join('')}</select><small class="hint">Al elegirlo, queda marcado como miembro en ese listado${m ? '' : ' y se copian sus datos'}.</small></label>` : ''}
+      ${enlazadoEn.length ? `<p class="muted small">${icon('users', 13)} También está en el listado de ${esc(enlazadoEn.join(', '))}.</p>` : ''}
       <label class="field"><span>Nombre y apellidos</span><input name="nombre" value="${esc(m?.nombre || '')}" required maxlength="80"></label>
       <div class="form-row">
         <label class="field"><span>Estado</span><select name="estado"><option value="activo" ${m?.estado !== 'inactivo' ? 'selected' : ''}>Activo</option><option value="inactivo" ${m?.estado === 'inactivo' ? 'selected' : ''}>Inactivo (alejado)</option></select></label>
@@ -118,6 +126,14 @@ export function editarMiembro(ctx, m = null) {
       ${m && ctx.user?.rol !== 'secretaria' ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar miembro</button>` : ''}`,
     submitLabel: m ? 'Guardar ficha' : 'Agregar',
     onOpen(f, { close }) {
+      // al elegir a alguien del listado de un ministerio, se completan los datos vacíos
+      f.integranteId?.addEventListener('change', () => {
+        const it = candidatos.find((i) => i.id === f.integranteId.value);
+        if (!it) return;
+        if (!f.nombre.value.trim()) f.nombre.value = it.nombre;
+        ['celular', 'email', 'fechaNacimiento'].forEach((k) => { if (!f[k].value && it[k]) f[k].value = it[k]; });
+        if (!m && !f.fechaIngreso.value) f.fechaIngreso.value = ctx.data.hoy;
+      });
       // la fecha de baja solo aplica a inactivos; al marcarlo inactivo se propone hoy
       f.estado.addEventListener('change', () => {
         const inactivo = f.estado.value === 'inactivo';
@@ -133,8 +149,9 @@ export function editarMiembro(ctx, m = null) {
     async onSubmit(f) {
       const d = formData(f);
       if (m) d.id = m.id;
-      await call('saveMiembro', d);
-      toast(m ? 'Ficha actualizada' : 'Miembro agregado');
+      const r = await call('saveMiembro', d);
+      const enl = r?.enlazados?.length ? ` · enlazado en el listado (${r.enlazados.join(', ')})` : '';
+      toast((m ? 'Ficha actualizada' : 'Miembro agregado') + enl);
       await ctx.refresh();
     }
   });
