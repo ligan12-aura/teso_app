@@ -117,7 +117,7 @@ const TEMAS = {
       <h4>Presupuesto</h4>
       <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. En la misma pantalla se fijan, por separado, el <b>ítem mensual</b> de cada ministerio (lo que se le transfiere; la transferencia no puede superarlo) y su <b>presupuesto mensual</b> (lo máximo que puede gastar en el mes). Solo el tesorero puede cambiar estos montos.</p>
       <h4>Importar historial</h4>
-      <p>Carga el libro de entradas y salidas (una hoja por mes). La app clasifica cada línea, compara los totales con los del libro y no duplica lo que ya importaste, así que puedes volver a usarlo cuando el libro tenga meses nuevos.</p>
+      <p>Carga el historial desde una <b>planilla tipo</b> (la misma que descarga la página, de la tesorería general o de un ministerio) o desde el libro antiguo de entradas y salidas. La app muestra un resumen antes de importar y no duplica lo que ya existe.</p>
       <h4>General</h4>
       <p>Define el <b>saldo inicial de caja</b>: el dinero que tenía la iglesia el día que empezaste a usar la app, y esa fecha.</p>`
     },
@@ -125,7 +125,8 @@ const TEMAS = {
       id: 'excel', titulo: 'Excel y respaldo', ico: 'sheet', html: `
       <ul class="hp-list">
         <li><b>Planilla automática:</b> cada movimiento se guarda al instante en la planilla de Google. Ábrela con ${btn('sheet', 'Abrir planilla')} en el menú. La pestaña <b>Resumen</b> calcula totales por mes sola.</li>
-        <li><b>Descargar Excel:</b> el botón ${btn('download', 'Descargar Excel')} genera un archivo .xlsx con resumen mensual, tesorería general, movimientos de ministerios, rendiciones y transferencias. Ideal para informes a la iglesia.</li>
+        <li><b>Descargar planilla:</b> el botón ${btn('download', 'Descargar planilla')} del menú genera la planilla de la tesorería general del año elegido, con los datos al día: resumen con saldos y presupuesto, flujo de caja por categoría y mes, y todos los movimientos. Dentro de cada ministerio hay un botón igual con su planilla. Las fórmulas siguen funcionando si agregas filas en Excel.</li>
+        <li><b>Respaldo completo:</b> en Configuración → General puedes descargar todos los datos en bruto (.xlsx).</li>
         <li><b>Boletas:</b> se guardan en la carpeta privada <i>“Tesorería El Redentor · Boletas”</i> de Google Drive, ordenadas por ministerio y mes.</li>
       </ul>
       ${tip('No modifiques a mano las hojas de la planilla: la app usa la columna <b>id</b> para encontrar cada registro. Para corregir algo, hazlo desde la app.', 'warn')}`

@@ -56,7 +56,7 @@ var TesoCore = (function () {
   var CATEGORIAS = {
     ministerio: {
       ingreso: ['Ítem mensual', 'Venta / actividad', 'Ofrenda especial', 'Donación', 'Otro ingreso'],
-      gasto: ['Materiales', 'Alimentación', 'Transporte', 'Equipamiento', 'Decoración', 'Impresiones', 'Regalos / premios', 'Ayuda social', 'Actividad / evento', 'Otro gasto']
+      gasto: ['Materiales', 'Alimentación', 'Transporte', 'Equipamiento', 'Decoración', 'Impresiones', 'Regalos / premios', 'Ayuda social', 'Actividad / evento', 'Aportes y cuotas', 'Evangelismo y misiones', 'Otro gasto']
     },
     general: { ingreso: aplanar(GRUPOS.ingreso), gasto: aplanar(GRUPOS.gasto) }
   };
@@ -507,12 +507,12 @@ var TesoCore = (function () {
       if (!items.length) throw TesoError('No hay movimientos para importar');
       if (items.length > 1500) throw TesoError('Importa como máximo 1500 movimientos por vez');
       var existentes = {};
-      all('MovimientosGenerales').forEach(function (m) { if (m.refId) existentes[m.refId] = 1; });
+      all('MovimientosGenerales').forEach(function (m) { existentes[m.id] = 1; if (m.refId) existentes[m.refId] = 1; });
       var now = env.now(), nuevos = [], omitidos = 0;
       items.forEach(function (it, i) {
         var ref = String(it.refId || '');
         if (!ref) throw TesoError('Fila ' + (i + 1) + ': falta el identificador de origen');
-        if (existentes[ref]) { omitidos++; return; }
+        if (existentes[ref] || (it.idOriginal && existentes[it.idOriginal])) { omitidos++; return; }
         var d;
         try { d = datosGeneral(it, true); } catch (e) { throw TesoError('Fila ' + (i + 1) + ' (' + (it.descripcion || '') + '): ' + e.message); }
         existentes[ref] = 1;
@@ -523,6 +523,68 @@ var TesoCore = (function () {
         saveConfig(user, { saldoInicial: p.saldoInicial, fechaSaldoInicial: p.fechaSaldoInicial || '' });
       }
       return { importados: nuevos.length, omitidos: omitidos };
+    }
+
+    // Importación del historial de un ministerio (planilla tipo).
+    // - No duplica: omite filas cuyo refId o id ya existe.
+    // - El saldo inicial se registra como ingreso "Saldo inicial" el último día del año anterior.
+    // - Las filas "Ítem mensual" quedan marcadas como transferidas (no se pueden transferir de nuevo).
+    // - Los meses importados anteriores al actual quedan con la rendición aprobada.
+    function importarMovimientosMinisterio(user, p) {
+      var m = getMinisterio(p.ministerioId);
+      var items = p.items || [];
+      if (!items.length && !p.saldoInicial) throw TesoError('No hay movimientos para importar');
+      if (items.length > 1500) throw TesoError('Importa como máximo 1500 movimientos por vez');
+      var propios = all('MovimientosMinisterios').filter(function (x) { return x.ministerioId === m.id; });
+      var existentes = {};
+      propios.forEach(function (x) { existentes[x.id] = 1; if (x.refId) existentes[x.refId] = 1; });
+      var now = env.now(), nuevos = [], omitidos = 0;
+      var agregar = function (it, i) {
+        var ref = String(it.refId || '');
+        if (!ref) throw TesoError('Fila ' + (i + 1) + ': falta el identificador de origen');
+        if (existentes[ref] || (it.idOriginal && existentes[it.idOriginal])) { omitidos++; return; }
+        var d;
+        try { d = validarMov(it, 'ministerio', true); } catch (e) { throw TesoError('Fila ' + (i + 1) + ' (' + (it.descripcion || '') + '): ' + e.message); }
+        existentes[ref] = 1;
+        nuevos.push(Object.assign(d, { id: uid(), ministerioId: m.id, mes: d.fecha.slice(0, 7), archivoId: '', origen: 'importado', refId: ref, creadoPor: user.id, creadoEn: now, actualizadoEn: now }));
+      };
+      var anio = Number(p.anio) || 0;
+      var saldo = Math.round(Number(p.saldoInicial) || 0);
+      if (saldo > 0 && anio) {
+        var antes = propios.some(function (x) { return x.mes < anio + '-01'; });
+        if (!antes) agregar({ refId: 'saldo:' + m.id + ':' + anio, fecha: (anio - 1) + '-12-31', tipo: 'ingreso', categoria: 'Saldo inicial', descripcion: 'Saldo al 1 de enero de ' + anio, monto: saldo }, -1);
+      }
+      items.forEach(agregar);
+      if (nuevos.length) insertMany('MovimientosMinisterios', nuevos);
+      // ítems como transferidos
+      var transf = all('Transferencias').filter(function (t) { return t.ministerioId === m.id; });
+      var conItem = {};
+      transf.forEach(function (t) { conItem[t.mes] = 1; });
+      var nuevasT = [];
+      nuevos.forEach(function (x) {
+        if (x.categoria === RESERVADAS.ministerio && !conItem[x.mes]) {
+          conItem[x.mes] = 1;
+          nuevasT.push({ id: uid(), ministerioId: m.id, mes: x.mes, monto: x.monto, fecha: x.fecha, movGeneralId: '', movMinisterioId: x.id, creadoPor: user.id, creadoEn: now });
+        }
+      });
+      if (nuevasT.length) insertMany('Transferencias', nuevasT);
+      // rendiciones de meses pasados: aprobadas como historial
+      var mesActual = env.today().slice(0, 7);
+      var rend = {};
+      all('Rendiciones').forEach(function (r) { if (r.ministerioId === m.id) rend[r.mes] = 1; });
+      var meses = {};
+      nuevos.forEach(function (x) { if (x.mes < mesActual && x.categoria !== 'Saldo inicial') meses[x.mes] = 1; });
+      var nuevasR = Object.keys(meses).filter(function (mm) { return !rend[mm]; }).map(function (mm) {
+        return { id: uid(), ministerioId: m.id, mes: mm, estado: 'aprobada', comentarioLider: '', fechaEnvio: now, comentarioTesorero: 'Historial importado desde planilla', fechaRevision: now, revisadoPor: user.id };
+      });
+      if (nuevasR.length) insertMany('Rendiciones', nuevasR);
+      if (p.itemMensual !== undefined || p.presupuestoMensual !== undefined) {
+        var patch = {};
+        if (Number(p.itemMensual) > 0) patch.itemMensual = Math.round(Number(p.itemMensual));
+        if (Number(p.presupuestoMensual) > 0) patch.presupuestoMensual = Math.round(Number(p.presupuestoMensual));
+        if (Object.keys(patch).length) update('Ministerios', m.id, patch);
+      }
+      return { importados: nuevos.length, omitidos: omitidos, transferencias: nuevasT.length, rendiciones: nuevasR.length };
     }
 
     // ---------------- Archivos (boletas) ----------------
@@ -621,6 +683,7 @@ var TesoCore = (function () {
       updateMovGeneral: { fn: updateMovGeneral, role: T, write: true },
       deleteMovGeneral: { fn: deleteMovGeneral, role: T, write: true },
       importarMovimientos: { fn: importarMovimientos, role: T, write: true },
+      importarMovimientosMinisterio: { fn: importarMovimientosMinisterio, role: T, write: true },
       saveMinisterio: { fn: saveMinisterio, role: T, write: true },
       saveUsuario: { fn: saveUsuario, role: T, write: true },
       saveConfig: { fn: saveConfig, role: T, write: true }

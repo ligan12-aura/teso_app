@@ -2,6 +2,7 @@ import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesNo
 import { call } from '../api.js';
 import { presupuestoMinisterio, resumenMinisterio, rendicionDe, transferenciaDe, liderDe, monthsBack, movsMinisterio, split, porCategoria, saldoMinisterio } from '../calc.js';
 import { abrirFormMovimiento } from './movform.js';
+import { descargarPlanillaMinisterio } from '../planillaDescarga.js';
 
 export function render(root, ctx) {
   const { data, mes, user } = ctx;
@@ -24,7 +25,7 @@ export function render(root, ctx) {
   const movs = [...r.movs].sort((a, b) => (b.fecha + b.creadoEn).localeCompare(a.fecha + a.creadoEn));
   const cats = porCategoria(r.movs, 'gasto');
   const hoyMes = data.hoy.slice(0, 7);
-  const historial = [...new Set([...data.rendiciones.filter((x) => x.ministerioId === m.id).map((x) => x.mes), ...movsMinisterio(data, m.id).map((x) => x.mes)])]
+  const historial = [...new Set([...data.rendiciones.filter((x) => x.ministerioId === m.id).map((x) => x.mes), ...movsMinisterio(data, m.id).filter((x) => x.categoria !== 'Saldo inicial').map((x) => x.mes)])]
     .sort().reverse().slice(0, 8);
 
   root.innerHTML = `
@@ -42,6 +43,7 @@ export function render(root, ctx) {
       <span>Saldo disponible hoy</span>
       <strong>${money(saldoTotal)}</strong>
       ${monthPicker(mes)}
+      <button class="btn btn-light btn-sm mh-descarga" data-planilla>${icon('download', 15)} Descargar planilla</button>
     </div>
   </section>
 
@@ -130,7 +132,7 @@ export function render(root, ctx) {
   // ---------- Avisos para el líder: meses anteriores sin cerrar ----------
   function pendientesLider() {
     if (esTes) return '';
-    const meses = [...new Set(movsMinisterio(data, m.id).map((x) => x.mes))].filter((mm) => mm < hoyMes && mm !== mes);
+    const meses = [...new Set(movsMinisterio(data, m.id).filter((x) => x.categoria !== 'Saldo inicial').map((x) => x.mes))].filter((mm) => mm < hoyMes && mm !== mes);
     return meses.sort().map((mm) => {
       const e = rendicionDe(data, m.id, mm)?.estado || 'abierta';
       if (e === 'observada') return `<button class="alert-strip warn" data-mes="${mm}">${icon('alert')} <span><strong>Tu rendición de ${mesNombre(mm)} fue observada.</strong> Revisa el comentario de tesorería y reenvíala.</span>${icon('chevR')}</button>`;
@@ -199,6 +201,7 @@ export function render(root, ctx) {
 
   // ---------- Eventos ----------
   bindMonthPicker(root, mes, ctx.setMes);
+  root.querySelector('[data-planilla]')?.addEventListener('click', () => descargarPlanillaMinisterio(data, m.id).catch((e) => toast(e.message, 'err')));
   root.querySelectorAll('[data-mes]').forEach((b) => b.addEventListener('click', () => ctx.setMes(b.dataset.mes)));
   const byId = (id) => data.movMinisterios.find((x) => x.id === id);
   const form = (tipo, mov) => abrirFormMovimiento({

@@ -804,3 +804,7 @@ input, select, textarea { font: inherit; color: inherit; }
   .help-pill { padding: 6px 10px; }
   .demo-pill { padding: 4px 8px; }
 }
+
+/* Botón "Descargar planilla" en el encabezado de un ministerio */
+.mh-right .mh-descarga { margin-top: 8px; background: rgba(255, 255, 255, .92); color: var(--navy-2, #1b2a45); border: 0; }
+.mh-right .mh-descarga:hover { background: #fff; }

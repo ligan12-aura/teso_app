@@ -1,6 +1,7 @@
 import { icon, esc, money, modal, formData, toast, fecha, emptyState, pesos, formatoPesos } from '../ui.js';
 import { call, isDemo } from '../api.js';
 import { renderImportar } from './importar.js';
+import { exportarExcel } from '../export.js';
 import { gastoGeneralPromedio, totalItems, presupuestoGeneralMensual } from '../calc.js';
 import { mesLargo, prevMonth } from '../ui.js';
 
@@ -148,10 +149,12 @@ export function render(root, ctx) {
         ${isDemo ? `<div class="note">${icon('sparkle', 16)} Estás en <b>modo demo</b>: los datos viven solo en este navegador. Para usar la app en serio, configura Google Sheets siguiendo el README del repositorio.</div>` : `
         <p>Todos los datos se guardan automáticamente en una planilla de Google (compatible con Excel) y las boletas en una carpeta privada de Google Drive.</p>
         ${data.extra?.sheetUrl ? `<a class="btn btn-ghost" href="${esc(data.extra.sheetUrl)}" target="_blank" rel="noopener">${icon('sheet', 16)} Abrir planilla</a>` : ''}`}
-        <p class="muted small" style="margin-top:14px">También puedes descargar una copia .xlsx en cualquier momento con el botón “Descargar Excel” del menú.</p>
+        <p class="muted small" style="margin-top:14px">La planilla con resumen, flujo de caja y movimientos se descarga con el botón “Descargar planilla” del menú (tesorería general) o dentro de cada ministerio.</p>
+        <button class="btn btn-ghost btn-sm" data-respaldo style="margin-top:10px">${icon('download', 15)} Respaldo completo de datos (.xlsx)</button>
       </article>
     </div>`;
     formatoPesos(body.querySelector('[name=saldoInicial]'));
+    body.querySelector('[data-respaldo]')?.addEventListener('click', () => exportarExcel(data).catch((er) => toast(er.message, 'err')));
     body.querySelector('[data-config]').addEventListener('submit', async (e) => {
       e.preventDefault();
       const d = formData(e.target);

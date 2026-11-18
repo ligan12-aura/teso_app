@@ -10,7 +10,7 @@ import * as Ministerio from './views/ministerio.js';
 import * as Rendiciones from './views/rendiciones.js';
 import * as Admin from './views/admin.js';
 import * as Perfil from './views/perfil.js';
-import { exportarExcel } from './export.js';
+import { descargarPlanillaGeneral } from './planillaDescarga.js';
 import { abrirAyuda } from './views/ayuda.js';
 
 const app = document.getElementById('app');
@@ -188,7 +188,7 @@ function shell(active) {
       ${botonTema('side-action', true)}
       ${u.rol === 'tesorero' ? `
         ${state.data.extra?.sheetUrl ? `<a class="side-action" href="${esc(state.data.extra.sheetUrl)}" target="_blank" rel="noopener">${icon('sheet')} Abrir planilla</a>` : ''}
-        <button class="side-action" data-export>${icon('download')} Descargar Excel</button>` : ''}
+        <button class="side-action" data-export>${icon('download')} Descargar planilla</button>` : ''}
       <div class="me">
         <div class="avatar">${esc(initials)}</div>
         <div class="me-txt"><strong>${esc(u.nombre)}</strong><span>${u.rol === 'tesorero' ? 'Tesorero' : `Líder · ${esc(min?.nombre || '')}`}</span></div>
@@ -220,7 +220,7 @@ async function route() {
   app.innerHTML = shell(activeNav);
   app.querySelectorAll('[data-logout]').forEach((b) => b.addEventListener('click', logout));
   app.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('click', () => abrirAyuda(state.user.rol, location.hash.replace(/^#\//, '').split('/')[0])));
-  app.querySelector('[data-export]')?.addEventListener('click', () => exportarExcel(state.data).catch((e) => toast(e.message, 'err')));
+  app.querySelector('[data-export]')?.addEventListener('click', () => descargarPlanillaGeneral(state.data).catch((e) => toast(e.message, 'err')));
   const root = app.querySelector('#view');
   const ctx = {
     data: state.data,

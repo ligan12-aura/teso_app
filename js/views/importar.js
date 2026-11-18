@@ -3,11 +3,14 @@
 // contra los del libro y envía los movimientos a la tesorería general.
 import { icon, esc, money, cap, mesLargo, fecha, toast, confirmar } from '../ui.js';
 import { call } from '../api.js';
+import { leerPlanilla } from '../planilla.js';
+import { cargarExcelJS } from '../planillaDescarga.js';
 
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const pad = (n) => String(n).padStart(2, '0');
-let estado = null; // { meses: [...], items: [...] }
+let estado = null; // { meses: [...], items: [...] }  (libro antiguo)
+let estadoPlanilla = null; // planilla tipo leída
 
 function loadXLSX() {
   if (window.XLSX) return Promise.resolve(window.XLSX);
@@ -180,15 +183,15 @@ export function renderImportar(body, ctx) {
   const { data } = ctx;
   body.innerHTML = `
   <article class="card">
-    <header class="card-head"><div><h3>Importar libro de Excel</h3><p class="muted">Carga los movimientos del libro “Entradas y salidas” (una hoja por mes) a la tesorería general.</p></div></header>
+    <header class="card-head"><div><h3>Importar historial</h3><p class="muted">Carga movimientos anteriores desde una <b>planilla tipo</b> (tesorería general o un ministerio) o desde el libro antiguo “Entradas y salidas” de la tesorería general.</p></div></header>
     <ol class="hp-steps">
       <li><span class="hp-n">1</span><div>Elige el archivo Excel. Se lee en tu navegador; el archivo no se sube a ninguna parte.</div></li>
-      <li><span class="hp-n">2</span><div>Revisa el resumen: la app compara sus totales con los del libro (${icon('checkCircle', 13)} = cuadra al peso).</div></li>
-      <li><span class="hp-n">3</span><div>Corrige la categoría de cualquier línea si la clasificación automática no te convence, y presiona <b>Importar</b>.</div></li>
+      <li><span class="hp-n">2</span><div>La app reconoce el formato y muestra un resumen por mes. En una planilla de ministerio, elige a qué ministerio corresponde.</div></li>
+      <li><span class="hp-n">3</span><div>Revisa las categorías y presiona <b>Importar</b>.</div></li>
     </ol>
     <label class="upload" style="margin-top:14px">
       <input type="file" accept=".xlsx,.xls" data-xls>
-      <div class="upload-ui"><div class="upload-cta">${icon('sheet', 22)}<span><strong>Elegir archivo Excel</strong><small>.xlsx · las hojas deben llamarse “Enero 2026”, “Febrero 2026”…</small></span></div></div>
+      <div class="upload-ui"><div class="upload-cta">${icon('sheet', 22)}<span><strong>Elegir archivo Excel</strong><small>Planilla tipo descargada de la página, o libro con hojas “Enero 2026”, “Febrero 2026”…</small></span></div></div>
     </label>
     ${tipNoDuplica()}
   </article>
@@ -199,13 +202,24 @@ export function renderImportar(body, ctx) {
     if (!f) return;
     prev.innerHTML = '<div class="card"><div class="spinner"></div></div>';
     try {
-      estado = await analizar(f, data);
+      const buf = await f.arrayBuffer();
+      let plan = null;
+      try {
+        const ExcelJS = await cargarExcelJS();
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buf.slice(0));
+        plan = leerPlanilla(wb);
+      } catch { plan = null; }
+      if (plan) { estado = null; estadoPlanilla = plan; pintarPlanilla(prev, ctx); return; }
+      estadoPlanilla = null;
+      estado = await analizar(buf, data);
       pintar(prev, ctx);
     } catch (er) {
       prev.innerHTML = `<div class="note warn">${icon('alert', 16)} ${esc(er.message)}</div>`;
     }
   });
-  if (estado) pintar(prev, ctx);
+  if (estadoPlanilla) pintarPlanilla(prev, ctx);
+  else if (estado) pintar(prev, ctx);
 }
 
 const tipNoDuplica = () => `<div class="note" style="margin-top:14px">${icon('sparkle', 16)}<span>Puedes volver a importar el mismo libro cuando agregues meses nuevos: las líneas que ya se importaron se reconocen y <b>no se duplican</b>.</span></div>`;
@@ -300,6 +314,148 @@ function pintar(prev, ctx) {
       await ctx.refresh();
       ctx.setMesSilent(primero.mes);
       ctx.go('general');
+    } catch (er) {
+      toast(er.message, 'err');
+      btn.disabled = false; btn.classList.remove('loading');
+    }
+  });
+}
+
+
+// =====================================================================
+// Planilla tipo (tesorería general o ministerio)
+// =====================================================================
+const hash = (t) => { let h = 2166136261; for (const c of String(t)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); };
+const normal = (t) => sinTildes(String(t || '')).replace(/[^A-Z0-9 ]/g, '').trim();
+
+function pintarPlanilla(prev, ctx) {
+  const { data } = ctx;
+  const p = estadoPlanilla;
+  const general = p.ambito === 'general';
+  const minis = data.ministerios;
+  if (!general && !minis.length) {
+    prev.innerHTML = `<div class="note warn">${icon('alert', 16)}<span>Esta es una planilla de ministerio. Primero crea el ministerio en <b>Configuración → Ministerios</b> y vuelve a elegir el archivo.</span></div>`;
+    return;
+  }
+  // ministerio de destino: por id guardado en la planilla o por nombre parecido
+  let destino = '';
+  if (!general) {
+    const porId = minis.find((m) => m.id === p.ministerioId);
+    const t = normal(p.titulo);
+    const porNombre = minis.find((m) => { const n = normal(m.nombre); return t && n && (n.includes(t) || t.includes(n)); });
+    destino = (prev._destino && minis.some((m) => m.id === prev._destino) ? prev._destino : null) || porId?.id || porNombre?.id || minis[0].id;
+  }
+  const m = general ? null : minis.find((x) => x.id === destino);
+  const existentes = new Set();
+  (general ? data.movGenerales : data.movMinisterios.filter((x) => x.ministerioId === destino)).forEach((x) => { existentes.add(x.id); if (x.refId) existentes.add(x.refId); });
+  const filas = p.movimientos.map((x) => {
+    const refId = x.id ? `planilla:${x.id}` : `planilla:${p.anio}:${hash([x.fecha, x.tipo, x.monto, x.descripcion, x.fila].join('|'))}`;
+    const error = !x.fecha ? 'sin fecha' : !x.categoria ? 'sin categoría' : '';
+    return { ...x, refId, idOriginal: x.id, error, yaImportado: existentes.has(refId) || (x.id && existentes.has(x.id)) };
+  });
+  const validas = filas.filter((f) => !f.error);
+  const nuevas = validas.filter((f) => !f.yaImportado);
+  const malas = filas.filter((f) => f.error);
+  const meses = [...new Set(validas.map((f) => f.fecha.slice(0, 7)))].sort();
+  let saldo = p.saldoInicial;
+  const resumen = meses.map((mm) => {
+    const fs = validas.filter((f) => f.fecha.startsWith(mm));
+    const ent = fs.filter((f) => f.tipo === 'ingreso').reduce((a, f) => a + f.monto, 0);
+    const sal = fs.filter((f) => f.tipo === 'gasto').reduce((a, f) => a + f.monto, 0);
+    saldo += ent - sal;
+    return { mes: mm, filas: fs, ent, sal, saldo };
+  });
+  // opciones
+  const tieneAntes = general ? false : data.movMinisterios.some((x) => x.ministerioId === destino && x.mes < `${p.anio}-01`);
+  const cfg = data.config;
+  const saldoGeneralConfigurado = (Number(cfg.saldoInicial) || 0) > 0;
+  const opcSaldo = p.saldoInicial > 0 && (general ? true : !tieneAntes);
+  const marcarSaldo = general ? !saldoGeneralConfigurado : true;
+  const opcItem = !general && p.item > 0 && p.item !== m.itemMensual;
+  const opcPres = !general && p.presupuesto > 0 && p.presupuesto !== (m.presupuestoMensual || 0);
+  const catsDe = (tipo, sel) => {
+    if (general) return opcionesCategoria(data, tipo, sel);
+    const lista = data.categorias.ministerio[tipo];
+    return [...lista, ...(lista.includes(sel) ? [] : [sel])].map((c) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  };
+
+  prev.innerHTML = `
+  <article class="card">
+    <header class="card-head wrap"><div><h3>Planilla de ${general ? 'la tesorería general' : `ministerio · ${esc(p.titulo)}`} ${p.anio}</h3><p class="muted">${filas.length} movimientos · ${nuevas.length} por importar${filas.length - malas.length - nuevas.length ? ` · ${filas.length - malas.length - nuevas.length} ya existen` : ''}</p></div></header>
+    ${general ? '' : `<label class="field" style="max-width:360px"><span>Importar en el ministerio</span><select data-destino>${minis.map((x) => `<option value="${x.id}" ${x.id === destino ? 'selected' : ''}>${esc(x.icono)} ${esc(x.nombre)}</option>`).join('')}</select></label>`}
+    <div class="table-wrap" style="margin-top:12px"><table class="table">
+      <thead><tr><th>Mes</th><th class="num">Ingresos</th><th class="num">Egresos</th><th class="num">Saldo final</th><th class="num">Líneas</th></tr></thead>
+      <tbody>
+        <tr><td class="muted">Saldo al 1 de enero</td><td></td><td></td><td class="num strong">${money(p.saldoInicial)}</td><td></td></tr>
+        ${resumen.map((r) => `<tr><td><b>${cap(mesLargo(r.mes))}</b></td><td class="num ingreso">${money(r.ent)}</td><td class="num gasto">${money(r.sal)}</td><td class="num strong">${money(r.saldo)}</td><td class="num">${r.filas.length}${r.filas.some((f) => f.yaImportado) ? `<br><small class="muted">${r.filas.filter((f) => f.yaImportado).length} ya existen</small>` : ''}</td></tr>`).join('')}
+      </tbody></table></div>
+    ${malas.length ? `<div class="note warn" style="margin-top:12px">${icon('alert', 16)}<span>${malas.length} fila${malas.length > 1 ? 's' : ''} no se importará${malas.length > 1 ? 'n' : ''} por estar incompleta${malas.length > 1 ? 's' : ''}: ${malas.slice(0, 5).map((f) => `fila ${f.fila} (${f.error})`).join(', ')}${malas.length > 5 ? '…' : ''}.</span></div>` : ''}
+    <div class="imp-opciones">
+      ${opcSaldo ? `<label class="check saldo-check"><input type="checkbox" data-opc-saldo ${marcarSaldo ? 'checked' : ''}> <span>Registrar el saldo al 1 de enero de <b>${money(p.saldoInicial)}</b>${general ? `<br><small class="muted">${saldoGeneralConfigurado ? `Hoy el saldo inicial de caja es ${money(cfg.saldoInicial)}${cfg.fechaSaldoInicial ? ` desde el ${fecha(cfg.fechaSaldoInicial)}` : ''}. Al marcarlo se reemplaza.` : 'Se usará como saldo inicial de caja.'}</small>` : ''}</span></label>` : ''}
+      ${!general && p.saldoInicial > 0 && tieneAntes ? `<div class="note" style="margin-top:10px">${icon('sparkle', 16)}<span>El ministerio ya tiene movimientos anteriores a ${p.anio}, así que su saldo de arrastre ya existe y no se vuelve a registrar.</span></div>` : ''}
+      ${opcItem ? `<label class="check saldo-check"><input type="checkbox" data-opc-item ${!m.itemMensual ? 'checked' : ''}> <span>Usar el ítem mensual de la planilla: <b>${money(p.item)}</b> <small class="muted">(hoy ${money(m.itemMensual)})</small></span></label>` : ''}
+      ${opcPres ? `<label class="check saldo-check"><input type="checkbox" data-opc-pres ${!m.presupuestoMensual ? 'checked' : ''}> <span>Usar el presupuesto mensual de la planilla: <b>${money(p.presupuesto)}</b></span></label>` : ''}
+    </div>
+    ${!general ? `<p class="muted small" style="margin-top:12px">Los ítems mensuales importados quedan registrados como ya transferidos, y los meses anteriores al actual quedan con la rendición aprobada.</p>` : ''}
+  </article>
+  ${resumen.map((r) => `
+  <details class="card imp-mes">
+    <summary><b>${cap(mesLargo(r.mes))}</b> <span class="muted">${r.filas.length} líneas</span>${icon('chevR', 16)}</summary>
+    <div class="table-wrap"><table class="table imp-table">
+      <thead><tr><th>Fecha</th><th>Descripción</th><th class="num">Monto</th><th>Categoría</th></tr></thead>
+      <tbody>${r.filas.map((f) => `
+        <tr class="${f.yaImportado ? 'inactive' : ''}">
+          <td class="nowrap">${fecha(f.fecha)}</td>
+          <td class="desc">${esc(f.descripcion)}${f.yaImportado ? ' <span class="tag">ya existe</span>' : ''}${f.observacion ? `<br><small class="muted">${esc(f.observacion)}</small>` : ''}</td>
+          <td class="num strong ${f.tipo}">${f.tipo === 'ingreso' ? '+' : '−'}${money(f.monto)}</td>
+          <td><select class="cat-sel" data-ref="${esc(f.refId)}" ${f.yaImportado ? 'disabled' : ''}>${catsDe(f.tipo, f.categoria)}</select></td>
+        </tr>`).join('')}</tbody>
+    </table></div>
+  </details>`).join('')}
+  <div class="imp-actions">
+    <button class="btn btn-ghost" data-cancel>Cancelar</button>
+    <button class="btn btn-primary" data-importar-planilla ${nuevas.length || opcSaldo ? '' : 'disabled'}>${icon('download', 16)} Importar ${nuevas.length} movimiento${nuevas.length === 1 ? '' : 's'}</button>
+  </div>`;
+
+  prev.querySelector('[data-destino]')?.addEventListener('change', (e) => { prev._destino = e.target.value; pintarPlanilla(prev, ctx); });
+  prev.querySelectorAll('.cat-sel').forEach((sel) => sel.addEventListener('change', () => {
+    p.movimientos.forEach((x) => { if ((x.id ? `planilla:${x.id}` : null) === sel.dataset.ref) x.categoria = sel.value; });
+    const f = filas.find((x) => x.refId === sel.dataset.ref); if (f) { f.categoria = sel.value; const orig = p.movimientos.find((x) => x.fila === f.fila); if (orig) orig.categoria = sel.value; }
+  }));
+  prev.querySelector('[data-cancel]').addEventListener('click', () => { estadoPlanilla = null; prev._destino = null; prev.innerHTML = ''; });
+  prev.querySelector('[data-importar-planilla]').addEventListener('click', async (e) => {
+    const btn = e.currentTarget; // antes de cualquier await
+    const usarSaldo = !!prev.querySelector('[data-opc-saldo]')?.checked;
+    const usarItem = !!prev.querySelector('[data-opc-item]')?.checked;
+    const usarPres = !!prev.querySelector('[data-opc-pres]')?.checked;
+    if (general && usarSaldo && saldoGeneralConfigurado && !(await confirmar(`Se reemplazará el saldo inicial de caja por ${money(p.saldoInicial)} al 1 de enero de ${p.anio}. ¿Continuar?`, { boton: 'Reemplazar' }))) return;
+    btn.disabled = true; btn.classList.add('loading');
+    const items = nuevas.map((f) => ({ refId: f.refId, idOriginal: f.idOriginal, fecha: f.fecha, tipo: f.tipo, monto: f.monto, categoria: f.categoria, descripcion: f.descripcion, medio: f.medio }));
+    let importados = 0, omitidos = 0;
+    try {
+      if (!items.length && usarSaldo) items.length = 0;
+      const lotes = items.length ? Math.ceil(items.length / 300) : 1;
+      for (let i = 0; i < lotes; i++) {
+        const lote = items.slice(i * 300, i * 300 + 300);
+        let r;
+        if (general) {
+          const extra = i === 0 && usarSaldo ? { saldoInicial: p.saldoInicial, fechaSaldoInicial: `${p.anio}-01-01` } : {};
+          r = lote.length ? await call('importarMovimientos', { items: lote, ...extra }) : (await call('saveConfig', { saldoInicial: p.saldoInicial, fechaSaldoInicial: `${p.anio}-01-01` }), { importados: 0, omitidos: 0 });
+        } else {
+          r = await call('importarMovimientosMinisterio', {
+            ministerioId: destino, anio: p.anio, items: lote,
+            ...(i === 0 && usarSaldo ? { saldoInicial: p.saldoInicial } : {}),
+            ...(i === 0 && usarItem ? { itemMensual: p.item } : {}),
+            ...(i === 0 && usarPres ? { presupuestoMensual: p.presupuesto } : {})
+          });
+        }
+        importados += r.importados; omitidos += r.omitidos;
+      }
+      estadoPlanilla = null; prev._destino = null;
+      toast(`${importados} movimientos importados${omitidos ? ` (${omitidos} ya existían)` : ''}`);
+      await ctx.refresh();
+      if (general) { ctx.setMesSilent(meses[meses.length - 1] || ctx.mes); ctx.go('general'); }
+      else { ctx.setMesSilent(meses[meses.length - 1] || ctx.mes); ctx.go(`ministerio/${destino}`); }
     } catch (er) {
       toast(er.message, 'err');
       btn.disabled = false; btn.classList.remove('loading');
