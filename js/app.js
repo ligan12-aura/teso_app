@@ -2,6 +2,7 @@ import { CONFIG } from './config.js';
 import { call, auth, isDemo, setAuthErrorHandler } from './api.js';
 import { resetDemo } from './demo.js';
 import { icon, esc, toast, destroyCharts, setupChartDefaults, modal, formData } from './ui.js';
+import { botonTema, alternarTema, aplicarTema, temaActual, seguirSistema } from './theme.js';
 import * as Dashboard from './views/dashboard.js';
 import * as General from './views/general.js';
 import * as Ministerios from './views/ministerios.js';
@@ -77,6 +78,7 @@ function renderLogin(msg = '') {
       </div>
     </div>
     <div class="login-panel">
+      ${botonTema('theme-fab', true)}
       <form class="login-form" novalidate>
         <div class="login-head">
           <span class="eyebrow">Equipo de finanzas</span>
@@ -183,6 +185,7 @@ function shell(active) {
     <nav class="nav">${links}</nav>
     <div class="side-foot">
       <button class="side-action help-action" data-help>${icon('help')} Ayuda · Guía de uso</button>
+      ${botonTema('side-action', true)}
       ${u.rol === 'tesorero' ? `
         ${state.data.extra?.sheetUrl ? `<a class="side-action" href="${esc(state.data.extra.sheetUrl)}" target="_blank" rel="noopener">${icon('sheet')} Abrir planilla</a>` : ''}
         <button class="side-action" data-export>${icon('download')} Descargar Excel</button>` : ''}
@@ -198,6 +201,7 @@ function shell(active) {
       <div class="brand mobile"><div class="brand-mark">${icon('church', 18)}</div><strong>El Redentor</strong></div>
       ${isDemo ? `<span class="demo-pill">${icon('sparkle', 13)} <span class="dp-long">Modo</span> demo</span>` : ''}
       <button class="help-pill mobile" data-help aria-label="Ayuda">${icon('help', 17)} Ayuda</button>
+      ${botonTema('icon-btn mobile')}
       <button class="icon-btn mobile" data-logout aria-label="Cerrar sesión">${icon('logout')}</button>
     </header>
     <main id="view" class="view"></main>
@@ -250,7 +254,23 @@ window.addEventListener('hashchange', route);
 // =================================================================
 // Arranque
 // =================================================================
+// Modo claro/oscuro: al cambiar, se vuelve a dibujar la vista para que los gráficos tomen los colores nuevos
+function alCambiarTema() {
+  setupChartDefaults();
+  if (!state.user || !state.data || document.body.classList.contains('is-login')) return;
+  const y = window.scrollY;
+  route();
+  window.scrollTo(0, y);
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-theme-toggle]')) return;
+  alternarTema();
+  alCambiarTema();
+});
+seguirSistema(alCambiarTema);
+
 (async function start() {
+  aplicarTema(temaActual());
   setupChartDefaults();
   document.title = `Tesorería · ${CONFIG.NOMBRE_IGLESIA}`;
   if (!auth.token) return renderLogin();

@@ -68,6 +68,8 @@ const P = {
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 4.9.7c0 1.7-2.4 2.1-2.4 3.6"/><path d="M12 17h.01"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
   sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>'
 };
 export const icon = (name, size = 18) =>
@@ -217,9 +219,19 @@ export async function verArchivo(id, titulo = 'Boleta') {
 
 // ---------------- Gráficos (Chart.js) ----------------
 let charts = [];
+// Lee un token del CSS (cambia con el modo claro/oscuro)
+export const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// Los colores neutros escritos en las vistas se cambian por los del tema actual
+function temaGrafico(v) {
+  if (Array.isArray(v)) return v.map(temaGrafico);
+  if (v && typeof v === 'object' && v.constructor === Object) { for (const k in v) v[k] = temaGrafico(v[k]); return v; }
+  if (v === '#eef0f3') return cssVar('--chart-grid');
+  if (v === '#fff' || v === '#ffffff') return cssVar('--surface');
+  return v;
+}
 export function chart(canvas, config) {
   if (!canvas || !window.Chart) return null;
-  const c = new window.Chart(canvas, config);
+  const c = new window.Chart(canvas, temaGrafico(config));
   charts.push(c);
   return c;
 }
@@ -230,7 +242,8 @@ export function setupChartDefaults() {
   const C = window.Chart;
   C.defaults.font.family = "'Plus Jakarta Sans', system-ui, sans-serif";
   C.defaults.font.size = 12;
-  C.defaults.color = '#5f6676';
+  C.defaults.color = cssVar('--muted') || '#5f6676';
+  C.defaults.borderColor = cssVar('--chart-grid') || '#eef0f3';
   // Animación corta: son datos para leer, no para esperar
   const reducir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   C.defaults.animation.duration = reducir ? 0 : 250;
