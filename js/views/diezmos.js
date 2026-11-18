@@ -25,12 +25,15 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
   miembros.forEach((m) => {
     const meses = Array(12).fill(0);
     data.diezmos.forEach((d) => { if (d.miembroId === m.id && d.fecha.startsWith(String(anio))) meses[+d.fecha.slice(5, 7) - 1] += d.monto; });
-    const conDiezmo = meses.slice(0, mesesPeriodo).filter((v) => v > 0).length;
+    // El mes en curso solo cuenta si ya tiene diezmo: mientras no termina, no es una falta
+    const evaluados = anio === hoyY && !meses[hoyM - 1] ? hoyM - 1 : mesesPeriodo;
+    const conDiezmo = meses.slice(0, evaluados).filter((v) => v > 0).length;
     const total = meses.reduce((a, v) => a + v, 0);
-    const cat = conDiezmo === 0 ? 'sin' : conDiezmo / mesesPeriodo >= UMBRAL_CONSTANTE ? 'constante' : 'irregular';
-    // meses seguidos sin diezmar hasta el mes actual (dentro del año)
+    // Sin meses evaluables (año futuro o enero recién empezado) no hay categoría
+    const cat = !evaluados ? null : conDiezmo === 0 ? 'sin' : conDiezmo / evaluados >= UMBRAL_CONSTANTE ? 'constante' : 'irregular';
+    // meses seguidos sin diezmar hasta el último mes evaluado (dentro del año)
     let racha = 0;
-    for (let i = mesesPeriodo - 1; i >= 0 && !meses[i]; i--) racha++;
+    for (let i = evaluados - 1; i >= 0 && !meses[i]; i--) racha++;
     porMiembro[m.id] = { m, meses, conDiezmo, total, cat, racha, ultimo: ultimoDe[m.id] || '' };
   });
   return { mesesPeriodo, porMiembro };
@@ -101,7 +104,7 @@ export function render(root, ctx) {
           <td class="dg-nombre"><button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>${x.m.estado === 'activo' && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
           ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${v ? 'con' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
           <td class="num strong">${x.total ? money(x.total) : '—'}</td>
-          <td>${x.m.estado === 'activo' ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : '<span class="badge st-open">Inactivo</span>'}</td>
+          <td>${x.m.estado !== 'activo' ? '<span class="badge st-open">Inactivo</span>' : x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : '<span class="muted">—</span>'}</td>
         </tr>`).join('')}</tbody>
       <tfoot><tr><td class="dg-nombre"><b>Total identificado</b></td>${identificado.map((v) => `<td class="num"><b>${v ? moneyShort(v) : ''}</b></td>`).join('')}<td class="num"><b>${money(totId)}</b></td><td></td></tr></tfoot>
     </table></div>` : emptyState(data.miembros.length ? 'Nadie coincide con los filtros' : 'Aún no hay miembros registrados', 'users')}

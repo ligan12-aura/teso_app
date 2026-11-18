@@ -64,6 +64,7 @@ var TesoCore = (function () {
   };
   // Categorías que solo se crean automáticamente al transferir un ítem
   var RESERVADAS = { ministerio: 'Ítem mensual', general: 'Asignación ministerios' };
+  var SALDO_INICIAL = 'Saldo inicial';
   var MEDIOS = ['Efectivo', 'Transferencia', 'Depósito', 'Cheque', 'Tarjeta'];
   var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var MAX_ARCHIVO_B64 = 11 * 1024 * 1024; // ~8 MB reales
@@ -229,6 +230,8 @@ var TesoCore = (function () {
         base.miembros = [];
         base.diezmos = [];
         base.extra = {};
+        // El líder no recibe saldo de caja ni presupuesto de la tesorería general
+        base.config = { nombreIglesia: base.config.nombreIglesia };
       }
       return base;
     }
@@ -270,6 +273,7 @@ var TesoCore = (function () {
       var cat = String(p.categoria || '').trim();
       if (!cat) throw TesoError('Selecciona una categoría');
       if (cat === RESERVADAS[ambito] && !permitirReservada) throw TesoError('La categoría "' + cat + '" se registra automáticamente al transferir el ítem.');
+      if (ambito === 'ministerio' && cat === SALDO_INICIAL && !permitirReservada) throw TesoError('La categoría "' + SALDO_INICIAL + '" solo se crea al importar el historial del ministerio.');
       return { fecha: p.fecha, tipo: tipo, categoria: cat, descripcion: String(p.descripcion || '').trim().slice(0, 300), monto: monto };
     }
     // ---------------- Presupuestos ----------------
@@ -339,16 +343,35 @@ var TesoCore = (function () {
       if (!mov) throw TesoError('Movimiento no encontrado');
       if (user.rol !== 'tesorero' && mov.ministerioId !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
       if (mov.origen === 'transferencia') throw TesoError('El ítem mensual se registra al transferirlo; si hubo un error, anúlalo desde el panel de rendición del ministerio (botón Anular).');
+      if (user.rol !== 'tesorero' && (mov.categoria === SALDO_INICIAL || transferenciaDeMov(mov.id))) {
+        throw TesoError('El saldo inicial y los ítems recibidos solo los puede corregir el tesorero.', 'FORBIDDEN');
+      }
       return mov;
+    }
+    // Transferencia registrada para un movimiento de ministerio (ítems importados como transferidos)
+    function transferenciaDeMov(movId) {
+      return all('Transferencias').filter(function (t) { return t.movMinisterioId === movId; })[0] || null;
+    }
+    // El tope de presupuesto se exige solo si la edición aumenta lo gastado del mes
+    function aumentaGasto(mov, d, mes) {
+      return d.tipo === 'gasto' && (mov.tipo !== 'gasto' || mes !== mov.mes || d.monto > mov.monto);
     }
     function updateMovMinisterio(user, p) {
       var mov = movMinisterioPropio(user, p.id);
-      var d = validarMov(p, 'ministerio');
+      // El tesorero puede corregir el saldo inicial o un ítem importado sin cambiarles la categoría
+      var reservadaPropia = user.rol === 'tesorero' && String(p.categoria || '').trim() === mov.categoria;
+      var d = validarMov(p, 'ministerio', reservadaPropia);
       var mes = d.fecha.slice(0, 7);
       exigirEditable(user, mov.ministerioId, mov.mes);
       exigirEditable(user, mov.ministerioId, mes);
       var m = getMinisterio(mov.ministerioId);
-      if (d.tipo === 'gasto') exigirPresupuestoMinisterio(m, mes, d.monto, mov.id);
+      if (aumentaGasto(mov, d, mes)) exigirPresupuestoMinisterio(m, mes, d.monto, mov.id);
+      var t = transferenciaDeMov(mov.id);
+      if (t) {
+        if (d.tipo !== 'ingreso' || d.categoria !== RESERVADAS.ministerio) throw TesoError('Este movimiento es un ítem recibido: solo se puede corregir su monto o su fecha dentro del mismo mes.');
+        if (mes !== mov.mes) throw TesoError('El ítem recibido debe quedar en ' + labelMes(mov.mes) + '.');
+        update('Transferencias', t.id, { monto: d.monto, fecha: d.fecha });
+      }
       var archivoId = mov.archivoId;
       if (p.archivo && p.archivo.base64) {
         var nuevo = guardarArchivo(p.archivo, ['Boletas ministerios', m.nombre, mes]);
@@ -363,8 +386,11 @@ var TesoCore = (function () {
     function deleteMovMinisterio(user, p) {
       var mov = movMinisterioPropio(user, p.id);
       exigirEditable(user, mov.ministerioId, mov.mes);
+      var t = transferenciaDeMov(mov.id);
       borrarArchivo(mov.archivoId);
       remove('MovimientosMinisterios', mov.id);
+      // Un ítem importado borrado deja de contar como transferido (se puede volver a transferir)
+      if (t) remove('Transferencias', t.id);
       return { id: mov.id };
     }
 
@@ -487,7 +513,7 @@ var TesoCore = (function () {
     function updateMovGeneral(user, p) {
       var mov = movGeneralManual(p.id);
       var d = datosGeneral(p, mov.origen === 'importado');
-      if (mov.origen !== 'importado' && d.tipo === 'gasto') exigirPresupuestoGeneral(d.mes, d.monto, mov.id);
+      if (mov.origen !== 'importado' && aumentaGasto(mov, d, d.mes)) exigirPresupuestoGeneral(d.mes, d.monto, mov.id);
       var archivoId = mov.archivoId;
       if (p.archivo && p.archivo.base64) {
         var nuevo = guardarArchivo(p.archivo, ['Comprobantes tesorería', d.mes]);
@@ -558,7 +584,7 @@ var TesoCore = (function () {
       var saldo = Math.round(Number(p.saldoInicial) || 0);
       if (saldo > 0 && anio) {
         var antes = propios.some(function (x) { return x.mes < anio + '-01'; });
-        if (!antes) agregar({ refId: 'saldo:' + m.id + ':' + anio, fecha: (anio - 1) + '-12-31', tipo: 'ingreso', categoria: 'Saldo inicial', descripcion: 'Saldo al 1 de enero de ' + anio, monto: saldo }, -1);
+        if (!antes) agregar({ refId: 'saldo:' + m.id + ':' + anio, fecha: (anio - 1) + '-12-31', tipo: 'ingreso', categoria: SALDO_INICIAL, descripcion: 'Saldo al 1 de enero de ' + anio, monto: saldo }, -1);
       }
       items.forEach(agregar);
       if (nuevos.length) insertMany('MovimientosMinisterios', nuevos);
@@ -579,7 +605,7 @@ var TesoCore = (function () {
       var rend = {};
       all('Rendiciones').forEach(function (r) { if (r.ministerioId === m.id) rend[r.mes] = 1; });
       var meses = {};
-      nuevos.forEach(function (x) { if (x.mes < mesActual && x.categoria !== 'Saldo inicial') meses[x.mes] = 1; });
+      nuevos.forEach(function (x) { if (x.mes < mesActual) meses[x.mes] = 1; });
       var nuevasR = Object.keys(meses).filter(function (mm) { return !rend[mm]; }).map(function (mm) {
         return { id: uid(), ministerioId: m.id, mes: mm, estado: 'aprobada', comentarioLider: '', fechaEnvio: now, comentarioTesorero: 'Historial importado desde planilla', fechaRevision: now, revisadoPor: user.id };
       });
@@ -657,6 +683,7 @@ var TesoCore = (function () {
       if (!mb) throw TesoError('Miembro no encontrado');
       if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
       if (p.fecha > env.today()) throw TesoError('La fecha no puede ser futura');
+      if (p.fecha < '2000-01-01') throw TesoError('Fecha inválida');
       var monto = Math.round(Number(p.monto));
       if (!(monto > 0)) throw TesoError('El monto debe ser mayor a 0');
       if (monto > MAX_MONTO) throw TesoError('El monto es demasiado grande');

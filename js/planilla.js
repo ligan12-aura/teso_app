@@ -301,7 +301,7 @@ export function construirPlanilla(ExcelJS, d) {
       v('id', m.id || '');
       if (general) v('medio', m.medio || '');
     }
-    if (general) v('grupo', { formula: `IF(${L.categoria}${rr}="","",IFERROR(VLOOKUP(${L.categoria}${rr},Categorías!$A$5:$B$400,2,FALSE),"Sin clasificar"))`, result: m ? grupoDe(m.tipo, m.categoria) : '' });
+    if (general) v('grupo', { formula: `IF(${L.categoria}${rr}="","",IFERROR(INDEX(Categorías!$B$5:$B$400,MATCH(1,INDEX((Categorías!$A$5:$A$400=${L.categoria}${rr})*(Categorías!$C$5:$C$400=${L.tipo}${rr}),0),0)),"Sin clasificar"))`, result: m ? grupoDe(m.tipo, m.categoria) : '' });
     v('saldo', { formula: `IF(AND(${L.ingreso}${rr}="",${L.egreso}${rr}=""),"",${SALDO_INI}+SUM(${L.ingreso}$${PRIMERA}:${L.ingreso}${rr})-SUM(${L.egreso}$${PRIMERA}:${L.egreso}${rr}))` });
     row.height = 18;
     cols.forEach(([k], ci) => {
@@ -394,7 +394,18 @@ export function leerPlanilla(wb) {
   const mv = wb.getWorksheet('Movimientos');
   const out = [];
   const texto = (v) => (v == null ? '' : typeof v === 'object' ? (v.richText ? v.richText.map((t) => t.text).join('') : v.text ?? v.result ?? '') : String(v)).trim();
-  const numero = (v) => { const x = v && typeof v === 'object' ? v.result : v; return Math.round(Number(String(x ?? '').replace(/[^\d.-]/g, '')) || 0); };
+  // Montos: números de Excel tal cual; texto al estilo es-CL ("1.500.000", "$ 25.000", "1500,5" → 1500).
+  // Devuelve { n, err }: err si hay texto que no es un monto válido.
+  const numero = (v) => {
+    const x = v && typeof v === 'object' && !(v instanceof Date) ? (v.result ?? texto(v)) : v;
+    if (x == null || x === '') return { n: 0, err: '' };
+    if (typeof x === 'number') return x < 0 ? { n: 0, err: 'monto negativo' } : { n: Math.round(x), err: '' };
+    const s = String(x).trim();
+    if (!s) return { n: 0, err: '' };
+    if (!/^-?\s*\$?\s*[\d.\s]+(,\d*)?$/.test(s)) return { n: 0, err: `monto no válido “${s.slice(0, 20)}”` };
+    if (s.includes('-')) return { n: 0, err: 'monto negativo' };
+    return { n: Number(s.split(',')[0].replace(/\D/g, '')) || 0, err: '' };
+  };
   const aFecha = (v) => {
     if (v instanceof Date) return `${v.getUTCFullYear()}-${String(v.getUTCMonth() + 1).padStart(2, '0')}-${String(v.getUTCDate()).padStart(2, '0')}`;
     if (typeof v === 'number') { const dt = new Date(Math.round((v - 25569) * 86400000)); return aFecha(dt); }
@@ -407,12 +418,20 @@ export function leerPlanilla(wb) {
   for (let i = Number(m.primeraFila) || 5; i <= ultima; i++) {
     const row = mv.getRow(i);
     const get = (k) => row.getCell(cols.indexOf(k) + 1).value;
-    const ingreso = numero(get('ingreso')), egreso = numero(get('egreso'));
-    if (!ingreso && !egreso) continue;
+    const ni = numero(get('ingreso')), ne = numero(get('egreso'));
+    const ingreso = ni.n, egreso = ne.n;
+    if (!ingreso && !egreso && !ni.err && !ne.err) continue;
+    const tipoTxt = texto(get('tipo')).toLowerCase();
+    const tipo = ingreso ? 'ingreso' : 'gasto';
+    let error = ni.err || ne.err || '';
+    if (!error && ingreso && egreso) error = 'tiene monto en Ingreso y en Egreso';
+    if (!error && tipoTxt && ((tipoTxt.startsWith('ing') && tipo !== 'ingreso') || (tipoTxt.startsWith('egr') && tipo !== 'gasto'))) error = `el tipo “${texto(get('tipo'))}” no coincide con la columna del monto`;
+    if (!error && !ingreso && !egreso) error = 'monto en 0';
     out.push({
       fila: i,
+      error,
       fecha: aFecha(get('fecha')),
-      tipo: ingreso ? 'ingreso' : 'gasto',
+      tipo,
       monto: ingreso || egreso,
       categoria: texto(get('categoria')),
       descripcion: texto(get('descripcion')),

@@ -180,7 +180,7 @@ function seed() {
     ['Mujeres', '#c2577a', '🌷', 60000, 'Ruth Contreras', 'mujeres'],
     ['Diaconía', '#7a8b3a', '🤝', 80000, 'Jorge Silva', 'diaconia']
   ].map(([nombre, color, icono, itemMensual, lider, usuario]) => {
-    const m = { id: id(), nombre, color, icono, itemMensual, presupuestoMensual: itemMensual, activo: true, creadoEn: now };
+    const m = { id: id(), nombre, color, icono, itemMensual, presupuestoMensual: Math.round(itemMensual * 1.35 / 10000) * 10000, activo: true, creadoEn: now };
     db.Ministerios.push(m);
     user(lider, usuario, 'lider', m.id);
     return m;
@@ -259,6 +259,7 @@ function seed() {
       const lista = gastosTipo[min.nombre];
       const nG = 3 + Math.floor(rand() * 2);
       const isCur = mm === curMonth;
+      let gastadoMes = 0;
       for (let j = 0; j < nG; j++) {
         const [categoria, descripcion] = lista[Math.floor(rand() * lista.length)];
         const d = 3 + Math.floor(rand() * 25);
@@ -266,6 +267,9 @@ function seed() {
         if (!notFuture(fecha)) continue;
         const monto = Math.max(3000, Math.round(min.itemMensual * (0.16 + rand() * 0.26) / 100) * 100);
         const conBoleta = rand() > 0.15;
+        // Datos de ejemplo coherentes: ningún mes supera el presupuesto del ministerio
+        if (gastadoMes + monto > min.presupuestoMensual) continue;
+        gastadoMes += monto;
         db.MovimientosMinisterios.push({ id: id(), ministerioId: min.id, fecha, mes: mm, tipo: 'gasto', categoria, descripcion, monto, archivoId: conBoleta ? `demo-${monto}-${encodeURIComponent(descripcion)}` : '', origen: 'manual', refId: '', creadoPor: lider.id, creadoEn: now, actualizadoEn: now });
       }
       if (rand() > 0.75) {

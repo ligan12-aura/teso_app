@@ -235,8 +235,11 @@ export async function analizar(fileOrBuffer, data) {
 }
 
 function opcionesCategoria(data, tipo, sel) {
-  const reservada = '';
-  return data.grupos[tipo].map(([g, cs]) => `<optgroup label="${esc(g)}">${cs.filter((c) => c !== reservada).map((c) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('')}</optgroup>`).join('');
+  const grupos = data.grupos[tipo];
+  // Una categoría personalizada (creada con "Otra…") se muestra tal cual, para que lo visto sea lo que se importa
+  const conocida = !sel || grupos.some(([, cs]) => cs.includes(sel));
+  const otras = conocida ? '' : `<optgroup label="Otras"><option selected>${esc(sel)}</option></optgroup>`;
+  return otras + grupos.map(([g, cs]) => `<optgroup label="${esc(g)}">${cs.map((c) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('')}</optgroup>`).join('');
 }
 
 function pintar(prev, ctx) {
@@ -350,7 +353,7 @@ function pintarPlanilla(prev, ctx) {
   (general ? data.movGenerales : data.movMinisterios.filter((x) => x.ministerioId === destino)).forEach((x) => { existentes.add(x.id); if (x.refId) existentes.add(x.refId); });
   const filas = p.movimientos.map((x) => {
     const refId = x.id ? `planilla:${x.id}` : `planilla:${p.anio}:${hash([x.fecha, x.tipo, x.monto, x.descripcion, x.fila].join('|'))}`;
-    const error = !x.fecha ? 'sin fecha' : !x.categoria ? 'sin categoría' : '';
+    const error = x.error || (!x.fecha ? 'sin fecha' : !x.categoria ? 'sin categoría' : '');
     return { ...x, refId, idOriginal: x.id, error, yaImportado: existentes.has(refId) || (x.id && existentes.has(x.id)) };
   });
   const validas = filas.filter((f) => !f.error);
@@ -389,7 +392,7 @@ function pintarPlanilla(prev, ctx) {
         <tr><td class="muted">Saldo al 1 de enero</td><td></td><td></td><td class="num strong">${money(p.saldoInicial)}</td><td></td></tr>
         ${resumen.map((r) => `<tr><td><b>${cap(mesLargo(r.mes))}</b></td><td class="num ingreso">${money(r.ent)}</td><td class="num gasto">${money(r.sal)}</td><td class="num strong">${money(r.saldo)}</td><td class="num">${r.filas.length}${r.filas.some((f) => f.yaImportado) ? `<br><small class="muted">${r.filas.filter((f) => f.yaImportado).length} ya existen</small>` : ''}</td></tr>`).join('')}
       </tbody></table></div>
-    ${malas.length ? `<div class="note warn" style="margin-top:12px">${icon('alert', 16)}<span>${malas.length} fila${malas.length > 1 ? 's' : ''} no se importará${malas.length > 1 ? 'n' : ''} por estar incompleta${malas.length > 1 ? 's' : ''}: ${malas.slice(0, 5).map((f) => `fila ${f.fila} (${f.error})`).join(', ')}${malas.length > 5 ? '…' : ''}.</span></div>` : ''}
+    ${malas.length ? `<div class="note warn" style="margin-top:12px">${icon('alert', 16)}<span>${malas.length} fila${malas.length > 1 ? 's' : ''} no se importará${malas.length > 1 ? 'n' : ''} por tener datos incompletos o inválidos: ${malas.slice(0, 5).map((f) => `fila ${f.fila} (${f.error})`).join(', ')}${malas.length > 5 ? '…' : ''}.</span></div>` : ''}
     <div class="imp-opciones">
       ${opcSaldo ? `<label class="check saldo-check"><input type="checkbox" data-opc-saldo ${marcarSaldo ? 'checked' : ''}> <span>Registrar el saldo al 1 de enero de <b>${money(p.saldoInicial)}</b>${general ? `<br><small class="muted">${saldoGeneralConfigurado ? `Hoy el saldo inicial de caja es ${money(cfg.saldoInicial)}${cfg.fechaSaldoInicial ? ` desde el ${fecha(cfg.fechaSaldoInicial)}` : ''}. Al marcarlo se reemplaza.` : 'Se usará como saldo inicial de caja.'}</small>` : ''}</span></label>` : ''}
       ${!general && p.saldoInicial > 0 && tieneAntes ? `<div class="note" style="margin-top:10px">${icon('sparkle', 16)}<span>El ministerio ya tiene movimientos anteriores a ${p.anio}, así que su saldo de arrastre ya existe y no se vuelve a registrar.</span></div>` : ''}

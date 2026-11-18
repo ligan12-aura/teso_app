@@ -81,7 +81,7 @@ export function render(root, ctx) {
           <td class="nowrap">${m.celular ? `<a class="link" href="tel:${esc(m.celular.replace(/[^\d+]/g, ''))}">${esc(m.celular)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm">${m.email ? `<a class="link" href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm desc">${m.domicilio ? esc(m.domicilio) : '<span class="falta">—</span>'}</td>
-          <td>${m.estado === 'activo' && c ? `<span class="badge ${CATEG_DIEZMO[c.cat].cls}">${CATEG_DIEZMO[c.cat].label}</span>` : '<span class="muted">—</span>'}</td>
+          <td>${m.estado === 'activo' && c && c.cat ? `<span class="badge ${CATEG_DIEZMO[c.cat].cls}">${CATEG_DIEZMO[c.cat].label}</span>` : '<span class="muted">—</span>'}</td>
           <td class="row-actions"><button class="icon-btn sm" data-edit="${m.id}" title="Editar ficha">${icon('edit', 16)}</button></td>
         </tr>`;
       }).join('')}</tbody></table></div>` : emptyState('Ningún miembro coincide con la búsqueda', 'search'))
