@@ -266,7 +266,7 @@ var TesoCore = (function () {
         // Listado propio y actividades: solo si el ministerio lo tiene habilitado
         var conAct = base.ministerios.some(function (m) { return m.actividades === 'si'; });
         // El líder no recibe datos de las fichas de Miembros: solo el nombre del enlazado
-        base.integrantes = conAct ? vistaIntegrantes(all('Integrantes').filter(own), true) : [];
+        base.integrantes = conAct ? vistaIntegrantes(all('Integrantes').filter(own)) : [];
         base.actividades = conAct ? all('Actividades').filter(own) : [];
         var actIds = {};
         base.actividades.forEach(function (a) { actIds[a.id] = 1; });
@@ -454,7 +454,8 @@ var TesoCore = (function () {
         .map(function (m) { return { id: m.id, nombre: m.nombre }; });
     }
     // Un integrante enlazado a un miembro toma sus datos de la ficha de Miembros (no se registra dos veces)
-    // soloNombre: para el líder, que no debe recibir contacto ni fecha de nacimiento de la ficha de Miembros
+    // Integrante enlazado: nombre, contacto y fecha de nacimiento vienen de su ficha de Miembros (también para
+    // el líder, solo de los integrantes de su propio listado). soloNombre: solo el nombre.
     function vistaIntegrantes(lista, soloNombre) {
       var mb = {};
       all('Miembros').forEach(function (m) { mb[m.id] = m; });
@@ -530,7 +531,7 @@ var TesoCore = (function () {
         activo: p.activo === undefined ? (actual ? actual.activo : true) : toBool(p.activo), actualizadoEn: now
       };
       var r = actual ? update('Integrantes', actual.id, d) : insert('Integrantes', Object.assign(d, { id: uid(), creadoEn: now }));
-      return vistaIntegrantes([r], !admin)[0];
+      return vistaIntegrantes([r])[0];
     }
     function deleteIntegrante(user, p) {
       var it = find('Integrantes', p.id);
@@ -1014,10 +1015,9 @@ var TesoCore = (function () {
         throw TesoError(esAdmin(user) ? 'Este miembro tiene diezmos registrados. Márcalo como inactivo en vez de eliminarlo.' : 'Este miembro no se puede eliminar. Márcalo como inactivo.');
       }
       if (mb.conyugeId) { var c = find('Miembros', mb.conyugeId); if (c && c.conyugeId === mb.id) update('Miembros', c.id, { conyugeId: '' }); }
-      // Los integrantes de ministerios enlazados a esta ficha quedan como no miembros con su nombre
-      // (el contacto de la ficha no se copia: el líder no debe recibir datos del registro de Miembros)
+      // Los integrantes de ministerios enlazados a esta ficha quedan como no miembros con sus datos
       all('Integrantes').forEach(function (i) {
-        if (i.miembroId === mb.id) update('Integrantes', i.id, { miembroId: '', nombre: mb.nombre, actualizadoEn: env.now() });
+        if (i.miembroId === mb.id) update('Integrantes', i.id, { miembroId: '', nombre: mb.nombre, celular: mb.celular || i.celular, email: mb.email || i.email, fechaNacimiento: mb.fechaNacimiento || i.fechaNacimiento, actualizadoEn: env.now() });
       });
       remove('Miembros', mb.id);
       return { id: mb.id };
