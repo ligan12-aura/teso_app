@@ -161,7 +161,7 @@ function seed() {
   let n = 0;
   const id = () => 'd' + (++n).toString(36) + Math.random().toString(36).slice(2, 8);
   const now = new Date().toISOString();
-  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [] };
+  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [] };
   let rnd = 7;
   const rand = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
   const between = (a, b) => Math.round((a + rand() * (b - a)) / 500) * 500;
@@ -286,6 +286,28 @@ function seed() {
         fechaEnvio: `${TesoCore.nextMonth(mm)}-02T15:00:00.000Z`, comentarioTesorero,
         fechaRevision: estado === 'aprobada' || estado === 'observada' ? `${TesoCore.nextMonth(mm)}-03T20:00:00.000Z` : '', revisadoPor: estado === 'enviada' ? '' : tesoreroId
       });
+    });
+  });
+
+  // Miembros y diezmos de ejemplo (nombres ficticios)
+  const nombres = ['Ana Castillo', 'Benjamín Rojas', 'Carolina Muñoz', 'Daniel Fuentes', 'Elena Vargas', 'Felipe Soto', 'Gabriela Torres', 'Héctor Díaz', 'Isabel Contreras', 'Joaquín Reyes',
+    'Karina Morales', 'Luis Espinoza', 'Marcela Pino', 'Nicolás Herrera', 'Olga Navarro', 'Pablo Sepúlveda', 'Rebeca Lagos', 'Samuel Ortiz', 'Teresa Gómez', 'Vicente Bravo',
+    'Ximena Salinas', 'Yolanda Cárcamo', 'Andrés Valdés', 'Beatriz Leiva', 'Cristian Paredes', 'Daniela Riquelme', 'Esteban Moya', 'Francisca Aguilar'];
+  const perfiles = ['constante', 'constante', 'constante', 'irregular', 'irregular', 'sin', 'constante', 'irregular'];
+  nombres.forEach((nombre, i) => {
+    const inactivo = i % 9 === 8;
+    const mid = id();
+    const anioNac = 1950 + Math.floor(rand() * 55);
+    const conDatos = rand() > 0.35;
+    db.Miembros.push({ id: mid, nombre, estado: inactivo ? 'inactivo' : 'activo', fechaNacimiento: conDatos ? `${anioNac}-${pad(1 + Math.floor(rand() * 12))}-${pad(1 + Math.floor(rand() * 27))}` : '',
+      celular: conDatos ? `+56 9 ${5000 + Math.floor(rand() * 4999)} ${1000 + Math.floor(rand() * 8999)}` : '', email: conDatos && rand() > 0.3 ? `${nombre.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}@correo.cl` : '',
+      domicilio: conDatos ? `Pasaje ${1 + Math.floor(rand() * 40)}, Temuco` : '', notas: inactivo ? 'Alejado' : '', creadoEn: now, actualizadoEn: now });
+    const perfil = inactivo ? 'sin' : perfiles[i % perfiles.length];
+    const base = between(15000, 90000);
+    months.filter((mm) => mm.startsWith(curMonth.slice(0, 4))).forEach((mm) => {
+      const da = perfil === 'constante' ? rand() > 0.05 : perfil === 'irregular' ? rand() > 0.55 : false;
+      const f = dateIn(mm, 1 + Math.floor(rand() * 26));
+      if (da && notFuture(f)) db.Diezmos.push({ id: id(), miembroId: mid, fecha: f, mes: mm, monto: base, medio: rand() > 0.5 ? 'Efectivo' : 'Transferencia', notas: '', creadoPor: tesoreroId, creadoEn: now, actualizadoEn: now });
     });
   });
 

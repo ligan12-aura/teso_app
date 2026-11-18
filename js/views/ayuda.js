@@ -108,6 +108,31 @@ const TEMAS = {
       ${tip('Si la rendición del mes anterior no está aprobada, la app te avisará antes de transferir. Puedes continuar igual si es necesario. Si te equivocaste, usa <b>Anular</b> en el ministerio.', 'warn')}`
     },
     {
+      id: 'diezmos', titulo: 'Diezmos', ico: 'heart', html: `
+      <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ve el tesorero.</p>
+      <h4>Registrar</h4>
+      ${pasos(`Presiona ${btn('plus', 'Registrar diezmos')} para anotar varios de una vez (por ejemplo, los sobres del domingo): elige la fecha y escribe el monto junto al nombre de cada hermano.`, 'Para un hermano en particular, toca la celda de su fila en el mes que corresponda: ahí puedes agregar, ver o eliminar sus diezmos de ese mes.')}
+      <h4>Categorías (solo hermanos activos)</h4>
+      <ul class="hp-list">
+        <li><span class="badge st-ok">Constante</span> diezmó en al menos el 80% de los meses transcurridos del año.</li>
+        <li><span class="badge st-obs">Irregular</span> diezmó algunos meses. Si lleva 2 o más meses sin diezmar se indica bajo su nombre.</li>
+        <li><span class="badge st-sin">No diezma</span> no tiene diezmos en el año.</li>
+      </ul>
+      <h4>Conciliación</h4>
+      <p>El gráfico compara lo registrado por hermano con los diezmos ingresados en la tesorería general (al registrar el culto). La diferencia es lo que aún no está identificado por nombre. Este registro <b>no suma dinero a la caja</b>: solo identifica quién diezmó.</p>`
+    },
+    {
+      id: 'miembros', titulo: 'Miembros', ico: 'users', html: `
+      <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Solo lo ve el tesorero.</p>
+      <ul class="hp-list">
+        <li><b>Activo / Inactivo:</b> los inactivos (alejados) no se consideran en el resumen de diezmos, pero su historial se conserva.</li>
+        <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio y notas. ${btn('edit', '')} abre la ficha.</li>
+        <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>
+        <li><b>Cumpleaños del mes:</b> aparecen arriba los hermanos activos que cumplen años este mes.</li>
+        <li><b>Importar listado:</b> carga un Excel con los nombres en la primera columna; quienes digan “alejado/a” quedan inactivos.</li>
+      </ul>`
+    },
+    {
       id: 'admin', titulo: 'Configuración', ico: 'settings', html: `
       <h4>Ministerios</h4>
       ${pasos(`Presiona ${btn('plus', 'Nuevo ministerio')}.`, 'Escribe el nombre, el <b>ítem mensual</b> y elige un ícono y un color.', 'Si un ministerio deja de funcionar, edítalo y desmarca <b>Ministerio activo</b>. Su historial se conserva.')}
@@ -185,7 +210,7 @@ const TEMAS = {
   ]
 };
 
-const RUTA_A_TEMA = { inicio: 'inicio', general: 'general', ministerios: 'ministerios', ministerio: 'ministerios', rendiciones: 'rendiciones', admin: 'admin', 'mi-ministerio': 'mi-ministerio', perfil: 'perfil' };
+const RUTA_A_TEMA = { inicio: 'inicio', general: 'general', ministerios: 'ministerios', ministerio: 'ministerios', rendiciones: 'rendiciones', diezmos: 'diezmos', miembros: 'miembros', admin: 'admin', 'mi-ministerio': 'mi-ministerio', perfil: 'perfil' };
 
 export function abrirAyuda(rol, ruta = '') {
   const temas = TEMAS[rol] || TEMAS.lider;

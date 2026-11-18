@@ -808,3 +808,64 @@ input, select, textarea { font: inherit; color: inherit; }
 /* Botón "Descargar planilla" en el encabezado de un ministerio */
 .mh-right .mh-descarga { margin-top: 8px; background: rgba(255, 255, 255, .92); color: var(--navy-2, #1b2a45); border: 0; }
 .mh-right .mh-descarga:hover { background: #fff; }
+
+/* ---------- Miembros y diezmos ---------- */
+.st-sin { background: var(--rose-soft); color: var(--rose-ink, #a83846); }
+.kpi-pct { font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+.falta { color: var(--muted); opacity: .6; }
+.link { color: var(--blue-ink, var(--blue)); }
+.link:hover { text-decoration: underline; }
+.danger-link { color: var(--rose-ink, var(--rose)) !important; margin-top: 4px; }
+.cumple-card .card-head h3 { display: flex; align-items: center; gap: 8px; }
+.cumple-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.cumple-list li { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px 5px 5px; font-size: 13px; }
+.cumple-list li b { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--gold-soft); color: var(--gold-ink, #8a6420); font-size: 12px; }
+.cumple-list li small { color: var(--muted); }
+.cumple-list li.hoy { border-color: var(--gold); background: var(--gold-soft); }
+.imp-resumen { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 6px 0 10px; }
+.imp-resumen div { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; }
+.imp-resumen b { font-family: var(--display); font-size: 22px; font-weight: 600; }
+.imp-resumen span { font-size: 12px; color: var(--muted); }
+.imp-lista { max-height: 300px; overflow-y: auto; }
+.conc-tot { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.conc-tot b { color: var(--ink); }
+.diezmo-wrap { max-height: 70vh; overflow: auto; margin: 0; padding: 0; }
+.diezmo-grid { font-size: 12.5px; }
+.diezmo-grid th, .diezmo-grid td { padding: 8px 6px; }
+.diezmo-grid thead th { position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.diezmo-grid tfoot td { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); }
+.diezmo-grid .dg-nombre { position: sticky; left: 0; background: var(--surface); z-index: 1; min-width: 170px; max-width: 220px; }
+.diezmo-grid thead .dg-nombre { z-index: 3; }
+.dg-ficha { color: var(--ink) !important; font-weight: 600; font-size: 13px; text-align: left; }
+.dg-racha { display: block; font-size: 11px; color: var(--rose-ink, var(--rose)); }
+.dg-celda { cursor: pointer; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 52px; border-radius: 6px; transition: background .12s; }
+.dg-celda:hover { background: var(--line-2); color: var(--ink); }
+.dg-celda.con { color: var(--green-ink, #1f6b48); font-weight: 600; background: rgba(47, 158, 110, calc(var(--int, .5) * .32)); }
+.dg-celda.futuro, th.futuro { opacity: .45; cursor: default; }
+.diezmo-regs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.diezmo-regs li { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
+.diezmo-regs li span { flex: 1; font-size: 13.5px; }
+.lote-buscar { margin: 2px 0 4px; }
+.lote-lista { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+.lote-lista li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; border-bottom: 1px solid var(--line-2); }
+.lote-lista li:last-child { border-bottom: 0; }
+.lote-lista li span { font-size: 13.5px; }
+.lote-monto { width: 130px; border: 1.5px solid var(--line); border-radius: 9px; padding: 6px 9px; text-align: right; font-family: var(--display); font-weight: 600; background: var(--surface); color: var(--ink); }
+.lote-monto:focus { outline: none; border-color: var(--navy-3); }
+@media (max-width: 600px) {
+  .imp-resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .diezmo-grid .dg-nombre { min-width: 130px; }
+  .lote-monto { width: 110px; }
+}
+@media (max-width: 960px) {
+  .bottom-nav .nav-link { font-size: 10px; padding: 7px 1px; }
+}
+@media (max-width: 600px) {
+  .filters .seg-sm { flex-wrap: wrap; width: 100%; }
+  .filters .seg-sm label { flex: 1 1 auto; }
+  .filters .seg-sm span { white-space: nowrap; padding: 6px 10px; }
+}
+@media (max-width: 400px) {
+  .help-pill .hp-txt { display: none; }
+  .help-pill { padding: 6px 8px; }
+}

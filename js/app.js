@@ -10,6 +10,8 @@ import * as Ministerio from './views/ministerio.js';
 import * as Rendiciones from './views/rendiciones.js';
 import * as Admin from './views/admin.js';
 import * as Perfil from './views/perfil.js';
+import * as Diezmos from './views/diezmos.js';
+import * as Miembros from './views/miembros.js';
 import { descargarPlanillaGeneral } from './planillaDescarga.js';
 import { abrirAyuda } from './views/ayuda.js';
 
@@ -20,8 +22,10 @@ const NAV = {
   tesorero: [
     { path: 'inicio', label: 'Inicio', icon: 'home' },
     { path: 'general', label: 'Tesorería', icon: 'wallet' },
-    { path: 'ministerios', label: 'Ministerios', icon: 'grid' },
-    { path: 'rendiciones', label: 'Rendiciones', icon: 'checkCircle' },
+    { path: 'ministerios', label: 'Ministerios', short: 'Minist.', icon: 'grid' },
+    { path: 'rendiciones', label: 'Rendiciones', short: 'Rendic.', icon: 'checkCircle' },
+    { path: 'diezmos', label: 'Diezmos', icon: 'heart' },
+    { path: 'miembros', label: 'Miembros', icon: 'users' },
     { path: 'admin', label: 'Configuración', short: 'Ajustes', icon: 'settings' }
   ],
   lider: [
@@ -36,6 +40,8 @@ const ROUTES = {
   ministerios: { view: Ministerios, role: 'tesorero' },
   ministerio: { view: Ministerio, role: 'tesorero' },
   rendiciones: { view: Rendiciones, role: 'tesorero' },
+  diezmos: { view: Diezmos, role: 'tesorero' },
+  miembros: { view: Miembros, role: 'tesorero' },
   admin: { view: Admin, role: 'tesorero' },
   'mi-ministerio': { view: Ministerio, role: 'lider' },
   perfil: { view: Perfil }
@@ -200,7 +206,7 @@ function shell(active) {
     <header class="topbar">
       <div class="brand mobile"><div class="brand-mark">${icon('church', 18)}</div><strong>El Redentor</strong></div>
       ${isDemo ? `<span class="demo-pill">${icon('sparkle', 13)} <span class="dp-long">Modo</span> demo</span>` : ''}
-      <button class="help-pill mobile" data-help aria-label="Ayuda">${icon('help', 17)} Ayuda</button>
+      <button class="help-pill mobile" data-help aria-label="Ayuda">${icon('help', 17)}<span class="hp-txt"> Ayuda</span></button>
       ${botonTema('icon-btn mobile')}
       <button class="icon-btn mobile" data-logout aria-label="Cerrar sesión">${icon('logout')}</button>
     </header>

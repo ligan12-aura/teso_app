@@ -22,7 +22,9 @@ var TesoCore = (function () {
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn'],
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
-    Config: ['id', 'valor']
+    Config: ['id', 'valor'],
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn'],
+    Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn']
   };
   var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1 };
   var BOOL = { activo: 1, debeCambiarPass: 1 };
@@ -213,6 +215,8 @@ var TesoCore = (function () {
         base.movGenerales = all('MovimientosGenerales');
         base.rendiciones = all('Rendiciones');
         base.transferencias = all('Transferencias');
+        base.miembros = all('Miembros');
+        base.diezmos = all('Diezmos');
       } else {
         var mid = user.ministerioId;
         var own = function (r) { return r.ministerioId === mid; };
@@ -222,6 +226,8 @@ var TesoCore = (function () {
         base.movGenerales = [];
         base.rendiciones = all('Rendiciones').filter(own);
         base.transferencias = all('Transferencias').filter(own);
+        base.miembros = [];
+        base.diezmos = [];
         base.extra = {};
       }
       return base;
@@ -587,6 +593,102 @@ var TesoCore = (function () {
       return { importados: nuevos.length, omitidos: omitidos, transferencias: nuevasT.length, rendiciones: nuevasR.length };
     }
 
+    // ---------------- Miembros (solo tesorero) ----------------
+    function normalNombre(t) {
+      return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+    }
+    function datosMiembro(p) {
+      var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim();
+      if (!nombre) throw TesoError('Escribe el nombre del miembro');
+      if (nombre.length > 80) throw TesoError('El nombre es demasiado largo');
+      var estado = p.estado === 'inactivo' ? 'inactivo' : 'activo';
+      var fn = String(p.fechaNacimiento || '').trim();
+      if (fn && (!isDate(fn) || fn > env.today() || fn < '1900-01-01')) throw TesoError('Fecha de nacimiento inválida');
+      var email = String(p.email || '').trim();
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw TesoError('El correo no parece válido');
+      return {
+        nombre: nombre, estado: estado, fechaNacimiento: fn,
+        celular: String(p.celular || '').trim().slice(0, 30), email: email.slice(0, 120),
+        domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300)
+      };
+    }
+    function saveMiembro(user, p) {
+      var d = datosMiembro(p);
+      var now = env.now();
+      if (p.id) {
+        if (!find('Miembros', p.id)) throw TesoError('Miembro no encontrado');
+        return update('Miembros', p.id, Object.assign(d, { actualizadoEn: now }));
+      }
+      return insert('Miembros', Object.assign(d, { id: uid(), creadoEn: now, actualizadoEn: now }));
+    }
+    function deleteMiembro(user, p) {
+      var mb = find('Miembros', p.id);
+      if (!mb) throw TesoError('Miembro no encontrado');
+      if (all('Diezmos').some(function (x) { return x.miembroId === mb.id; })) {
+        throw TesoError('Este miembro tiene diezmos registrados. Márcalo como inactivo en vez de eliminarlo.');
+      }
+      remove('Miembros', mb.id);
+      return { id: mb.id };
+    }
+    function importarMiembros(user, p) {
+      var items = p.items || [];
+      if (!items.length) throw TesoError('No hay miembros para importar');
+      if (items.length > 2000) throw TesoError('Demasiadas filas');
+      var existentes = {};
+      all('Miembros').forEach(function (m) { existentes[normalNombre(m.nombre)] = 1; });
+      var now = env.now(), nuevos = [], omitidos = 0;
+      items.forEach(function (it, i) {
+        var d;
+        try { d = datosMiembro(it); } catch (e) { throw TesoError('Fila ' + (i + 1) + ': ' + e.message); }
+        var k = normalNombre(d.nombre);
+        if (existentes[k] && !it.permitirRepetido) { omitidos++; return; }
+        existentes[k] = 1;
+        nuevos.push(Object.assign(d, { id: uid(), creadoEn: now, actualizadoEn: now }));
+      });
+      if (nuevos.length) insertMany('Miembros', nuevos);
+      return { importados: nuevos.length, omitidos: omitidos };
+    }
+
+    // ---------------- Diezmos por hermano (solo tesorero) ----------------
+    // Registro de control: no mueve la caja (los diezmos ya entran a la tesorería
+    // general al registrar el culto). La página compara ambos totales por mes.
+    function datosDiezmo(p) {
+      var mb = find('Miembros', p.miembroId);
+      if (!mb) throw TesoError('Miembro no encontrado');
+      if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
+      if (p.fecha > env.today()) throw TesoError('La fecha no puede ser futura');
+      var monto = Math.round(Number(p.monto));
+      if (!(monto > 0)) throw TesoError('El monto debe ser mayor a 0');
+      if (monto > MAX_MONTO) throw TesoError('El monto es demasiado grande');
+      return { miembroId: mb.id, fecha: p.fecha, mes: p.fecha.slice(0, 7), monto: monto, medio: String(p.medio || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 200) };
+    }
+    function saveDiezmo(user, p) {
+      var d = datosDiezmo(p);
+      var now = env.now();
+      if (p.id) {
+        if (!find('Diezmos', p.id)) throw TesoError('Registro no encontrado');
+        return update('Diezmos', p.id, Object.assign(d, { actualizadoEn: now }));
+      }
+      return insert('Diezmos', Object.assign(d, { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now }));
+    }
+    function saveDiezmosLote(user, p) {
+      var items = (p.items || []).filter(function (it) { return Number(it.monto) > 0; });
+      if (!items.length) throw TesoError('Ingresa al menos un monto');
+      var now = env.now();
+      var filas = items.map(function (it, i) {
+        try {
+          return Object.assign(datosDiezmo({ miembroId: it.miembroId, fecha: p.fecha, monto: it.monto, medio: p.medio, notas: it.notas }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now });
+        } catch (e) { throw TesoError('Fila ' + (i + 1) + ': ' + e.message); }
+      });
+      insertMany('Diezmos', filas);
+      return { creados: filas.length };
+    }
+    function deleteDiezmo(user, p) {
+      if (!find('Diezmos', p.id)) throw TesoError('Registro no encontrado');
+      remove('Diezmos', String(p.id));
+      return { id: p.id };
+    }
+
     // ---------------- Archivos (boletas) ----------------
     function getArchivo(user, p) {
       var id = String(p.id || '');
@@ -684,6 +786,12 @@ var TesoCore = (function () {
       deleteMovGeneral: { fn: deleteMovGeneral, role: T, write: true },
       importarMovimientos: { fn: importarMovimientos, role: T, write: true },
       importarMovimientosMinisterio: { fn: importarMovimientosMinisterio, role: T, write: true },
+      saveMiembro: { fn: saveMiembro, role: T, write: true },
+      deleteMiembro: { fn: deleteMiembro, role: T, write: true },
+      importarMiembros: { fn: importarMiembros, role: T, write: true },
+      saveDiezmo: { fn: saveDiezmo, role: T, write: true },
+      saveDiezmosLote: { fn: saveDiezmosLote, role: T, write: true },
+      deleteDiezmo: { fn: deleteDiezmo, role: T, write: true },
       saveMinisterio: { fn: saveMinisterio, role: T, write: true },
       saveUsuario: { fn: saveUsuario, role: T, write: true },
       saveConfig: { fn: saveConfig, role: T, write: true }

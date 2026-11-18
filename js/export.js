@@ -68,5 +68,9 @@ export async function exportarExcel(data) {
 
   add('Transferencias ítem', data.transferencias.map((t) => ({ Ministerio: min[t.ministerioId] || '', 'Ítem del mes': t.mes, Monto: t.monto, 'Fecha transferencia': t.fecha })), [14, 12, 12, 18]);
 
+  const nombreDe = Object.fromEntries((data.miembros || []).map((m) => [m.id, m.nombre]));
+  if (data.miembros?.length) add('Miembros', data.miembros.map((m) => ({ Nombre: m.nombre, Estado: m.estado, 'Fecha de nacimiento': m.fechaNacimiento, Celular: m.celular, Correo: m.email, Domicilio: m.domicilio, Notas: m.notas })), [30, 10, 16, 18, 28, 36, 30]);
+  if (data.diezmos?.length) add('Diezmos', [...data.diezmos].sort(byFecha).map((d) => ({ Fecha: d.fecha, Mes: d.mes, Hermano: nombreDe[d.miembroId] || '', Monto: d.monto, Medio: d.medio, Notas: d.notas })), [11, 8, 30, 12, 14, 30]);
+
   XLSX.writeFile(wb, `Tesoreria_ElRedentor_${data.hoy}.xlsx`);
 }
