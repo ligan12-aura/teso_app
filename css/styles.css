@@ -353,7 +353,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .table tr:hover td { background: var(--surface-2); }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table .desc { max-width: 320px; }
-.table tr.inactive td { opacity: .55; }
+/* Inactivos: atenuados con color, no con opacidad, para mantener el contraste */
+.table tr.inactive td, .table tr.inactive td .link, .table tr.inactive td strong, .table tr.inactive td b { color: var(--muted); }
+.table tr.inactive .badge, .table tr.inactive .dg-celda.con { filter: grayscale(.7); }
 .row-actions { white-space: nowrap; text-align: right; width: 1%; }
 .cat-pill { display: inline-block; padding: 3px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .cat-pill.ingreso { background: var(--green-soft); color: var(--green-ink); }
@@ -510,7 +512,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .seg input:checked + .seg-ingreso { color: var(--green-ink); }
 .seg input:focus-visible + span { outline: 2px solid var(--navy-3); }
 .seg-sm { width: auto; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
-.seg-sm span { padding: 6px 14px; font-size: 13px; }
+.seg-sm span { padding: 6px 14px; font-size: 13px; white-space: nowrap; }
 .seg-sm input:checked + span { background: var(--navy); color: #fff; }
 .upload { position: relative; display: block; cursor: pointer; }
 .upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; z-index: 1; }
@@ -548,6 +550,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 8px; }
 .modal-head h3 { font-family: var(--display); font-size: 21px; font-weight: 600; }
 .modal-body { padding: 10px 22px 6px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+/* Los hijos no se encogen: si el contenido es largo, el modal se desplaza (antes aplastaba el buscador) */
+.modal-body > * { flex-shrink: 0; }
+/* .search usa flex: 1 para crecer en la barra de filtros; en la columna del modal eso anulaba su alto */
+.modal-body > .search { flex: none; }
 .modal .form-error { margin: 8px 22px 0; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px 20px; }
 .confirm-text { color: var(--ink-2); line-height: 1.6; }
@@ -807,12 +813,13 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* Botón "Descargar planilla" en el encabezado de un ministerio */
 .mh-right .mh-descarga { margin-top: 8px; background: rgba(255, 255, 255, .92); color: var(--navy-2, #1b2a45); border: 0; }
+.mh-right .mh-descarga { transition: background-color .15s ease, transform 140ms var(--ease-out); }
 .mh-right .mh-descarga:hover { background: #fff; }
 
 /* ---------- Miembros y diezmos ---------- */
 .st-sin { background: var(--rose-soft); color: var(--rose-ink, #a83846); }
 .kpi-pct { font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 4px; }
-.falta { color: var(--muted); opacity: .6; }
+.falta { color: var(--muted); }
 .link { color: var(--blue-ink, var(--blue)); }
 .link:hover { text-decoration: underline; }
 .danger-link { color: var(--rose-ink, var(--rose)) !important; margin-top: 4px; }
@@ -835,9 +842,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .diezmo-grid .dg-nombre { position: sticky; left: 0; background: var(--surface); z-index: 1; min-width: 170px; max-width: 220px; }
 .diezmo-grid thead .dg-nombre { z-index: 3; }
 .dg-ficha { color: var(--ink) !important; font-weight: 600; font-size: 13px; text-align: left; }
-.dg-racha { display: block; font-size: 11px; color: var(--rose-ink, var(--rose)); }
-.dg-celda { cursor: pointer; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 52px; border-radius: 6px; transition: background .12s; }
-.dg-celda:hover { background: var(--line-2); color: var(--ink); }
+.dg-racha { display: block; font-size: 12px; font-weight: 600; color: var(--rose-ink, var(--rose)); }
+.dg-celda { cursor: pointer; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 52px; border-radius: 6px; transition: background-color 120ms ease, color 120ms ease, transform 140ms var(--ease-out); }
+.dg-celda:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .dg-celda:hover { background-color: var(--line-2); color: var(--ink); } }
 .dg-celda.con { color: var(--green-ink, #1f6b48); font-weight: 600; background: rgba(47, 158, 110, calc(var(--int, .5) * .32)); }
 .dg-celda.futuro, th.futuro { opacity: .45; cursor: default; }
 .diezmo-regs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -856,7 +864,7 @@ input, select, textarea { font: inherit; color: inherit; }
   .lote-monto { width: 110px; }
 }
 @media (max-width: 960px) {
-  .bottom-nav .nav-link { font-size: 10px; padding: 7px 1px; }
+  .bottom-nav .nav-link { font-size: 11px; padding: 7px 2px; }
 }
 @media (max-width: 600px) {
   .filters .seg-sm { flex-wrap: wrap; width: 100%; }
@@ -897,7 +905,7 @@ input, select, textarea { font: inherit; color: inherit; }
 /* Diezmos: estadística del mes */
 .mp-select { border: 0; background: transparent; font: inherit; font-weight: 700; font-size: 14px; color: var(--ink); padding: 4px 2px; cursor: pointer; border-radius: 8px; }
 .mp-select:focus-visible { outline: 2px solid var(--navy-3); }
-.mp-select option { color: #1b2333; }
+.mp-select option { color: var(--ink); background: var(--surface); }
 .dm-cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; }
 .dm-tit { font-size: 14px; margin: 0 0 10px; display: flex; align-items: center; gap: 4px; }
 .dm-lista { list-style: none; margin: 0; padding: 0 10px 0 0; max-height: 420px; overflow: auto; }
@@ -908,9 +916,22 @@ input, select, textarea { font: inherit; color: inherit; }
 .dm-total { display: flex; justify-content: space-between; padding: 10px 0 0; font-size: 14px; }
 .dm-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 420px; overflow: auto; }
 .dm-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer; }
-.dm-chip:hover { border-color: var(--navy-3); }
+.dm-chip { transition: border-color .15s ease, background-color .15s ease, transform 140ms var(--ease-out); }
+.dm-chip:hover { border-color: var(--navy-3); background: var(--surface); }
+.dm-chip:active { transform: scale(.97); }
 .dm-chip i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .diezmo-grid th.sel, .diezmo-grid tfoot td.sel { color: var(--gold-ink); }
 .dg-celda.sel { outline: 1.5px solid var(--gold); outline-offset: -2px; }
 @media (max-width: 760px) { .dm-cols { grid-template-columns: 1fr; } }
 
+
+/* ---------- Menú inferior: pestaña "Más" ---------- */
+.bottom-nav button.nav-link { border: 0; background: transparent; font: inherit; font-weight: 600; cursor: pointer; }
+.mas-sheet .modal-body { padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.mas-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mas-list a { display: flex; align-items: center; gap: 14px; padding: 14px 12px; border-radius: 12px; font-weight: 600; color: var(--ink); min-height: 48px; transition: background-color .15s ease, transform 140ms var(--ease-out); }
+.mas-list a:active { transform: scale(.98); }
+.mas-list a.active { background: var(--blue-soft); color: var(--navy-ink); }
+.mas-list a .ico { color: var(--muted); }
+.mas-list a.active .ico { color: var(--navy-ink); }
+@media (hover: hover) and (pointer: fine) { .mas-list a:hover { background: var(--surface-2); } }

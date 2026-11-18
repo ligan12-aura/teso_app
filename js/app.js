@@ -22,11 +22,11 @@ const NAV = {
   tesorero: [
     { path: 'inicio', label: 'Inicio', icon: 'home' },
     { path: 'general', label: 'Tesorería', icon: 'wallet' },
-    { path: 'ministerios', label: 'Ministerios', short: 'Minist.', icon: 'grid' },
-    { path: 'rendiciones', label: 'Rendiciones', short: 'Rendic.', icon: 'checkCircle' },
+    { path: 'ministerios', label: 'Ministerios', icon: 'grid', mas: true },
+    { path: 'rendiciones', label: 'Rendiciones', icon: 'checkCircle' },
     { path: 'diezmos', label: 'Diezmos', icon: 'heart' },
-    { path: 'miembros', label: 'Miembros', icon: 'users' },
-    { path: 'admin', label: 'Configuración', short: 'Ajustes', icon: 'settings' }
+    { path: 'miembros', label: 'Miembros', icon: 'users', mas: true },
+    { path: 'admin', label: 'Configuración', short: 'Ajustes', icon: 'settings', mas: true }
   ],
   secretaria: [
     { path: 'miembros', label: 'Miembros', icon: 'users' },
@@ -191,6 +191,11 @@ function shell(active) {
   const min = u.rol === 'lider' ? state.data.ministerios[0] : null;
   const initials = u.nombre.split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
   const links = nav.map((n) => `<a href="#/${n.path}" class="nav-link ${active === n.path ? 'active' : ''}">${icon(n.icon, 20)}<span>${n.short ? `<span class="lbl-long">${n.label}</span><span class="lbl-short">${n.short}</span>` : n.label}</span></a>`).join('');
+  // En el celular caben 5 pestañas: las marcadas con "mas" van dentro de "Más"
+  const enMas = nav.filter((n) => n.mas);
+  const masActiva = enMas.some((n) => n.path === active);
+  const bottom = nav.filter((n) => !n.mas).map((n) => `<a href="#/${n.path}" class="nav-link ${active === n.path ? 'active' : ''}">${icon(n.icon, 20)}<span>${n.short || n.label}</span></a>`).join('')
+    + (enMas.length ? `<button type="button" class="nav-link ${masActiva ? 'active' : ''}" data-mas aria-haspopup="dialog">${icon('menu', 20)}<span>Más</span></button>` : '');
   return `
   <aside class="sidebar">
     <div class="brand">
@@ -221,7 +226,25 @@ function shell(active) {
     </header>
     <main id="view" class="view"></main>
   </div>
-  <nav class="bottom-nav">${links}</nav>`;
+  <nav class="bottom-nav">${bottom}</nav>`;
+}
+
+// Hoja "Más" del celular: las secciones que no caben en el menú inferior
+function abrirMas(active) {
+  const nav = (NAV[state.user.rol] || NAV.lider).filter((n) => n.mas);
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-wrap';
+  wrap.innerHTML = `<div class="modal mas-sheet" role="dialog" aria-modal="true" aria-label="Más secciones">
+    <header class="modal-head"><h3>Más</h3><button type="button" class="icon-btn" data-cerrar aria-label="Cerrar">${icon('x')}</button></header>
+    <div class="modal-body"><ul class="mas-list">${nav.map((n) => `<li><a href="#/${n.path}" class="${active === n.path ? 'active' : ''}">${icon(n.icon, 20)}${n.label}</a></li>`).join('')}</ul></div>
+  </div>`;
+  const onKey = (e) => { if (e.key === 'Escape') cerrar(); };
+  const cerrar = () => { wrap.classList.remove('in'); setTimeout(() => wrap.remove(), 200); document.removeEventListener('keydown', onKey); };
+  wrap.addEventListener('click', (e) => { if (e.target === wrap || e.target.closest('[data-cerrar]') || e.target.closest('a')) cerrar(); });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(wrap);
+  requestAnimationFrame(() => wrap.classList.add('in'));
+  wrap.querySelector('a')?.focus();
 }
 
 async function route() {
@@ -234,6 +257,7 @@ async function route() {
   const activeNav = path === 'ministerio' ? 'ministerios' : path;
   app.innerHTML = shell(activeNav);
   app.querySelectorAll('[data-logout]').forEach((b) => b.addEventListener('click', logout));
+  app.querySelector('[data-mas]')?.addEventListener('click', () => abrirMas(activeNav));
   app.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('click', () => abrirAyuda(state.user.rol, location.hash.replace(/^#\//, '').split('/')[0])));
   app.querySelector('[data-export]')?.addEventListener('click', () => descargarPlanillaGeneral(state.data).catch((e) => toast(e.message, 'err')));
   const root = app.querySelector('#view');

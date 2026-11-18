@@ -50,14 +50,14 @@ export function render(root, ctx) {
   </section>
 
   <section class="kpis kpis-4">
-    <article class="kpi"><span class="kpi-label">${icon('users', 15)} Miembros</span><strong class="kpi-value">${miembros.length}</strong></article>
-    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--green)"></i> Activos</span><strong class="kpi-value">${activos.length}</strong></article>
+    <article class="kpi"><span class="kpi-label">${icon('users', 15)} Miembros</span><strong class="kpi-value">${miembros.length}</strong><span class="kpi-sub">en el registro</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--green)"></i> Activos</span><strong class="kpi-value">${activos.length}</strong><span class="kpi-sub">${miembros.length ? Math.round((activos.length / miembros.length) * 100) : 0}% del total</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:#9aa3b2"></i> Inactivos</span><strong class="kpi-value">${miembros.length - activos.length}</strong><span class="kpi-sub">alejados</span></article>
     <article class="kpi"><span class="kpi-label">${icon('checkCircle', 15)} Fichas completas</span><strong class="kpi-value">${miembros.length ? Math.round((completas / miembros.length) * 100) : 0}%</strong><span class="kpi-sub">${completas} de ${miembros.length} con nacimiento, celular, correo y domicilio</span></article>
   </section>
 
   ${cumple.length ? `<article class="card cumple-card">
-    <header class="card-head"><div><h3>${icon('sparkle', 17)} Cumpleaños de ${MESES[mesHoy - 1]}</h3></div></header>
+    <header class="card-head"><div><h3>${icon('gift', 17)} Cumpleaños de ${MESES[mesHoy - 1]}</h3></div></header>
     <ul class="cumple-list">${cumple.map((m) => { const dia = +m.fechaNacimiento.slice(8, 10); const e = edad(m.fechaNacimiento, `${hoy.slice(0, 4)}-${hoy.slice(5, 7)}-${String(dia).padStart(2, '0')}`); return `<li class="${dia === +hoy.slice(8, 10) ? 'hoy' : ''}"><b>${dia}</b><span>${esc(m.nombre)}</span><small>${e} años</small></li>`; }).join('')}</ul>
   </article>` : ''}
 

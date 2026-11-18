@@ -1,0 +1,16 @@
+{
+  "name": "Tesorería · Iglesia Bautista El Redentor",
+  "short_name": "El Redentor",
+  "description": "Tesorería de la Iglesia Bautista El Redentor",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1b2a45",
+  "theme_color": "#1b2a45",
+  "lang": "es",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
