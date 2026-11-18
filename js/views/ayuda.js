@@ -126,7 +126,8 @@ const TEMAS = {
       <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Solo lo ve el tesorero.</p>
       <ul class="hp-list">
         <li><b>Activo / Inactivo:</b> los inactivos (alejados) no se consideran en el resumen de diezmos, pero su historial se conserva.</li>
-        <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio y notas. ${btn('edit', '')} abre la ficha.</li>
+        <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
+        <li><b>💍 Matrimonio:</b> al elegir el cónyuge, ambos quedan unidos. Al registrar diezmos, el matrimonio aparece en una sola fila y su diezmo cuenta para los dos hermanos.</li>
         <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>
         <li><b>Cumpleaños del mes:</b> aparecen arriba los hermanos activos que cumplen años este mes.</li>
         <li><b>Importar listado:</b> carga un Excel con los nombres en la primera columna; quienes digan “alejado/a” quedan inactivos.</li>

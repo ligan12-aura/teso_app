@@ -23,8 +23,8 @@ var TesoCore = (function () {
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
-    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn'],
-    Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId']
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId'],
+    Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId']
   };
   var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1 };
   var BOOL = { activo: 1, debeCambiarPass: 1 };
@@ -529,7 +529,7 @@ var TesoCore = (function () {
         var det = (it.detalle || []).filter(function (x) { return Number(x.monto) > 0; });
         if (det.length) {
           insertMany('Diezmos', det.map(function (x) {
-            return Object.assign(datosDiezmo({ miembroId: x.miembroId, fecha: p.fecha, monto: x.monto, medio: it.medio || p.medio, notas: 'Culto · ' + (p.descripcion || '') }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: mov.id });
+            return Object.assign(datosDiezmo({ miembroId: x.miembroId, conyugeId: x.conyugeId, fecha: p.fecha, monto: x.monto, medio: it.medio || p.medio, notas: 'Culto · ' + (p.descripcion || '') }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: mov.id });
           }));
           identificados += det.length;
         }
@@ -674,21 +674,47 @@ var TesoCore = (function () {
         domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300)
       };
     }
+    // Une a dos miembros como matrimonio (vínculo en ambos sentidos). cid vacío = deshacer.
+    function vincularConyuge(mid, cid) {
+      cid = String(cid || '');
+      if (cid === mid) throw TesoError('Un miembro no puede ser su propio cónyuge');
+      var yo = find('Miembros', mid);
+      if (!yo) throw TesoError('Miembro no encontrado');
+      if (yo.conyugeId && yo.conyugeId !== cid) {
+        var antes = find('Miembros', yo.conyugeId);
+        if (antes && antes.conyugeId === mid) update('Miembros', antes.id, { conyugeId: '' });
+      }
+      if (cid) {
+        var otro = find('Miembros', cid);
+        if (!otro) throw TesoError('El cónyuge elegido no está en el registro');
+        if (otro.conyugeId && otro.conyugeId !== mid) {
+          var exOtro = find('Miembros', otro.conyugeId);
+          if (exOtro && exOtro.conyugeId === cid) update('Miembros', exOtro.id, { conyugeId: '' });
+        }
+        update('Miembros', cid, { conyugeId: mid });
+      }
+      return update('Miembros', mid, { conyugeId: cid });
+    }
     function saveMiembro(user, p) {
       var d = datosMiembro(p);
       var now = env.now();
+      var r;
       if (p.id) {
         if (!find('Miembros', p.id)) throw TesoError('Miembro no encontrado');
-        return update('Miembros', p.id, Object.assign(d, { actualizadoEn: now }));
+        r = update('Miembros', p.id, Object.assign(d, { actualizadoEn: now }));
+      } else {
+        r = insert('Miembros', Object.assign(d, { id: uid(), creadoEn: now, actualizadoEn: now, conyugeId: '' }));
       }
-      return insert('Miembros', Object.assign(d, { id: uid(), creadoEn: now, actualizadoEn: now }));
+      if (p.conyugeId !== undefined) r = vincularConyuge(r.id, p.conyugeId);
+      return r;
     }
     function deleteMiembro(user, p) {
       var mb = find('Miembros', p.id);
       if (!mb) throw TesoError('Miembro no encontrado');
-      if (all('Diezmos').some(function (x) { return x.miembroId === mb.id; })) {
+      if (all('Diezmos').some(function (x) { return x.miembroId === mb.id || x.conyugeId === mb.id; })) {
         throw TesoError(esAdmin(user) ? 'Este miembro tiene diezmos registrados. Márcalo como inactivo en vez de eliminarlo.' : 'Este miembro no se puede eliminar. Márcalo como inactivo.');
       }
+      if (mb.conyugeId) { var c = find('Miembros', mb.conyugeId); if (c && c.conyugeId === mb.id) update('Miembros', c.id, { conyugeId: '' }); }
       remove('Miembros', mb.id);
       return { id: mb.id };
     }
@@ -723,7 +749,12 @@ var TesoCore = (function () {
       var monto = Math.round(Number(p.monto));
       if (!(monto > 0)) throw TesoError('El monto debe ser mayor a 0');
       if (monto > MAX_MONTO) throw TesoError('El monto es demasiado grande');
-      return { miembroId: mb.id, fecha: p.fecha, mes: p.fecha.slice(0, 7), monto: monto, medio: String(p.medio || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 200) };
+      var conyugeId = String(p.conyugeId || '');
+      if (conyugeId) {
+        if (conyugeId === mb.id) throw TesoError('El cónyuge no puede ser el mismo hermano');
+        if (!find('Miembros', conyugeId)) throw TesoError('El cónyuge no está en el registro de miembros');
+      }
+      return { miembroId: mb.id, conyugeId: conyugeId, fecha: p.fecha, mes: p.fecha.slice(0, 7), monto: monto, medio: String(p.medio || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 200) };
     }
     // Ingreso en la tesorería general vinculado a un diezmo registrado fuera del culto
     function ingresoDeDiezmo(user, d, diezmoId) {
@@ -758,7 +789,7 @@ var TesoCore = (function () {
       var now = env.now();
       var filas = items.map(function (it, i) {
         try {
-          return Object.assign(datosDiezmo({ miembroId: it.miembroId, fecha: p.fecha, monto: it.monto, medio: p.medio, notas: it.notas }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: '' });
+          return Object.assign(datosDiezmo({ miembroId: it.miembroId, conyugeId: it.conyugeId, fecha: p.fecha, monto: it.monto, medio: p.medio, notas: it.notas }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: '' });
         } catch (e) { throw TesoError('Fila ' + (i + 1) + ': ' + e.message); }
       });
       if (p.sumarACaja) {
@@ -771,6 +802,39 @@ var TesoCore = (function () {
       }
       insertMany('Diezmos', filas);
       return { creados: filas.length, enCaja: !!p.sumarACaja };
+    }
+    // Historial (p. ej. el cuaderno de la tesorera anterior). No suma a la caja:
+    // esos meses ya están en la tesorería general. No duplica por refId.
+    function importarDiezmos(user, p) {
+      var items = p.items || [];
+      if (!items.length) throw TesoError('No hay diezmos para importar');
+      if (items.length > 3000) throw TesoError('Demasiadas filas');
+      var existentes = {};
+      all('Diezmos').forEach(function (x) { if (x.refId) existentes[x.refId] = 1; });
+      var now = env.now(), nuevos = [], omitidos = 0;
+      items.forEach(function (it, i) {
+        var ref = String(it.refId || '');
+        if (!ref) throw TesoError('Fila ' + (i + 1) + ': falta el identificador de origen');
+        if (existentes[ref]) { omitidos++; return; }
+        var d;
+        try { d = datosDiezmo(it); } catch (e) { throw TesoError('Fila ' + (i + 1) + ': ' + e.message); }
+        existentes[ref] = 1;
+        nuevos.push(Object.assign(d, { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: '', refId: ref }));
+      });
+      if (nuevos.length) insertMany('Diezmos', nuevos);
+      var vinculados = 0;
+      if (p.vincularMatrimonios) {
+        nuevos.forEach(function (x) {
+          if (!x.conyugeId) return;
+          var a = find('Miembros', x.miembroId), b = find('Miembros', x.conyugeId);
+          if (!a || !b) return;
+          if (a.conyugeId === b.id && b.conyugeId === a.id) return;
+          if (a.conyugeId || b.conyugeId) return; // ya tienen otro cónyuge: no se cambia
+          vincularConyuge(a.id, b.id);
+          vinculados++;
+        });
+      }
+      return { importados: nuevos.length, omitidos: omitidos, matrimonios: vinculados };
     }
     function deleteDiezmo(user, p) {
       var x = find('Diezmos', p.id);
@@ -883,6 +947,7 @@ var TesoCore = (function () {
       importarMiembros: { fn: importarMiembros, role: MIEMBROS, write: true },
       saveDiezmo: { fn: saveDiezmo, role: T, write: true },
       saveDiezmosLote: { fn: saveDiezmosLote, role: T, write: true },
+      importarDiezmos: { fn: importarDiezmos, role: T, write: true },
       deleteDiezmo: { fn: deleteDiezmo, role: T, write: true },
       saveMinisterio: { fn: saveMinisterio, role: T, write: true },
       saveUsuario: { fn: saveUsuario, role: T, write: true },

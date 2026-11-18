@@ -2,6 +2,29 @@
 import { icon, esc, money, moneyShort, modal, formData, toast, confirmar, emptyState, fecha, chart, COLOR, pesos, formatoPesos, cap, mesLargo } from '../ui.js';
 import { call } from '../api.js';
 import { editarMiembro } from './miembros.js';
+import { importarHistorialDiezmos } from './diezmosImportar.js';
+
+// Un diezmo cuenta para un hermano si lo dio él o su matrimonio
+export const esDeMiembro = (d, mid) => d.miembroId === mid || d.conyugeId === mid;
+// Lista para registrar: los matrimonios activos aparecen en una sola fila
+export function filasDiezmantes(miembros) {
+  const activos = miembros.filter((m) => m.estado === 'activo').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const porId = Object.fromEntries(miembros.map((m) => [m.id, m]));
+  const usados = new Set();
+  const filas = [];
+  activos.forEach((m) => {
+    if (usados.has(m.id)) return;
+    const c = m.conyugeId && porId[m.conyugeId];
+    if (c && c.conyugeId === m.id && c.estado === 'activo') {
+      usados.add(m.id); usados.add(c.id);
+      filas.push({ id: m.id, conyugeId: c.id, nombre: `${m.nombre} y ${c.nombre}`, matrimonio: true });
+    } else {
+      usados.add(m.id);
+      filas.push({ id: m.id, conyugeId: '', nombre: m.nombre, matrimonio: false });
+    }
+  });
+  return filas.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+}
 
 const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const pad = (n) => String(n).padStart(2, '0');
@@ -21,10 +44,16 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
   const porMiembro = {};
   const miembros = data.miembros.filter((m) => incluirInactivos || m.estado === 'activo');
   const ultimoDe = {};
-  data.diezmos.forEach((d) => { if (!ultimoDe[d.miembroId] || d.fecha > ultimoDe[d.miembroId]) ultimoDe[d.miembroId] = d.fecha; });
+  data.diezmos.forEach((d) => [d.miembroId, d.conyugeId].filter(Boolean).forEach((id) => { if (!ultimoDe[id] || d.fecha > ultimoDe[id]) ultimoDe[id] = d.fecha; }));
   miembros.forEach((m) => {
     const meses = Array(12).fill(0);
-    data.diezmos.forEach((d) => { if (d.miembroId === m.id && d.fecha.startsWith(String(anio))) meses[+d.fecha.slice(5, 7) - 1] += d.monto; });
+    const pareja = Array(12).fill(false);
+    data.diezmos.forEach((d) => {
+      if (!esDeMiembro(d, m.id) || !d.fecha.startsWith(String(anio))) return;
+      const i = +d.fecha.slice(5, 7) - 1;
+      meses[i] += d.monto;
+      if (d.conyugeId) pareja[i] = true;
+    });
     // El mes en curso solo cuenta si ya tiene diezmo: mientras no termina, no es una falta
     const evaluados = anio === hoyY && !meses[hoyM - 1] ? hoyM - 1 : mesesPeriodo;
     const conDiezmo = meses.slice(0, evaluados).filter((v) => v > 0).length;
@@ -34,7 +63,7 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
     // meses seguidos sin diezmar hasta el último mes evaluado (dentro del año)
     let racha = 0;
     for (let i = evaluados - 1; i >= 0 && !meses[i]; i--) racha++;
-    porMiembro[m.id] = { m, meses, conDiezmo, total, cat, racha, ultimo: ultimoDe[m.id] || '' };
+    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat, racha, ultimo: ultimoDe[m.id] || '' };
   });
   return { mesesPeriodo, porMiembro };
 }
@@ -56,12 +85,14 @@ export function render(root, ctx) {
   const q = vista.q.toLowerCase();
   const lista = todos.filter((x) => (vista.inactivos || x.m.estado === 'activo') && (vista.filtro === 'todos' || (x.m.estado === 'activo' && x.cat === vista.filtro)) && (!q || x.m.nombre.toLowerCase().includes(q)));
   const maxCelda = Math.max(1, ...todos.flatMap((x) => x.meses));
+  const nombreDe = Object.fromEntries(data.miembros.map((m) => [m.id, m.nombre]));
 
   root.innerHTML = `
   <section class="page-head">
     <div><span class="eyebrow">Mayordomía</span><h1>Diezmos</h1></div>
     <div class="head-actions">
       <div class="month-picker"><button class="icon-btn" data-y="-1" aria-label="Año anterior">${icon('chevL')}</button><span class="mp-label">Año ${anio}</span><button class="icon-btn" data-y="1" aria-label="Año siguiente">${icon('chevR')}</button></div>
+      <button class="btn btn-ghost" data-historial ${data.miembros.length ? '' : 'disabled'}>${icon('sheet', 16)} Importar historial</button>
       <button class="btn btn-primary" data-lote ${data.miembros.length ? '' : 'disabled'}>${icon('plus', 16)} Registrar diezmos</button>
     </div>
   </section>
@@ -89,7 +120,7 @@ export function render(root, ctx) {
   </section>
 
   <article class="card">
-    <header class="card-head wrap"><div><h3>Diezmos por hermano · ${anio}</h3><p class="muted">Toca una celda para registrar o editar el diezmo de ese mes</p></div></header>
+    <header class="card-head wrap"><div><h3>Diezmos por hermano · ${anio}</h3><p class="muted">Toca una celda para registrar o editar el diezmo de ese mes. 💍 = diezmo del matrimonio (cuenta para ambos y se suma una sola vez en el total)</p></div></header>
     <div class="filters">
       <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" value="${esc(vista.q)}" data-q></div>
       <div class="seg seg-sm">
@@ -101,8 +132,8 @@ export function render(root, ctx) {
       <thead><tr><th class="dg-nombre">Hermano</th>${MESES_C.map((m, i) => `<th class="num ${i >= mesesPeriodo ? 'futuro' : ''}">${m}</th>`).join('')}<th class="num">Total</th><th>Estado</th></tr></thead>
       <tbody>${lista.map((x) => `
         <tr class="${x.m.estado === 'inactivo' ? 'inactive' : ''}">
-          <td class="dg-nombre"><button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>${x.m.estado === 'activo' && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
-          ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${v ? 'con' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
+          <td class="dg-nombre"><button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>${x.m.conyugeId && nombreDe[x.m.conyugeId] ? `<small class="dg-pareja">💍 ${esc(nombreDe[x.m.conyugeId])}</small>` : ''}${x.m.estado === 'activo' && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
+          ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
           <td class="num strong">${x.total ? money(x.total) : '—'}</td>
           <td>${x.m.estado !== 'activo' ? '<span class="badge st-open">Inactivo</span>' : x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : '<span class="muted">—</span>'}</td>
         </tr>`).join('')}</tbody>
@@ -113,6 +144,7 @@ export function render(root, ctx) {
   // eventos
   root.querySelectorAll('[data-y]').forEach((b) => b.addEventListener('click', () => { vista.anio += Number(b.dataset.y); render(root, ctx); }));
   root.querySelector('[data-lote]')?.addEventListener('click', () => registrarLote(ctx));
+  root.querySelector('[data-historial]')?.addEventListener('click', () => importarHistorialDiezmos(ctx));
   root.querySelectorAll('[name=fcat]').forEach((r) => r.addEventListener('change', () => { vista.filtro = r.value; render(root, ctx); }));
   root.querySelector('[data-inactivos]')?.addEventListener('change', (e) => { vista.inactivos = e.target.checked; render(root, ctx); });
   const qi = root.querySelector('[data-q]');
@@ -156,13 +188,15 @@ function etiquetaCaja(data, d) {
 
 function diezmoDelMes(ctx, m, mes) {
   const data = ctx.data;
-  const regs = data.diezmos.filter((d) => d.miembroId === m.id && d.mes === mes).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const regs = data.diezmos.filter((d) => esDeMiembro(d, m.id) && d.mes === mes).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const nombreDe = Object.fromEntries(data.miembros.map((x) => [x.id, x.nombre]));
+  const conyuge = m.conyugeId && data.miembros.find((x) => x.id === m.conyugeId);
   const ultimo = new Date(+mes.slice(0, 4), +mes.slice(5, 7), 0).getDate();
   const fechaDef = mes === data.hoy.slice(0, 7) ? data.hoy : `${mes}-${pad(ultimo)}`;
   return modal({
     title: `${esc(m.nombre)} · ${cap(mesLargo(mes))}`,
     body: `
-      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b><button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
+      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.conyugeId ? `<br><small class="muted">💍 Matrimonio: ${esc(nombreDe[d.miembroId] || '')} y ${esc(nombreDe[d.conyugeId] || '')}</small>` : ''}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b><button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
         <p class="muted small">Total del mes: <b>${money(regs.reduce((a, d) => a + d.monto, 0))}</b>. Puedes agregar otro diezmo abajo.</p>` : '<p class="muted">Sin diezmos registrados este mes.</p>'}
       <div class="form-row">
         <label class="field"><span>Monto ($)</span><input name="monto" inputmode="numeric" class="input-money" placeholder="0" required></label>
@@ -172,6 +206,7 @@ function diezmoDelMes(ctx, m, mes) {
         <label class="field"><span>Medio</span><select name="medio">${opcionesMedio(data)}</select></label>
         <label class="field"><span>Nota (opcional)</span><input name="notas" maxlength="200"></label>
       </div>
+      ${conyuge ? `<label class="check pareja-check"><input type="checkbox" name="matrimonio" checked> <span>💍 <b>Diezmo del matrimonio</b> con ${esc(conyuge.nombre)}<br><small class="muted">Cuenta como diezmo de ambos hermanos.</small></span></label>` : ''}
       <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general)<br><small class="muted">Desmárcalo solo si este dinero ya está incluido en un culto registrado.</small></span></label>`,
     submitLabel: 'Registrar diezmo',
     onOpen(f, { close }) {
@@ -188,7 +223,8 @@ function diezmoDelMes(ctx, m, mes) {
       const d = formData(f);
       d.monto = pesos(d.monto);
       if (!d.monto) throw new Error('Ingresa el monto');
-      await call('saveDiezmo', { miembroId: m.id, ...d, sumarACaja: !!f.sumarACaja.checked });
+      delete d.matrimonio;
+      await call('saveDiezmo', { miembroId: m.id, conyugeId: conyuge && f.matrimonio?.checked ? conyuge.id : '', ...d, sumarACaja: !!f.sumarACaja.checked });
       toast(f.sumarACaja.checked ? 'Diezmo registrado y sumado a la caja' : 'Diezmo registrado');
       await ctx.refresh();
     }
@@ -198,7 +234,7 @@ function diezmoDelMes(ctx, m, mes) {
 // ---------------- Registro rápido de varios hermanos (por ejemplo, sobres del domingo) ----------------
 function registrarLote(ctx) {
   const data = ctx.data;
-  const activos = data.miembros.filter((m) => m.estado === 'activo').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const activos = filasDiezmantes(data.miembros);
   return modal({
     title: 'Registrar diezmos',
     wide: true,
@@ -209,7 +245,7 @@ function registrarLote(ctx) {
       </div>
       <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general)<br><small class="muted">Desmárcalo solo si este dinero ya está incluido en un culto registrado.</small></span></label>
       <div class="search lote-buscar">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
-      <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(m.nombre.toLowerCase())}"><span>${esc(m.nombre)}</span><input class="lote-monto" data-id="${m.id}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
+      <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(m.nombre.toLowerCase())}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><input class="lote-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
       <div class="culto-total"><span data-cant>0 hermanos</span> · Total: <strong data-total>$0</strong></div>`,
     submitLabel: 'Guardar diezmos',
     onOpen(f) {
@@ -227,7 +263,7 @@ function registrarLote(ctx) {
     },
     async onSubmit(f) {
       const d = formData(f);
-      const items = [...f.querySelectorAll('.lote-monto')].map((i) => ({ miembroId: i.dataset.id, monto: pesos(i.value) })).filter((x) => x.monto > 0);
+      const items = [...f.querySelectorAll('.lote-monto')].map((i) => ({ miembroId: i.dataset.id, conyugeId: i.dataset.conyuge || '', monto: pesos(i.value) })).filter((x) => x.monto > 0);
       if (!items.length) throw new Error('Escribe al menos un monto');
       const r = await call('saveDiezmosLote', { fecha: d.fecha, medio: d.medio, items, sumarACaja: !!f.sumarACaja.checked });
       toast(`${r.creados} diezmo${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}${r.enCaja ? (r.creados > 1 ? ' y sumados' : ' y sumado') + ' a la caja' : ''}`);

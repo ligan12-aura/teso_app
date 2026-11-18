@@ -20,7 +20,7 @@ var PROP_SECRET = 'TOKEN_SECRET';
 var PROP_SCHEMA = 'SCHEMA_VERSION';
 // Súbelo cada vez que cambien las columnas (TABLES) o la hoja Resumen:
 // el servidor se actualiza solo en la siguiente solicitud, sin ejecutar setup().
-var SCHEMA_VERSION = '5';
+var SCHEMA_VERSION = '6';
 
 // =================================================================
 // Instalación inicial — ejecutar UNA vez desde el editor

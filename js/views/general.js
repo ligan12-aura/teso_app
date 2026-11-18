@@ -3,6 +3,7 @@ import { call } from '../api.js';
 import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe, presupuestoGeneralMensual } from '../calc.js';
 import { PALETA } from '../ui.js';
 import { abrirFormMovimiento } from './movform.js';
+import { filasDiezmantes } from './diezmos.js';
 
 const filtros = { periodo: 'mes', tipo: '', categoria: '', grupo: '', q: '' };
 
@@ -11,7 +12,7 @@ export const nuevoMovGeneral = (ctx, tipo = 'ingreso', mov = null) =>
 
 export function registrarCulto(ctx) {
   const cats = ['Diezmos', 'Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo'];
-  const activos = (ctx.data.miembros || []).filter((m) => m.estado === 'activo').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const activos = filasDiezmantes(ctx.data.miembros || []);
   return modal({
     title: 'Registrar culto',
     wide: true,
@@ -29,7 +30,7 @@ export function registrarCulto(ctx) {
         <div class="det-panel" hidden>
           <p class="muted small">Escribe cuánto diezmó cada hermano. El total de <b>Diezmos</b> se calcula solo (hermanos + sin identificar) y cada diezmo queda registrado en el apartado Diezmos.</p>
           <div class="search lote-buscar">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
-          <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(m.nombre.toLowerCase())}"><span>${esc(m.nombre)}</span><input class="lote-monto det-monto" data-id="${m.id}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
+          <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(m.nombre.toLowerCase())}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><input class="lote-monto det-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
           <div class="det-sin"><span>Sin identificar <small class="muted">(sobres sin nombre)</small></span><input class="lote-monto" data-sin inputmode="numeric" placeholder="$0"></div>
           <div class="det-resumen" data-det-resumen></div>
         </div>
@@ -72,7 +73,7 @@ export function registrarCulto(ctx) {
         const t = e.target.value.toLowerCase();
         form.querySelectorAll('.lote-lista li').forEach((li) => { li.hidden = t && !li.dataset.nombre.includes(t); });
       });
-      form._detalle = () => (detalleActivo() ? dets.map((i) => ({ miembroId: i.dataset.id, monto: pesos(i.value) })).filter((x) => x.monto > 0) : null);
+      form._detalle = () => (detalleActivo() ? dets.map((i) => ({ miembroId: i.dataset.id, conyugeId: i.dataset.conyuge || '', monto: pesos(i.value) })).filter((x) => x.monto > 0) : null);
     },
     async onSubmit(form) {
       const d = formData(form);

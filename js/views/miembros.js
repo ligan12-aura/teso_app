@@ -26,6 +26,7 @@ export function render(root, ctx) {
   const activos = miembros.filter((m) => m.estado === 'activo');
   const completas = miembros.filter(fichaCompleta).length;
   const anio = Number(hoy.slice(0, 4));
+  const nombreDe = Object.fromEntries(data.miembros.map((x) => [x.id, x.nombre]));
   const verDiezmo = esAdmin(ctx.user);
   const cat = resumenDiezmos(data, anio, true).porMiembro;
   const mesHoy = +hoy.slice(5, 7);
@@ -76,7 +77,7 @@ export function render(root, ctx) {
         const e = edad(m.fechaNacimiento, hoy);
         const c = cat[m.id];
         return `<tr class="${m.estado === 'inactivo' ? 'inactive' : ''}">
-          <td><b>${esc(m.nombre)}</b>${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
+          <td><b>${esc(m.nombre)}</b>${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
           <td>${m.estado === 'activo' ? '<span class="badge st-ok">Activo</span>' : '<span class="badge st-open">Inactivo</span>'}</td>
           <td class="nowrap">${m.fechaNacimiento ? `${fecha(m.fechaNacimiento)}<br><small class="muted">${e} años</small>` : '<span class="falta">—</span>'}</td>
           <td class="nowrap">${m.celular ? `<a class="link" href="tel:${esc(m.celular.replace(/[^\d+]/g, ''))}">${esc(m.celular)}</a>` : '<span class="falta">—</span>'}</td>
@@ -114,6 +115,7 @@ export function editarMiembro(ctx, m = null) {
         <label class="field"><span>Correo</span><input type="email" name="email" placeholder="nombre@correo.cl" value="${esc(m?.email || '')}"></label>
       </div>
       <label class="field"><span>Domicilio</span><input name="domicilio" placeholder="Calle, número, comuna" value="${esc(m?.domicilio || '')}"></label>
+      <label class="field"><span>💍 Cónyuge (diezman como matrimonio)</span><select name="conyugeId"><option value="">— Sin cónyuge registrado —</option>${[...ctx.data.miembros].filter((x) => x.id !== m?.id).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((x) => `<option value="${x.id}" ${x.id === m?.conyugeId ? 'selected' : ''}>${esc(x.nombre)}${x.conyugeId && x.conyugeId !== m?.id ? ' (ya tiene cónyuge)' : ''}${x.estado === 'inactivo' ? ' · inactivo' : ''}</option>`).join('')}</select></label>
       <label class="field"><span>Notas</span><input name="notas" maxlength="300" value="${esc(m?.notas || '')}"></label>
       ${m ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar miembro</button>` : ''}`,
     submitLabel: m ? 'Guardar ficha' : 'Agregar',
