@@ -227,6 +227,7 @@ const TEMAS = {
       <ul class="hp-list">
         <li>Registra nombre, celular, correo y fecha de nacimiento de cada joven, sea o no miembro de la iglesia.</li>
         <li>Si un joven <b>se hace miembro</b> de la iglesia, no lo agregues de nuevo: cuando secretaría o tesorería lo registre en Miembros con el mismo nombre, queda enlazado solo y conserva su historial de actividades.</li>
+        <li>En los jóvenes que son miembros, sus datos vienen de la ficha de Miembros. Si a la ficha le falta el celular, el correo o la fecha de nacimiento, puedes completarlo desde su ficha en el listado y queda guardado en Miembros.</li>
         <li>Si ya no participa, desmarca <b>Activo</b> en vez de eliminarlo.</li>
       </ul>
       <h4>Actividades con cuota</h4>

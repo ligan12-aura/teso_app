@@ -465,7 +465,9 @@ var TesoCore = (function () {
         if (soloNombre) return Object.assign({}, i, { nombre: m.nombre, esMiembro: true });
         return Object.assign({}, i, {
           nombre: m.nombre, celular: m.celular || i.celular, email: m.email || i.email,
-          fechaNacimiento: m.fechaNacimiento || i.fechaNacimiento, esMiembro: true
+          fechaNacimiento: m.fechaNacimiento || i.fechaNacimiento, esMiembro: true,
+          // datos que faltan en su ficha de Miembros (el líder puede completarlos)
+          faltan: ['celular', 'email', 'fechaNacimiento'].filter(function (k) { return !m[k]; })
         });
       });
     }
@@ -530,7 +532,23 @@ var TesoCore = (function () {
         fechaNacimiento: fn, miembroId: miembroId, notas: String(p.notas || '').trim().slice(0, 300),
         activo: p.activo === undefined ? (actual ? actual.activo : true) : toBool(p.activo), actualizadoEn: now
       };
+      if (mb && p.completar && typeof p.completar === 'object') {
+        var cm = String(p.completar.email || '').trim(), cf = String(p.completar.fechaNacimiento || '').trim();
+        if (cm && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cm)) throw TesoError('El correo no parece válido');
+        if (cf && (!isDate(cf) || cf > env.today() || cf < '1900-01-01')) throw TesoError('Fecha de nacimiento inválida');
+      }
       var r = actual ? update('Integrantes', actual.id, d) : insert('Integrantes', Object.assign(d, { id: uid(), creadoEn: now }));
+      // Completar la ficha de Miembros: solo los datos que estén vacíos (los que ya tiene no se cambian)
+      if (mb && p.completar && typeof p.completar === 'object') {
+        var c = p.completar, patch = {};
+        var cCel = String(c.celular || '').trim().slice(0, 30);
+        var cMail = String(c.email || '').trim();
+        var cFn = String(c.fechaNacimiento || '').trim();
+        if (cCel && !mb.celular) patch.celular = cCel;
+        if (cMail && !mb.email) patch.email = cMail.slice(0, 120);
+        if (cFn && !mb.fechaNacimiento) patch.fechaNacimiento = cFn;
+        if (Object.keys(patch).length) { patch.actualizadoEn = now; update('Miembros', mb.id, patch); }
+      }
       return vistaIntegrantes([r])[0];
     }
     // Agrega de una vez al listado del ministerio a varios miembros de la iglesia (quedan enlazados a su ficha).

@@ -182,6 +182,14 @@ function editarIntegrante(ctx, m, it = null) {
         <small class="hint">Si es miembro, elígelo: sus datos se toman de su ficha en Miembros y no se registra dos veces.</small></label>`
         : `<input type="hidden" name="miembroId" value="${enlazado ? esc(it.miembroId) : ''}">${!it ? `<p class="muted small">Si se hace miembro de la iglesia, al registrarlo en Miembros con el mismo nombre queda enlazado solo.</p>` : ''}`}
       <div class="note" data-nota-miembro hidden>${icon('church', 16)}<span>${puedeEnlazar ? 'Nombre, contacto y fecha de nacimiento se toman de la ficha de Miembros (los actualiza secretaría o tesorería).' : 'Está enlazado a su ficha de Miembros: sus datos personales los administra secretaría o tesorería.'}</span></div>
+      ${enlazado && it.faltan?.length ? `<div data-completar>
+        <p class="muted small">${icon('alert', 13)} A su ficha de Miembros le falta${it.faltan.length > 1 ? 'n' : ''} ${it.faltan.map((k) => ({ celular: 'el celular', email: 'el correo', fechaNacimiento: 'la fecha de nacimiento' })[k]).join(', ').replace(/, ([^,]*)$/, ' y $1')}. Si lo sabes, complétalo aquí y quedará guardado en Miembros.</p>
+        <div class="form-row">
+          ${it.faltan.includes('celular') ? `<label class="field"><span>Celular</span><input name="cCelular" inputmode="tel" placeholder="+56 9 1234 5678" value="${esc(it.celular || '')}"></label>` : ''}
+          ${it.faltan.includes('fechaNacimiento') ? `<label class="field"><span>Fecha de nacimiento</span><input type="date" name="cFechaNacimiento" max="${data.hoy}" value="${esc(it.fechaNacimiento || '')}"></label>` : ''}
+        </div>
+        ${it.faltan.includes('email') ? `<label class="field"><span>Correo</span><input type="email" name="cEmail" placeholder="nombre@correo.cl" value="${esc(it.email || '')}"></label>` : ''}
+      </div>` : ''}
       <div data-propios>
         <label class="field"><span>Nombre y apellidos</span><input name="nombre" maxlength="80" value="${esc(it && !it.esMiembro ? it.nombre : '')}"></label>
         ${it && !it.esMiembro && it.miembroId ? '<p class="muted small">Su ficha de Miembros ya no existe: quedó como no miembro.</p>' : ''}
@@ -200,6 +208,9 @@ function editarIntegrante(ctx, m, it = null) {
         const es = !!f.miembroId.value;
         f.querySelector('[data-propios]').hidden = es;
         f.querySelector('[data-nota-miembro]').hidden = !es;
+        // completar datos de la ficha solo mientras siga enlazado al mismo miembro
+        const comp = f.querySelector('[data-completar]');
+        if (comp) comp.hidden = f.miembroId.value !== it.miembroId;
       };
       if (puedeEnlazar) f.miembroId.addEventListener('change', sync);
       sync();
@@ -212,6 +223,8 @@ function editarIntegrante(ctx, m, it = null) {
     async onSubmit(f) {
       const d = formData(f);
       if (!d.miembroId && !d.nombre) throw new Error('Escribe el nombre');
+      if (f.querySelector('[data-completar]') && d.miembroId === it?.miembroId) d.completar = { celular: d.cCelular || '', email: d.cEmail || '', fechaNacimiento: d.cFechaNacimiento || '' };
+      delete d.cCelular; delete d.cEmail; delete d.cFechaNacimiento;
       d.ministerioId = m.id;
       if (it) { d.id = it.id; d.activo = f.activo.checked; }
       await call('saveIntegrante', d);
