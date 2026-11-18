@@ -109,7 +109,7 @@ const TEMAS = {
     },
     {
       id: 'diezmos', titulo: 'Diezmos', ico: 'heart', html: `
-      <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ve el tesorero.</p>
+      <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ven el tesorero y el pastor.</p>
       <h4>Registrar</h4>
       ${pasos(`<b>En el culto:</b> en Tesorería → ${btn('church', 'Registrar culto')} presiona <b>Detallar diezmos por hermano</b> y escribe cuánto dio cada uno (y lo que venga sin nombre). Se guarda el ingreso del culto en la caja y, a la vez, el diezmo de cada hermano.`, `<b>Fuera del culto</b> (transferencia, depósito): toca la celda del hermano en el mes, o usa ${btn('plus', 'Registrar diezmos')} para varios a la vez. Con <b>Sumar a la caja</b> marcado se crea también el ingreso en la tesorería general, con la misma fecha. Puedes adjuntar la <b>foto o captura del comprobante</b> de la transferencia como respaldo; se ve con el botón “Comprobante”.`, 'Si corriges o eliminas un diezmo sumado a la caja, su ingreso en la tesorería se actualiza o se elimina solo. Eliminar el diezmo de un hermano registrado en un culto no cambia el total del culto (ese dinero ya se recibió): solo pasa a “sin identificar”.')}
       <h4>Categorías (solo hermanos activos y habilitados para diezmar)</h4>
@@ -124,7 +124,7 @@ const TEMAS = {
     },
     {
       id: 'miembros', titulo: 'Miembros', ico: 'users', html: `
-      <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Solo lo ve el tesorero.</p>
+      <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Lo ven el tesorero, el pastor y la secretaría.</p>
       <ul class="hp-list">
         <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b>. En el resumen de diezmos cuenta como activo hasta el mes anterior a la baja, y desde ahí deja de contar; su historial se conserva. Un miembro con diezmos no se puede eliminar: se marca inactivo.</li>
         <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
@@ -142,7 +142,7 @@ const TEMAS = {
       ${pasos(`Presiona ${btn('plus', 'Nuevo usuario')}.`, 'Escribe el nombre, un usuario corto (ej: <code>alabanza</code>), el rol <b>Líder</b> y su ministerio.', 'Inventa una <b>contraseña temporal</b> y envíasela junto con el enlace de la página.', 'Al entrar por primera vez, el líder deberá crear su propia contraseña.')}
       ${tip('Si un líder olvida su contraseña, edita su usuario y escribe una nueva contraseña temporal.')}
       <h4>Presupuesto</h4>
-      <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. En la misma pantalla se fijan, por separado, el <b>ítem mensual</b> de cada ministerio (lo que se le transfiere; la transferencia no puede superarlo) y su <b>presupuesto mensual</b> (lo máximo que puede gastar en el mes). Solo el tesorero puede cambiar estos montos.</p>
+      <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. En la misma pantalla se fijan, por separado, el <b>ítem mensual</b> de cada ministerio (lo que se le transfiere; la transferencia no puede superarlo) y su <b>presupuesto mensual</b> (lo máximo que puede gastar en el mes). Solo el tesorero y el pastor pueden cambiar estos montos.</p>
       <h4>Importar historial</h4>
       <p>Carga el historial desde una <b>planilla tipo</b> (la misma que descarga la página, de la tesorería general o de un ministerio) o desde el libro antiguo de entradas y salidas. La app muestra un resumen antes de importar y no duplica lo que ya existe.</p>
       <h4>General</h4>
@@ -223,7 +223,20 @@ TEMAS.secretaria = [
     </ul>
     ${tip('Puedes abrir esta guía cuando quieras con el botón <b>Ayuda</b>.')}`
   },
-  TEMAS.tesorero.find((t) => t.id === 'miembros'),
+  {
+    // Versión para la secretaría: sin referencias a diezmos (información que no ve)
+    id: 'miembros', titulo: 'Miembros', ico: 'users', html: `
+    <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Lo ven el tesorero, el pastor y la secretaría.</p>
+    <ul class="hp-list">
+      <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b> (desde cuándo no asiste) y su ficha se conserva. Si vuelve, márcalo activo otra vez.</li>
+      <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
+      <li><b>💍 Matrimonio:</b> al elegir el cónyuge, ambos quedan unidos en sus fichas.</li>
+      <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>
+      <li><b>Cumpleaños del mes:</b> aparecen arriba los hermanos activos que cumplen años este mes.</li>
+      <li><b>Importar listado:</b> carga un Excel con los nombres en la primera columna; quienes digan “alejado/a” quedan inactivos.</li>
+      <li><b>Eliminar</b> a alguien del registro lo hace el tesorero o el pastor. Si solo dejó de asistir, márcalo inactivo.</li>
+    </ul>`
+  },
   TEMAS.lider.find((t) => t.id === 'perfil')
 ];
 

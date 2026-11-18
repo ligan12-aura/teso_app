@@ -80,7 +80,14 @@ var TesoCore = (function () {
   }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function toBool(v) { return v === true || v === 1 || v === '1' || String(v).toLowerCase() === 'true'; }
-  function isDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s)); }
+  // Formato AAAA-MM-DD y además una fecha que exista (rechaza 2026-02-30, 2026-11-00, etc.)
+  function isDate(s) {
+    var t = String(s);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return false;
+    var y = +t.slice(0, 4), m = +t.slice(5, 7), d = +t.slice(8, 10);
+    var dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+  }
   function isMonth(s) { return /^\d{4}-\d{2}$/.test(String(s)); }
   function prevMonth(m) {
     var y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1;
@@ -306,7 +313,7 @@ var TesoCore = (function () {
       if (!b.limite) return;
       if (b.gastado + monto > b.limite) {
         throw TesoError('Este gasto supera el presupuesto de ' + m.nombre + ' para ' + labelMes(mes) + '. ' +
-          'Presupuesto: ' + pesos(b.limite) + ' · ya gastado: ' + pesos(b.gastado) + ' · disponible: ' + pesos(Math.max(0, b.disponible)) +
+          'Presupuesto: ' + pesos(b.limite) + ' · ' + (excluirId ? 'otros gastos del mes' : 'ya gastado') + ': ' + pesos(b.gastado) + ' · disponible: ' + pesos(Math.max(0, b.disponible)) +
           '. Si es necesario, el tesorero puede ajustar el presupuesto del ministerio.', 'PRESUPUESTO');
       }
     }
@@ -325,7 +332,7 @@ var TesoCore = (function () {
       if (!b.limite) return;
       if (b.gastado + monto > b.limite) {
         throw TesoError('Este gasto supera el presupuesto mensual de la tesorería general para ' + labelMes(mes) + '. ' +
-          'Presupuesto: ' + pesos(b.limite) + ' · ya gastado: ' + pesos(b.gastado) + ' · disponible: ' + pesos(Math.max(0, b.disponible)) +
+          'Presupuesto: ' + pesos(b.limite) + ' · ' + (excluirId ? 'otros gastos del mes' : 'ya gastado') + ': ' + pesos(b.gastado) + ' · disponible: ' + pesos(Math.max(0, b.disponible)) +
           '. Si el gasto es necesario, el tesorero debe ajustar el presupuesto en Configuración → Presupuesto.', 'PRESUPUESTO');
       }
     }
@@ -524,14 +531,22 @@ var TesoCore = (function () {
         if (suma > Math.round(Number(it.monto))) throw TesoError('El detalle por hermano suma más que el total de ' + it.categoria);
       });
       var now = env.now(), identificados = 0;
-      var creados = items.map(function (it) {
-        var mov = addMovGeneral(user, { fecha: p.fecha, tipo: 'ingreso', categoria: it.categoria, monto: it.monto, medio: it.medio || p.medio, descripcion: it.descripcion || p.descripcion });
-        var det = (it.detalle || []).filter(function (x) { return Number(x.monto) > 0; });
-        if (det.length) {
-          insertMany('Diezmos', det.map(function (x) {
-            return Object.assign(datosDiezmo({ miembroId: x.miembroId, conyugeId: x.conyugeId, fecha: p.fecha, monto: x.monto, medio: it.medio || p.medio, notas: 'Culto · ' + (p.descripcion || '') }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: mov.id });
+      // Todo se valida antes de guardar: si algo falla, no queda un culto a medias
+      var preparados = items.map(function (it) {
+        var mp = { fecha: p.fecha, tipo: 'ingreso', categoria: it.categoria, monto: it.monto, medio: it.medio || p.medio, descripcion: it.descripcion || p.descripcion };
+        datosGeneral(mp);
+        var det = (it.detalle || []).filter(function (x) { return Number(x.monto) > 0; }).map(function (x) {
+          return datosDiezmo({ miembroId: x.miembroId, conyugeId: x.conyugeId, fecha: p.fecha, monto: x.monto, medio: it.medio || p.medio, notas: 'Culto · ' + (p.descripcion || '') });
+        });
+        return { mp: mp, det: det };
+      });
+      var creados = preparados.map(function (x) {
+        var mov = addMovGeneral(user, x.mp);
+        if (x.det.length) {
+          insertMany('Diezmos', x.det.map(function (d) {
+            return Object.assign(d, { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: mov.id });
           }));
-          identificados += det.length;
+          identificados += x.det.length;
         }
         return mov;
       });
@@ -544,9 +559,27 @@ var TesoCore = (function () {
       if (mov.origen === 'diezmo') throw TesoError('Este ingreso corresponde a un diezmo registrado por hermano; corrígelo o elimínalo en el apartado Diezmos.');
       return mov;
     }
+    function diezmosDeMov(movId) {
+      return all('Diezmos').filter(function (x) { return x.movGeneralId === movId; });
+    }
     function updateMovGeneral(user, p) {
       var mov = movGeneralManual(p.id);
       var d = datosGeneral(p, mov.origen === 'importado');
+      // Un culto con diezmos por hermano: sigue siendo un ingreso de la misma categoría
+      // y no puede quedar por debajo de lo identificado; si cambia la fecha, los diezmos la siguen
+      var vinculados = diezmosDeMov(mov.id);
+      if (vinculados.length) {
+        var identificado = vinculados.reduce(function (a, x) { return a + (Number(x.monto) || 0); }, 0);
+        if (d.tipo !== 'ingreso' || d.categoria !== mov.categoria) {
+          throw TesoError('Este ingreso tiene diezmos registrados por hermano: debe seguir siendo un ingreso de "' + mov.categoria + '". Para cambiarlo, primero elimina esos diezmos en el apartado Diezmos.');
+        }
+        if (d.monto < identificado) {
+          throw TesoError('El monto no puede ser menor que lo identificado por hermano (' + pesos(identificado) + '). Corrige primero los diezmos en el apartado Diezmos.');
+        }
+        if (d.fecha !== mov.fecha) {
+          vinculados.forEach(function (x) { update('Diezmos', x.id, { fecha: d.fecha, mes: d.mes, actualizadoEn: env.now() }); });
+        }
+      }
       if (mov.origen !== 'importado' && aumentaGasto(mov, d, d.mes)) exigirPresupuestoGeneral(d.mes, d.monto, mov.id);
       var archivoId = mov.archivoId;
       if (p.archivo && p.archivo.base64) {
@@ -783,6 +816,13 @@ var TesoCore = (function () {
       if (p.id) {
         var actual = find('Diezmos', p.id);
         if (!actual) throw TesoError('Registro no encontrado');
+        // Diezmo que es parte de un culto: queda en la fecha del culto y lo identificado no puede superar su total
+        var culto = actual.movGeneralId ? find('MovimientosGenerales', actual.movGeneralId) : null;
+        if (culto && culto.origen !== 'diezmo') {
+          if (d.fecha !== culto.fecha) throw TesoError('Este diezmo es parte del culto del ' + culto.fecha.split('-').reverse().join('-') + ': su fecha no se puede cambiar.');
+          var otros = all('Diezmos').reduce(function (a, x) { return a + (x.movGeneralId === culto.id && x.id !== actual.id ? (Number(x.monto) || 0) : 0); }, 0);
+          if (otros + d.monto > culto.monto) throw TesoError('Lo identificado por hermano superaría el total del culto (' + pesos(culto.monto) + '). Corrige primero el ingreso del culto en Tesorería.');
+        }
         if (archivoNuevo) { borrarArchivo(actual.archivoId); d.archivoId = archivoNuevo; }
         else if (p.quitarArchivo) { borrarArchivo(actual.archivoId); d.archivoId = ''; }
         var g = movDeDiezmo(actual);
@@ -954,7 +994,7 @@ var TesoCore = (function () {
       importarMovimientos: { fn: importarMovimientos, role: T, write: true },
       importarMovimientosMinisterio: { fn: importarMovimientosMinisterio, role: T, write: true },
       saveMiembro: { fn: saveMiembro, role: MIEMBROS, write: true },
-      deleteMiembro: { fn: deleteMiembro, role: MIEMBROS, write: true },
+      deleteMiembro: { fn: deleteMiembro, role: ADMIN, write: true },
       importarMiembros: { fn: importarMiembros, role: MIEMBROS, write: true },
       saveDiezmo: { fn: saveDiezmo, role: T, write: true },
       saveDiezmosLote: { fn: saveDiezmosLote, role: T, write: true },

@@ -140,7 +140,7 @@ En cada pantalla revisa: **errores de consola**, **peticiones fallidas**, textos
 
 **Casos límite en formularios:** campos vacíos, monto 0, negativo, decimal, texto en campos numéricos, montos enormes, fechas futuras y anteriores a 2000, textos muy largos, caracteres especiales y HTML (`<b>x</b>`, `<img src=x onerror=alert(1)>`) para detectar XSS. Pruébalos también enviando directo al backend demo, no solo por el formulario.
 
-**Responsive:** repite un recorrido corto a 375×812 (celular), en modo claro y oscuro: menú inferior (7 ítems para tesorero y pastor, 2 para secretaría, con etiquetas cortas), tablas o grillas que se desbordan (sobre todo la de diezmos y la estadística), botones tapados y scroll horizontal.
+**Responsive:** repite un recorrido corto a 375×812 (celular), en modo claro y oscuro: menú inferior (tesorero y pastor: 5 pestañas, Inicio, Tesorería, Rendiciones, Diezmos y "Más", que abre el resto; secretaría: 2), que "Más" abra y cierre bien y lleve a cada pantalla, tablas o grillas que se desbordan (sobre todo la de diezmos y la estadística), botones tapados y scroll horizontal.
 
 ## 3. Revisión de código
 Busca:

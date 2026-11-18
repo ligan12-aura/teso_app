@@ -121,7 +121,8 @@ export function render(root, ctx) {
   const ant = mi ? `${anio}-${pad(mi)}` : `${anio - 1}-12`;
   const totalAnt = data.diezmos.filter((d) => d.fecha.slice(0, 7) === ant).reduce((a, d) => a + d.monto, 0);
   const totalMes = totales[mi];
-  const variacion = totalAnt ? Math.round(((totalMes - totalAnt) / totalAnt) * 100) : null;
+  // Un mes futuro no tiene variación (aún no hay diezmos que comparar)
+  const variacion = totalAnt && !futuro ? Math.round(((totalMes - totalAnt) / totalAnt) * 100) : null;
   const regsMes = data.diezmos.filter((d) => d.fecha.slice(0, 7) === mes)
     .map((d) => ({ d, nombre: d.conyugeId && nombreDe[d.conyugeId] ? `${nombreDe[d.miembroId] || '—'} y ${nombreDe[d.conyugeId]}` : (nombreDe[d.miembroId] || '—') }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es') || a.d.fecha.localeCompare(b.d.fecha));
@@ -166,7 +167,7 @@ export function render(root, ctx) {
   ${futuro ? `<div class="note">${icon('sparkle', 16)}<span>${nomMes} aún no llega: las cifras del mes aparecerán cuando se registren diezmos.</span></div>` : ''}
 
   <section class="kpis kpis-4">
-    <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (totalAnt ? '' : 'sin diezmos el mes anterior') : `<b class="${variacion >= 0 ? 'ingreso' : 'gasto'}">${variacion >= 0 ? '▲' : '▼'} ${Math.abs(variacion)}%</b> vs. ${mesLargo(ant)} (${money(totalAnt)})`}</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (futuro ? 'mes aún no transcurrido' : totalAnt ? '' : 'sin diezmos el mes anterior') : `<b class="${variacion >= 0 ? 'ingreso' : 'gasto'}">${variacion >= 0 ? '▲' : '▼'} ${Math.abs(variacion)}%</b> vs. ${mesLargo(ant)} (${money(totalAnt)})`}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Diezmaron</span><strong class="kpi-value">${diezmaron.length} <small class="kpi-pct">${pctMes}%</small></strong><span class="kpi-sub">de ${elMes.length} hermanos habilitados para diezmar${noHabConDiezmo ? ` · además ${noHabConDiezmo} no habilitado${noHabConDiezmo > 1 ? 's' : ''}` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.sin.color}"></i> No diezmaron</span><strong class="kpi-value">${futuro ? '—' : noDiezmaron.length}</strong><span class="kpi-sub">${futuro ? 'mes por venir' : 'habilitados sin diezmo registrado'}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('receipt', 15)} Promedio por diezmo</span><strong class="kpi-value">${money(promedio)}</strong><span class="kpi-sub">${regsMes.length} diezmo${regsMes.length === 1 ? '' : 's'} registrado${regsMes.length === 1 ? '' : 's'} (matrimonio = 1)</span></article>
@@ -299,8 +300,9 @@ function diezmoDelMes(ctx, m, mes) {
   return modal({
     title: `${esc(m.nombre)} · ${cap(mesLargo(mes))}`,
     body: `
-      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.conyugeId ? `<br><small class="muted">💍 Matrimonio: ${esc(nombreDe[d.miembroId] || '')} y ${esc(nombreDe[d.conyugeId] || '')}</small>` : ''}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b>${d.archivoId ? `<button type="button" class="chip-btn" data-ver="${d.id}">${icon('receipt', 14)} Comprobante</button>` : ''}<button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
-        <p class="muted small">Total del mes: <b>${money(regs.reduce((a, d) => a + d.monto, 0))}</b>. Puedes agregar otro diezmo abajo.</p>` : '<p class="muted">Sin diezmos registrados este mes.</p>'}
+      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.conyugeId ? `<br><small class="muted">💍 Matrimonio: ${esc(nombreDe[d.miembroId] || '')} y ${esc(nombreDe[d.conyugeId] || '')}</small>` : ''}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b>${d.archivoId ? `<button type="button" class="chip-btn" data-ver="${d.id}">${icon('receipt', 14)} Comprobante</button>` : ''}<button type="button" class="icon-btn sm" data-editar="${d.id}" title="Corregir" aria-label="Corregir">${icon('edit', 15)}</button><button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
+        <p class="muted small">Total del mes: <b>${money(regs.reduce((a, d) => a + d.monto, 0))}</b>. Puedes agregar otro diezmo abajo o corregir uno con ${icon('edit', 12)}.</p>` : '<p class="muted">Sin diezmos registrados este mes.</p>'}
+      <div class="note" data-editando hidden>${icon('edit', 16)}<span>Corrigiendo el diezmo del <b data-ed-fecha></b>. <button type="button" class="link-btn" data-cancelar-ed>Cancelar corrección</button></span></div>
       <div class="form-row">
         <label class="field"><span>Monto ($)</span><input name="monto" inputmode="numeric" class="input-money" placeholder="0" required></label>
         <label class="field"><span>Fecha</span><input type="date" name="fecha" value="${fechaDef}" min="${mes}-01" max="${mes === data.hoy.slice(0, 7) ? data.hoy : `${mes}-${pad(ultimo)}`}" required></label>
@@ -341,6 +343,36 @@ function diezmoDelMes(ctx, m, mes) {
         const reg = regs.find((x) => x.id === b.dataset.ver);
         if (reg) verArchivo(reg.archivoId, `Comprobante · ${m.nombre} · ${money(reg.monto)}`);
       }));
+      // Corregir un diezmo ya registrado: se cargan sus datos en el formulario
+      const btnGuardar = f.querySelector('button[type="submit"]');
+      const cajaCheck = f.querySelector('.caja-check');
+      const salirEdicion = () => {
+        delete f.dataset.editId;
+        f.querySelector('[data-editando]').hidden = true;
+        cajaCheck.hidden = false;
+        f.fecha.readOnly = false;
+        f.monto.value = ''; f.notas.value = ''; f.fecha.value = fechaDef;
+        btnGuardar.textContent = 'Registrar diezmo';
+      };
+      f.querySelector('[data-cancelar-ed]').addEventListener('click', salirEdicion);
+      f.querySelectorAll('[data-editar]').forEach((b) => b.addEventListener('click', () => {
+        const reg = regs.find((x) => x.id === b.dataset.editar);
+        if (!reg) return;
+        f.dataset.editId = reg.id;
+        f.monto.value = Number(reg.monto).toLocaleString('es-CL');
+        f.fecha.value = reg.fecha;
+        if ([...f.medio.options].some((o) => o.value === reg.medio)) f.medio.value = reg.medio;
+        f.notas.value = reg.notas || '';
+        if (f.matrimonio) f.matrimonio.checked = !!reg.conyugeId;
+        // el diezmo de un culto queda en la fecha del culto; "Sumar a la caja" no aplica al corregir
+        const deCulto = reg.movGeneralId && data.movGenerales.some((x) => x.id === reg.movGeneralId && x.origen !== 'diezmo');
+        f.fecha.readOnly = !!deCulto;
+        cajaCheck.hidden = true;
+        f.querySelector('[data-ed-fecha]').textContent = fecha(reg.fecha);
+        f.querySelector('[data-editando]').hidden = false;
+        btnGuardar.textContent = 'Guardar corrección';
+        f.monto.focus();
+      }));
       f.querySelectorAll('[data-borrar]').forEach((b) => b.addEventListener('click', async () => {
         close(null);
         const reg = regs.find((x) => x.id === b.dataset.borrar);
@@ -356,6 +388,16 @@ function diezmoDelMes(ctx, m, mes) {
       delete d.matrimonio;
       const comp = f.archivo._payload;
       if (comp) d.archivo = { nombre: comp.nombre, mime: comp.mime, base64: comp.base64 };
+      const editId = f.dataset.editId;
+      if (editId) {
+        const reg = regs.find((x) => x.id === editId);
+        const conyugeId = conyuge ? (f.matrimonio?.checked ? conyuge.id : '') : (reg?.conyugeId || '');
+        delete d.sumarACaja;
+        await call('saveDiezmo', { id: editId, miembroId: reg?.miembroId || m.id, conyugeId, ...d });
+        toast('Diezmo corregido');
+        await ctx.refresh();
+        return;
+      }
       await call('saveDiezmo', { miembroId: m.id, conyugeId: conyuge && f.matrimonio?.checked ? conyuge.id : '', ...d, sumarACaja: !!f.sumarACaja.checked });
       toast(f.sumarACaja.checked ? 'Diezmo registrado y sumado a la caja' : 'Diezmo registrado');
       await ctx.refresh();
