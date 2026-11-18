@@ -118,8 +118,8 @@ const TEMAS = {
         <li><span class="badge st-obs">Irregular</span> diezmó algunos meses. Si lleva 2 o más meses sin diezmar se indica bajo su nombre.</li>
         <li><span class="badge st-sin">No diezma</span> no tiene diezmos en el año.</li>
       </ul>
-      <h4>Conciliación</h4>
-      <p>El gráfico compara lo registrado por hermano con los diezmos ingresados en la tesorería general. La diferencia es lo que aún no está identificado por nombre (por ejemplo, sobres sin nombre).</p>`
+      <h4>Estadística del mes</h4>
+      <p>Elige el <b>mes y el año</b> arriba (con las flechas o las listas). Verás el total diezmado y su variación frente al mes anterior, cuántos hermanos activos diezmaron y cuántos no, el promedio por diezmo y las listas de <b>quiénes diezmaron</b> y <b>quiénes no</b> ese mes. El gráfico <b>Mes a mes</b> muestra el total de cada mes del año y el % de hermanos que diezmó; toca una barra para ir a ese mes.</p>`
     },
     {
       id: 'miembros', titulo: 'Miembros', ico: 'users', html: `

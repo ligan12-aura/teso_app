@@ -827,8 +827,6 @@ input, select, textarea { font: inherit; color: inherit; }
 .imp-resumen b { font-family: var(--display); font-size: 22px; font-weight: 600; }
 .imp-resumen span { font-size: 12px; color: var(--muted); }
 .imp-lista { max-height: 300px; overflow-y: auto; }
-.conc-tot { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; font-size: 13px; color: var(--muted); }
-.conc-tot b { color: var(--ink); }
 .diezmo-wrap { max-height: 70vh; overflow: auto; margin: 0; padding: 0; }
 .diezmo-grid { font-size: 12.5px; }
 .diezmo-grid th, .diezmo-grid td { padding: 8px 6px; }
@@ -895,3 +893,24 @@ input, select, textarea { font: inherit; color: inherit; }
 /* Fecha de baja */
 .dg-celda.baja { background: repeating-linear-gradient(135deg, transparent 0 5px, var(--line-2) 5px 7px); color: var(--muted); cursor: default; }
 .dg-baja { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Diezmos: estadística del mes */
+.mp-select { border: 0; background: transparent; font: inherit; font-weight: 700; font-size: 14px; color: var(--ink); padding: 4px 2px; cursor: pointer; border-radius: 8px; }
+.mp-select:focus-visible { outline: 2px solid var(--navy-3); }
+.mp-select option { color: #1b2333; }
+.dm-cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; }
+.dm-tit { font-size: 14px; margin: 0 0 10px; display: flex; align-items: center; gap: 4px; }
+.dm-lista { list-style: none; margin: 0; padding: 0 10px 0 0; max-height: 420px; overflow: auto; }
+.dm-lista li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 12px; padding: 8px 0; border-bottom: 1px solid var(--line-2); align-items: center; }
+.dm-lista li .link-btn { text-align: left; font-weight: 600; color: var(--ink) !important; font-size: 13.5px; }
+.dm-lista li small { grid-column: 1; font-size: 12px; }
+.dm-lista li b { grid-column: 2; grid-row: 1 / span 2; font-variant-numeric: tabular-nums; }
+.dm-total { display: flex; justify-content: space-between; padding: 10px 0 0; font-size: 14px; }
+.dm-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 420px; overflow: auto; }
+.dm-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.dm-chip:hover { border-color: var(--navy-3); }
+.dm-chip i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.diezmo-grid th.sel, .diezmo-grid tfoot td.sel { color: var(--gold-ink); }
+.dg-celda.sel { outline: 1.5px solid var(--gold); outline-offset: -2px; }
+@media (max-width: 760px) { .dm-cols { grid-template-columns: 1fr; } }
+
