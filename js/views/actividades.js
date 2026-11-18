@@ -33,7 +33,7 @@ export function resumenActividad(data, a) {
 
 // Pestañas del ministerio (Finanzas · Jóvenes · Actividades)
 export function tabsMinisterio(m, base, activo) {
-  const t = [['', 'Finanzas', 'wallet'], ['integrantes', etiquetaIntegrantes(m), 'users'], ['actividades', 'Actividades', 'sparkle']];
+  const t = [['', 'Finanzas', 'wallet'], ['integrantes', etiquetaIntegrantes(m), 'users'], ['actividades', 'Actividades', 'calendar']];
   return `<nav class="min-tabs" aria-label="Secciones del ministerio">${t.map(([k, l, ic]) => `<a href="#/${base}${k ? '/' + k : ''}" class="${activo === k ? 'active' : ''}">${icon(ic, 16)} ${l}</a>`).join('')}</nav>`;
 }
 
@@ -186,7 +186,7 @@ function renderActividades(root, ctx, m, base, esTes) {
   root.innerHTML = `
   ${cabecera(m, base, esTes, 'actividades', 'Actividades', `<button class="btn btn-primary" data-nueva>${icon('plus', 16)} Nueva actividad</button>`)}
   <section class="kpis kpis-4">
-    <article class="kpi"><span class="kpi-label">${icon('sparkle', 15)} Actividades</span><strong class="kpi-value">${acts.length}</strong><span class="kpi-sub">${acts.filter((a) => a.estado !== 'cerrada').length} abiertas</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('calendar', 15)} Actividades</span><strong class="kpi-value">${acts.length}</strong><span class="kpi-sub">${acts.filter((a) => a.estado !== 'cerrada').length} abiertas</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--green)"></i> Entradas</span><strong class="kpi-value">${money(tot.ing)}</strong><span class="kpi-sub">cuotas y otros ingresos</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--rose)"></i> Salidas</span><strong class="kpi-value">${money(tot.gas)}</strong><span class="kpi-sub">gastos de las actividades</span></article>
     <article class="kpi kpi-dark"><span class="kpi-label">Resultado</span><strong class="kpi-value">${money(tot.ing - tot.gas)}</strong><span class="kpi-sub">${tot.ing - tot.gas < 0 ? 'cubierto con la caja del ministerio' : 'entradas menos salidas'}</span></article>
@@ -255,7 +255,7 @@ function renderActividad(root, ctx, m, base, esTes, aid) {
   ${cabecera(m, base, esTes, 'actividades', esc(a.nombre), `
     <button class="btn btn-ghost" data-editar>${icon('edit', 16)} Editar</button>
     <button class="btn btn-ghost danger-txt" data-eliminar>${icon('trash', 16)} Eliminar</button>`)}
-  <p class="act-meta">${icon('clock', 15)} ${cap(fecha(a.fecha))} · Cuota ${a.cuota ? `<b>${money(a.cuota)}</b> por persona` : '<b>sin cuota</b>'} · ${a.estado === 'cerrada' ? '<span class="badge st-open">Cerrada</span>' : '<span class="badge st-ok">Abierta</span>'}${a.descripcion ? `<br><span class="muted">${esc(a.descripcion)}</span>` : ''}</p>
+  <p class="act-meta"><span class="am-item">${icon('clock', 15)} ${cap(fecha(a.fecha))}</span><span class="am-item">Cuota ${a.cuota ? `<b>${money(a.cuota)}</b> por persona` : '<b>sin cuota</b>'}</span><span class="am-item">${a.estado === 'cerrada' ? '<span class="badge st-open">Cerrada</span>' : '<span class="badge st-ok">Abierta</span>'}</span>${a.descripcion ? `<span class="am-desc muted">${esc(a.descripcion)}</span>` : ''}</p>
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label">${icon('users', 15)} Confirmados</span><strong class="kpi-value">${r.ins.length}</strong><span class="kpi-sub">de ${activosTot} ${lbl} activos</span></article>
     <article class="kpi"><span class="kpi-label">${icon('checkCircle', 15)} Cuotas pagadas</span><strong class="kpi-value">${r.pagados} <small class="kpi-pct">de ${r.ins.length}</small></strong><span class="kpi-sub">recaudado ${money(r.cuotas)}${r.porCobrar ? ` · falta <b>${money(r.porCobrar)}</b>` : ''}</span></article>

@@ -283,7 +283,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .kpi-spark { margin: 2px -4px -4px; }
 .kpi-spark .spark { width: 100%; height: 46px; display: block; }
 .kpi-dark { background: var(--navy-2); color: #fff; border: 0; }
-.kpi-dark .kpi-label { color: rgba(255, 255, 255, .78); }
+.kpi-dark .kpi-label, .kpi-dark .kpi-sub { color: rgba(255, 255, 255, .78); }
 .kpi-warn { background: var(--amber-soft); border-color: var(--amber-line); }
 
 .alert-strip { display: flex; align-items: center; gap: 10px; background: var(--blue-soft); color: var(--blue-ink); border: 1px solid var(--blue-line); padding: 12px 16px; border-radius: 14px; font-size: 14px; }
@@ -940,12 +940,16 @@ input, select, textarea { font: inherit; color: inherit; }
 
 /* Integrantes y actividades de un ministerio */
 .min-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 0; }
-.min-tabs a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-weight: 600; font-size: 13.5px; }
+.min-tabs a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font-weight: 600; font-size: 13.5px; transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform 140ms var(--ease-out); }
+.min-tabs a:active { transform: scale(.97); }
 .min-tabs a:hover { color: var(--ink); border-color: var(--line-strong, var(--line)); }
 .min-tabs a.active { background: var(--navy); border-color: var(--navy); color: #fff; }
 .act-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
-.act-card { display: flex; flex-direction: column; gap: 14px; color: inherit; transition: transform .15s, box-shadow .15s; }
-.act-card:hover { transform: translateY(-2px); }
+.act-card { display: flex; flex-direction: column; gap: 14px; color: inherit; transition: transform 200ms var(--ease-out), box-shadow 200ms var(--ease-out); }
+.act-card:active { transform: scale(.99); }
+@media (hover: hover) and (pointer: fine) {
+  .act-card:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(27, 36, 51, .05), 0 14px 34px rgba(27, 36, 51, .1); }
+}
 .act-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
 .act-top h3 { margin: 0 0 2px; font-size: 16px; }
 .act-top .muted { font-size: 12.5px; }
@@ -955,7 +959,11 @@ input, select, textarea { font: inherit; color: inherit; }
 .act-res { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid var(--line-2); font-size: 13px; color: var(--muted); }
 .act-res b { font-size: 17px; color: var(--green-ink); }
 .act-res.neg b, .act-tot .neg b { color: var(--rose-ink); }
-.act-meta { margin: -8px 0 0; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.act-meta { margin: -8px 0 0; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; }
+.am-item { display: inline-flex; align-items: center; gap: 6px; }
+/* El separador va al inicio de cada dato, así nunca queda un "·" suelto al final de una línea */
+.am-item + .am-item::before { content: "·"; color: var(--muted); margin: 0 8px; }
+.am-desc { flex-basis: 100%; }
 .act-tot { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--line-2); }
 .ins-list { list-style: none; margin: 0; padding: 0; }
 .ins-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line-2); flex-wrap: wrap; }
@@ -970,3 +978,10 @@ input, select, textarea { font: inherit; color: inherit; }
 .act-mini small { font-weight: 400; font-size: 12px; }
 .danger-txt { color: var(--rose-ink, var(--rose)) !important; }
 a.tag { text-decoration: none; }
+
+/* Celular: "Eliminar" no compite con "Editar" (acción destructiva, menos peso) */
+@media (max-width: 520px) {
+  .head-actions .btn.danger-txt { flex: none; }
+  .act-meta { gap: 6px 16px; }
+  .am-item + .am-item::before { display: none; }
+}

@@ -83,7 +83,7 @@ export function render(root, ctx) {
           <span class="ml-ico ${x.tipo}">${icon(x.origen === 'transferencia' ? 'transfer' : x.tipo === 'ingreso' ? 'down' : 'up', 16)}</span>
           <div class="ml-main">
             <strong>${esc(x.descripcion || x.categoria)}</strong>
-            <span>${esc(x.categoria)} · ${fecha(x.fecha)}${x.actividadId && actNombre[x.actividadId] ? ` · <a class="tag" href="#/${base}/actividad/${x.actividadId}">${icon('sparkle', 11)} ${esc(actNombre[x.actividadId])}</a>` : ''}</span>
+            <span>${esc(x.categoria)} · ${fecha(x.fecha)}${x.actividadId && actNombre[x.actividadId] ? ` · <a class="tag" href="#/${base}/actividad/${x.actividadId}">${icon('calendar', 11)} ${esc(actNombre[x.actividadId])}</a>` : ''}</span>
           </div>
           <div class="ml-right">
             <b class="${x.tipo}">${x.tipo === 'ingreso' ? '+' : '−'}${money(x.monto)}</b>
@@ -108,7 +108,7 @@ export function render(root, ctx) {
         <div class="chart-box sm"><canvas id="ch-6m"></canvas></div>
       </article>
       ${conAct ? `<article class="card">
-        <header class="card-head"><div><h3>Actividades</h3><p class="muted">Resultado de cada una (entradas − salidas)</p></div><a class="link" href="#/${base}/actividades">Ver todas</a></header>
+        <header class="card-head"><div><h3>Actividades</h3><p class="muted">Resultado de cada una (entradas − salidas)</p></div><a class="link nowrap" href="#/${base}/actividades">Ver todas</a></header>
         ${acts.length ? `<ul class="act-mini">${acts.slice(0, 5).map((a) => { const ra = resumenActividad(data, a); return `<li><a href="#/${base}/actividad/${a.id}"><span>${esc(a.nombre)}<small class="muted">${fecha(a.fecha)} · ${ra.pagados}/${ra.ins.length} pagaron</small></span><b class="${ra.resultado < 0 ? 'gasto' : 'ingreso'}">${money(ra.resultado)}</b></a></li>`; }).join('')}</ul>` : emptyState('Sin actividades aún')}
       </article>` : ''}
       <article class="card">
@@ -301,7 +301,7 @@ export function render(root, ctx) {
       labels: meses.map(mesCorto),
       datasets: [
         { label: 'Ingresos', data: serie.map((s) => s.ingresos), backgroundColor: COLOR.ingreso, borderRadius: 5, maxBarThickness: 14 },
-        { label: 'Gastos', data: serie.map((s) => s.gastos), backgroundColor: m.color, borderRadius: 5, maxBarThickness: 14 }
+        { label: 'Gastos', data: serie.map((s) => s.gastos), backgroundColor: COLOR.gasto, borderRadius: 5, maxBarThickness: 14 }
       ]
     },
     options: {
