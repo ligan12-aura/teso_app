@@ -72,5 +72,22 @@ export async function exportarExcel(data) {
   if (data.miembros?.length) add('Miembros', data.miembros.map((m) => ({ Nombre: m.nombre, Estado: m.estado, 'Fecha de nacimiento': m.fechaNacimiento, Celular: m.celular, Correo: m.email, Domicilio: m.domicilio, Notas: m.notas })), [30, 10, 16, 18, 28, 36, 30]);
   if (data.diezmos?.length) add('Diezmos', [...data.diezmos].sort(byFecha).map((d) => ({ Fecha: d.fecha, Mes: d.mes, Hermano: nombreDe[d.miembroId] || '', Monto: d.monto, Medio: d.medio, Notas: d.notas })), [11, 8, 30, 12, 14, 30]);
 
+  // Listados de integrantes y actividades de los ministerios
+  const integ = Object.fromEntries((data.integrantes || []).map((i) => [i.id, i]));
+  if (data.integrantes?.length) add('Integrantes', data.integrantes.map((i) => ({ Ministerio: min[i.ministerioId] || '', Nombre: i.nombre, 'Miembro de la iglesia': i.esMiembro ? 'Sí' : 'No', 'Fecha de nacimiento': i.fechaNacimiento, Celular: i.celular, Correo: i.email, Activo: i.activo ? 'Sí' : 'No', Notas: i.notas })), [14, 30, 12, 16, 18, 28, 8, 30]);
+  if (data.actividades?.length) {
+    add('Actividades', data.actividades.map((a) => {
+      const movs = data.movMinisterios.filter((x) => x.actividadId === a.id);
+      const ing = movs.filter((x) => x.tipo === 'ingreso').reduce((s, x) => s + x.monto, 0);
+      const gas = movs.filter((x) => x.tipo === 'gasto').reduce((s, x) => s + x.monto, 0);
+      const ins = (data.inscripciones || []).filter((x) => x.actividadId === a.id);
+      return { Ministerio: min[a.ministerioId] || '', Actividad: a.nombre, Fecha: a.fecha, Cuota: a.cuota, Confirmados: ins.length, Pagaron: ins.filter((x) => x.movId).length, Entradas: ing, Salidas: gas, Resultado: ing - gas, Estado: a.estado };
+    }), [14, 28, 11, 10, 12, 10, 12, 12, 12, 10]);
+    add('Inscripciones', (data.inscripciones || []).map((x) => {
+      const a = data.actividades.find((y) => y.id === x.actividadId);
+      return { Actividad: a?.nombre || '', Integrante: integ[x.integranteId]?.nombre || '', Pagó: x.movId ? 'Sí' : 'No', Monto: x.pagoMonto || '', 'Fecha de pago': x.fechaPago };
+    }), [28, 30, 8, 12, 14]);
+  }
+
   XLSX.writeFile(wb, `Tesoreria_ElRedentor_${data.hoy}.xlsx`);
 }

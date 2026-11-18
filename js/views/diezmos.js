@@ -52,6 +52,12 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
     const y = +m.fechaBaja.slice(0, 4), mo = +m.fechaBaja.slice(5, 7);
     return y > anio ? 12 : y < anio ? 0 : mo - 1;
   };
+  // Primer mes del año en que ya era miembro (según su fecha de ingreso; sin fecha = desde siempre)
+  const mesDesde = (m) => {
+    if (!m.fechaIngreso) return 0;
+    const y = +m.fechaIngreso.slice(0, 4), mo = +m.fechaIngreso.slice(5, 7);
+    return y < anio ? 0 : y > anio ? 12 : mo - 1;
+  };
   const miembros = data.miembros.filter((m) => incluirInactivos || m.estado === 'activo' || mesesActivo(m) > 0);
   const ultimoDe = {};
   data.diezmos.forEach((d) => [d.miembroId, d.conyugeId].filter(Boolean).forEach((id) => { if (!ultimoDe[id] || d.fecha > ultimoDe[id]) ultimoDe[id] = d.fecha; }));
@@ -66,20 +72,22 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
     });
     // El mes en curso solo cuenta si ya tiene diezmo: mientras no termina, no es una falta
     const activoHasta = mesesActivo(m);
-    const evaluados = Math.min(anio === hoyY && !meses[hoyM - 1] ? hoyM - 1 : mesesPeriodo, activoHasta);
-    const conDiezmo = meses.slice(0, evaluados).filter((v) => v > 0).length;
+    const activoDesde = mesDesde(m);
+    const finEval = Math.min(anio === hoyY && !meses[hoyM - 1] ? hoyM - 1 : mesesPeriodo, activoHasta);
+    const evaluados = Math.max(0, finEval - activoDesde);
+    const conDiezmo = meses.slice(activoDesde, Math.max(activoDesde, finEval)).filter((v) => v > 0).length;
     const total = meses.reduce((a, v) => a + v, 0);
     // Sin meses evaluables (año futuro o enero recién empezado) no hay categoría
     const cat = !evaluados ? null : conDiezmo === 0 ? 'sin' : conDiezmo / evaluados >= UMBRAL_CONSTANTE ? 'constante' : 'irregular';
     // meses seguidos sin diezmar hasta el último mes evaluado (dentro del año)
     let racha = 0;
-    for (let i = evaluados - 1; i >= 0 && !meses[i]; i--) racha++;
-    // "En el período": activo hoy, o que estuvo activo algún mes evaluado del año antes de su baja
-    const enPeriodo = m.estado === 'activo' || evaluados > 0;
+    for (let i = finEval - 1; i >= activoDesde && !meses[i]; i--) racha++;
+    // "En el período": estuvo activo algún mes transcurrido del año (entre su ingreso y su baja)
+    const enPeriodo = evaluados > 0 || (m.estado === 'activo' && activoDesde < Math.max(mesesPeriodo, 1) && mesesPeriodo > 0);
     const bajaEnAnio = m.estado !== 'activo' && m.fechaBaja && +m.fechaBaja.slice(0, 4) === anio ? +m.fechaBaja.slice(5, 7) : 0;
     // Los no habilitados para diezmar (estudiantes, sin ingresos) no se clasifican ni cuentan en la estadística
     const habilitado = m.habilitadoDiezmo !== 'no';
-    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat: enPeriodo && habilitado ? cat : null, racha, enPeriodo, habilitado, activoHasta, bajaEnAnio, ultimo: ultimoDe[m.id] || '' };
+    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat: enPeriodo && habilitado ? cat : null, racha, enPeriodo, habilitado, activoDesde, activoHasta, bajaEnAnio, ultimo: ultimoDe[m.id] || '' };
   });
   return { mesesPeriodo, porMiembro };
 }
@@ -100,7 +108,7 @@ export function render(root, ctx) {
   // ---- Totales y participación de cada mes del año ----
   const totales = Array(12).fill(0), registros = Array(12).fill(0);
   data.diezmos.forEach((d) => { if (d.fecha.startsWith(String(anio))) { const i = +d.fecha.slice(5, 7) - 1; totales[i] += d.monto; registros[i]++; } });
-  const activoEn = (x, i) => x.activoHasta > i;
+  const activoEn = (x, i) => x.activoDesde <= i && x.activoHasta > i;
   // Solo cuentan los hermanos activos ese mes y habilitados para diezmar
   const elegibles = (i) => todos.filter((x) => x.habilitado && activoEn(x, i));
   const participacion = totales.map((_, i) => {
@@ -214,7 +222,7 @@ export function render(root, ctx) {
       <tbody>${lista.map((x) => `
         <tr class="${!x.enPeriodo || !x.habilitado ? 'inactive' : ''}">
           <td class="dg-nombre"><button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>${x.m.conyugeId && nombreDe[x.m.conyugeId] ? `<small class="dg-pareja">💍 ${esc(nombreDe[x.m.conyugeId])}</small>` : ''}${x.m.estado === 'activo' && x.habilitado && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
-          ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${i === mi ? 'sel' : ''} ${x.m.estado !== 'activo' && i >= x.activoHasta && i < mesesPeriodo ? 'baja' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
+          ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${i === mi ? 'sel' : ''} ${((x.m.estado !== 'activo' && i >= x.activoHasta) || i < x.activoDesde) && i < mesesPeriodo ? 'baja' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
           <td class="num strong">${x.total ? money(x.total) : '—'}</td>
           <td>${x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : x.m.estado !== 'activo' ? '<span class="badge st-open">Inactivo</span>' : !x.habilitado ? '<span class="tag tag-gris" title="Estudiante o sin ingresos: no se cuenta en la estadística">No habilitado</span>' : '<span class="muted">—</span>'}${x.bajaEnAnio ? `<small class="dg-baja">baja ${MESES_C[x.bajaEnAnio - 1].toLowerCase()}</small>` : ''}</td>
         </tr>`).join('')}</tbody>

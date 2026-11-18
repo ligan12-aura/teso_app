@@ -39,7 +39,8 @@ const NAV = {
 };
 
 NAV.pastor = NAV.tesorero;
-const ADM = ['tesorero', 'pastor'];
+NAV.admin = NAV.tesorero;
+const ADM = ['admin', 'tesorero', 'pastor'];
 const ROUTES = {
   inicio: { view: Dashboard, roles: ADM },
   general: { view: General, roles: ADM },

@@ -20,7 +20,7 @@ var PROP_SECRET = 'TOKEN_SECRET';
 var PROP_SCHEMA = 'SCHEMA_VERSION';
 // Súbelo cada vez que cambien las columnas (TABLES) o la hoja Resumen:
 // el servidor se actualiza solo en la siguiente solicitud, sin ejecutar setup().
-var SCHEMA_VERSION = '9';
+var SCHEMA_VERSION = '10';
 
 // =================================================================
 // Instalación inicial — ejecutar UNA vez desde el editor
@@ -169,12 +169,25 @@ function migrarSiHaceFalta_() {
     var ss = SpreadsheetApp.openById(props.getProperty(PROP_SHEET));
     Object.keys(TesoCore.TABLES).forEach(function (name) { ensureSheet_(ss, name); });
     rellenarGrupos_(ss);
+    activarActividadesJovenes_(ss);
     crearResumen_(ss);
     SpreadsheetApp.flush();
     props.setProperty(PROP_SCHEMA, SCHEMA_VERSION);
   } finally {
     lock.releaseLock();
   }
+}
+
+// El ministerio de jóvenes parte con el listado de integrantes y actividades activado
+// (solo si nunca se definió: 'no' significa que el tesorero lo desactivó)
+function activarActividadesJovenes_(ss) {
+  var st = new SheetStore_(ss);
+  st.read('Ministerios').forEach(function (m) {
+    if (!m.actividades && /j[oó]ven/i.test(String(m.nombre))) {
+      m.actividades = 'si';
+      st.update('Ministerios', m.id, m);
+    }
+  });
 }
 
 function buildEnv_() {

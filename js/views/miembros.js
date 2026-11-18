@@ -74,7 +74,7 @@ export function render(root, ctx) {
         const e = edad(m.fechaNacimiento, hoy);
         return `<tr class="${m.estado === 'inactivo' ? 'inactive' : ''}">
           <td><b>${esc(m.nombre)}</b>${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.habilitadoDiezmo === 'no' ? '<br><span class="tag tag-gris">No habilitado para diezmar</span>' : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
-          <td>${m.estado === 'activo' ? '<span class="badge st-ok">Activo</span>' : `<span class="badge st-open">Inactivo</span>${m.fechaBaja ? `<br><small class="muted">desde ${fecha(m.fechaBaja)}</small>` : ''}`}</td>
+          <td>${m.estado === 'activo' ? `<span class="badge st-ok">Activo</span>${m.fechaIngreso ? `<br><small class="muted">desde ${fecha(m.fechaIngreso)}</small>` : ''}` : `<span class="badge st-open">Inactivo</span>${m.fechaBaja ? `<br><small class="muted">desde ${fecha(m.fechaBaja)}</small>` : ''}`}</td>
           <td class="nowrap">${m.fechaNacimiento ? `${fecha(m.fechaNacimiento)}<br><small class="muted">${e} años</small>` : '<span class="falta">—</span>'}</td>
           <td class="nowrap">${m.celular ? `<a class="link" href="tel:${esc(m.celular.replace(/[^\d+]/g, ''))}">${esc(m.celular)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm">${m.email ? `<a class="link" href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="falta">—</span>'}</td>
@@ -103,6 +103,7 @@ export function editarMiembro(ctx, m = null) {
       <label class="field"><span>Nombre y apellidos</span><input name="nombre" value="${esc(m?.nombre || '')}" required maxlength="80"></label>
       <div class="form-row">
         <label class="field"><span>Estado</span><select name="estado"><option value="activo" ${m?.estado !== 'inactivo' ? 'selected' : ''}>Activo</option><option value="inactivo" ${m?.estado === 'inactivo' ? 'selected' : ''}>Inactivo (alejado)</option></select></label>
+        <label class="field"><span>Miembro desde</span><input type="date" name="fechaIngreso" value="${esc(m ? m.fechaIngreso || '' : ctx.data.hoy)}" max="${ctx.data.hoy}"></label>
         <label class="field" data-baja ${m?.estado === 'inactivo' ? '' : 'hidden'}><span>Fecha de baja (desde cuándo no asiste)</span><input type="date" name="fechaBaja" value="${esc(m?.fechaBaja || '')}" max="${ctx.data.hoy}"></label>
         <label class="field"><span>Fecha de nacimiento</span><input type="date" name="fechaNacimiento" value="${esc(m?.fechaNacimiento || '')}" max="${ctx.data.hoy}"></label>
       </div>
@@ -125,7 +126,7 @@ export function editarMiembro(ctx, m = null) {
       });
       f.querySelector('[data-borrar]')?.addEventListener('click', async () => {
         close(null);
-        if (!(await confirmar(`¿Eliminar a <b>${esc(m.nombre)}</b> del registro? Si solo dejó de asistir, es mejor marcarlo como inactivo.`, { boton: 'Eliminar', danger: true }))) return;
+        if (!(await confirmar(`¿Eliminar a <b>${esc(m.nombre)}</b> del registro?<br><span class="muted">Elimina solo si fue un error al ingresarlo: desaparece también de los análisis de meses pasados. Si dejó la iglesia, márcalo <b>inactivo</b> con su fecha de baja y su historial se conserva.</span>`, { boton: 'Eliminar', danger: true }))) return;
         try { await call('deleteMiembro', { id: m.id }); toast('Miembro eliminado'); await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
       });
     },

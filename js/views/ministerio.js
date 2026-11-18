@@ -1,18 +1,26 @@
-import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesNombre, mesCorto, fecha, fechaCorta, chart, PALETA, COLOR, monthPicker, bindMonthPicker, badgeEstado, ESTADOS, modal, formData, toast, confirmar, verArchivo, emptyState, nextMonth, prevMonth } from '../ui.js';
+import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesNombre, mesCorto, fecha, fechaCorta, chart, PALETA, COLOR, monthPicker, bindMonthPicker, badgeEstado, ESTADOS, modal, formData, toast, confirmar, verArchivo, emptyState, nextMonth, prevMonth, esAdmin } from '../ui.js';
 import { call } from '../api.js';
 import { presupuestoMinisterio, resumenMinisterio, rendicionDe, transferenciaDe, liderDe, monthsBack, movsMinisterio, split, porCategoria, saldoMinisterio } from '../calc.js';
 import { abrirFormMovimiento } from './movform.js';
 import { descargarPlanillaMinisterio } from '../planillaDescarga.js';
+import { renderSeccion, tabsMinisterio, actividadesDe, resumenActividad } from './actividades.js';
 
 export function render(root, ctx) {
   const { data, mes, user } = ctx;
-  const esTes = user.rol === 'tesorero' || user.rol === 'pastor';
+  const esTes = esAdmin(user);
   const mid = esTes ? ctx.params[0] : user.ministerioId;
   const m = data.ministerios.find((x) => x.id === mid);
   if (!m) {
     root.innerHTML = emptyState(esTes ? 'Ministerio no encontrado.' : 'Tu usuario aún no tiene un ministerio asignado. Habla con el tesorero.', 'alert');
     return;
   }
+  // Listado de integrantes y actividades (si el ministerio lo tiene habilitado)
+  const conAct = m.actividades === 'si';
+  const base = esTes ? `ministerio/${m.id}` : 'mi-ministerio';
+  const sub = esTes ? ctx.params[1] : ctx.params[0];
+  if (sub && conAct) return renderSeccion(root, ctx, m, { esTes, base, sub, subId: esTes ? ctx.params[2] : ctx.params[1] });
+  const acts = conAct ? actividadesDe(data, m.id).sort((a, b) => b.fecha.localeCompare(a.fecha)) : [];
+  const actNombre = Object.fromEntries(acts.map((a) => [a.id, a.nombre]));
   const r = resumenMinisterio(data, m.id, mes);
   const rend = rendicionDe(data, m.id, mes);
   const estado = rend?.estado || 'abierta';
@@ -46,6 +54,7 @@ export function render(root, ctx) {
       <button class="btn btn-light btn-sm mh-descarga" data-planilla>${icon('download', 15)} Descargar planilla</button>
     </div>
   </section>
+  ${conAct ? tabsMinisterio(m, base, '') : ''}
 
   ${pendientesLider()}
   ${panelRendicion()}
@@ -74,7 +83,7 @@ export function render(root, ctx) {
           <span class="ml-ico ${x.tipo}">${icon(x.origen === 'transferencia' ? 'transfer' : x.tipo === 'ingreso' ? 'down' : 'up', 16)}</span>
           <div class="ml-main">
             <strong>${esc(x.descripcion || x.categoria)}</strong>
-            <span>${esc(x.categoria)} · ${fecha(x.fecha)}</span>
+            <span>${esc(x.categoria)} · ${fecha(x.fecha)}${x.actividadId && actNombre[x.actividadId] ? ` · <a class="tag" href="#/${base}/actividad/${x.actividadId}">${icon('sparkle', 11)} ${esc(actNombre[x.actividadId])}</a>` : ''}</span>
           </div>
           <div class="ml-right">
             <b class="${x.tipo}">${x.tipo === 'ingreso' ? '+' : '−'}${money(x.monto)}</b>
@@ -97,6 +106,10 @@ export function render(root, ctx) {
         <header class="card-head"><div><h3>Últimos 6 meses</h3></div></header>
         <div class="chart-box sm"><canvas id="ch-6m"></canvas></div>
       </article>
+      ${conAct ? `<article class="card">
+        <header class="card-head"><div><h3>Actividades</h3><p class="muted">Resultado de cada una (entradas − salidas)</p></div><a class="link" href="#/${base}/actividades">Ver todas</a></header>
+        ${acts.length ? `<ul class="act-mini">${acts.slice(0, 5).map((a) => { const ra = resumenActividad(data, a); return `<li><a href="#/${base}/actividad/${a.id}"><span>${esc(a.nombre)}<small class="muted">${fecha(a.fecha)} · ${ra.pagados}/${ra.ins.length} pagaron</small></span><b class="${ra.resultado < 0 ? 'gasto' : 'ingreso'}">${money(ra.resultado)}</b></a></li>`; }).join('')}</ul>` : emptyState('Sin actividades aún')}
+      </article>` : ''}
       <article class="card">
         <header class="card-head"><div><h3>Historial de rendiciones</h3></div></header>
         ${historial.length ? `<ul class="hist">${historial.map((mm) => {

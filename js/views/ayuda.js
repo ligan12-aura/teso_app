@@ -208,11 +208,26 @@ const TEMAS = {
         <li>Para salir, usa el botón ${icon('logout', 13)} de arriba.</li>
       </ul>
       ${tip('En el celular puedes agregar la página a tu pantalla de inicio (en el menú del navegador, “Agregar a pantalla de inicio”) para abrirla como una app.')}`
+    },
+    {
+      id: 'actividades', titulo: 'Jóvenes y actividades', ico: 'users', html: `
+      <p>Si tu ministerio tiene activado el <b>listado de integrantes y actividades</b> (por ejemplo, Jóvenes), verás las pestañas <b>Finanzas · Jóvenes · Actividades</b>.</p>
+      <h4>Listado de jóvenes</h4>
+      <ul class="hp-list">
+        <li>Registra nombre, celular, correo y fecha de nacimiento de cada joven, sea o no miembro de la iglesia.</li>
+        <li>Si el joven <b>es miembro</b>, elígelo en “¿Es miembro de la iglesia?”: sus datos se toman de su ficha en Miembros y no se registra dos veces.</li>
+        <li>Si ya no participa, desmarca <b>Activo</b> en vez de eliminarlo.</li>
+      </ul>
+      <h4>Actividades con cuota</h4>
+      ${pasos('Crea la actividad con su <b>cuota por persona</b>.', 'Con <b>Elegir confirmados</b> marca, del listado de jóvenes, quiénes van.', 'Cuando cada uno pague, toca <b>Registrar pago</b> y pon la fecha en que entregó el dinero: entra como ingreso del ministerio en esa fecha.', 'Registra los <b>gastos</b> de la actividad (con su boleta) desde la misma actividad.')}
+      <p>Verás el <b>resultado</b> de la actividad (entradas − salidas). Puede ser negativo: la diferencia sale de la caja del ministerio. Todos estos movimientos aparecen también en <b>Finanzas</b> y en tu rendición del mes.</p>
+      ${tip('Si un pago se registró mal, usa <b>Anular</b> junto al pago y vuelve a registrarlo.')}`
     }
   ]
 };
 
 TEMAS.pastor = TEMAS.tesorero;
+TEMAS.admin = TEMAS.tesorero;
 TEMAS.secretaria = [
   {
     id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `

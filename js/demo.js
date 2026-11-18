@@ -4,7 +4,8 @@
  * Sirve para probar la app sin configurar Google.
  */
 
-const DB_KEY = 'teso_demo_db_v1';
+const DB_KEY = 'teso_demo_db_v2';
+try { localStorage.removeItem('teso_demo_db_v1'); } catch (e) { /* sin almacenamiento */ }
 const FILES_KEY = 'teso_demo_files_v1';
 const SECRET_KEY = 'teso_demo_secret';
 
@@ -161,7 +162,7 @@ function seed() {
   let n = 0;
   const id = () => 'd' + (++n).toString(36) + Math.random().toString(36).slice(2, 8);
   const now = new Date().toISOString();
-  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [] };
+  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [], Integrantes: [], Actividades: [], Inscripciones: [] };
   let rnd = 7;
   const rand = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
   const between = (a, b) => Math.round((a + rand() * (b - a)) / 500) * 500;
@@ -316,6 +317,33 @@ function seed() {
       if (da && notFuture(f)) db.Diezmos.push({ id: id(), miembroId: mid, fecha: f, mes: mm, monto: base, medio: rand() > 0.5 ? 'Efectivo' : 'Transferencia', notas: '', creadoPor: tesoreroId, creadoEn: now, actualizadoEn: now });
     });
   });
+
+  // Jóvenes: listado propio (algunos son miembros) y una actividad con cuota
+  const jov = mins.find((x) => x.nombre === 'Jóvenes');
+  jov.actividades = 'si';
+  const liderJov = db.Usuarios.find((u) => u.ministerioId === jov.id);
+  const jovenes = ['Tomás Riquelme', 'Valentina Cáceres', 'Martín Ulloa', 'Josefa Inostroza', 'Diego Carrasco', 'Catalina Bustos', 'Sebastián Poblete', 'Fernanda Arriagada', 'Ignacio Vera', 'Antonia Sandoval'];
+  const integ = jovenes.map((nombre, i) => ({
+    id: id(), ministerioId: jov.id, nombre, celular: `+56 9 ${6000 + i * 137} ${2000 + i * 311}`, email: i % 3 ? '' : `${nombre.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}@correo.cl`,
+    fechaNacimiento: `${2003 + (i % 7)}-${pad(1 + ((i * 5) % 12))}-${pad(3 + i * 2)}`, miembroId: '', notas: i === 4 ? 'Asiste con su hermano' : '', activo: i !== 9, creadoEn: now, actualizadoEn: now
+  }));
+  // dos jóvenes que ya son miembros de la iglesia (enlazados a su ficha)
+  [db.Miembros[1], db.Miembros[9]].forEach((mb) => integ.push({ id: id(), ministerioId: jov.id, nombre: mb.nombre, celular: '', email: '', fechaNacimiento: '', miembroId: mb.id, notas: '', activo: true, creadoEn: now, actualizadoEn: now }));
+  db.Integrantes.push(...integ);
+  const diaHoy = +today.slice(8, 10);
+  const act = { id: id(), ministerioId: jov.id, nombre: 'Campamento de verano', fecha: `${TesoCore.nextMonth(curMonth)}-15`, cuota: 25000, descripcion: 'Tres días en Pucón', estado: 'abierta', creadoPor: liderJov.id, creadoEn: now, actualizadoEn: now };
+  db.Actividades.push(act);
+  integ.filter((x) => x.activo).slice(0, 8).forEach((x, k) => {
+    const ins = { id: id(), actividadId: act.id, integranteId: x.id, pagoMonto: 0, fechaPago: '', movId: '', creadoEn: now, actualizadoEn: now };
+    if (k < 5) {
+      const f = dateIn(curMonth, Math.max(1, Math.min(diaHoy, 1 + k * 3)));
+      const mv = { id: id(), ministerioId: jov.id, fecha: f, mes: curMonth, tipo: 'ingreso', categoria: TesoCore.CUOTA, descripcion: `Cuota ${act.nombre} · ${x.nombre}`, monto: act.cuota, archivoId: '', origen: 'cuota', refId: ins.id, creadoPor: liderJov.id, creadoEn: now, actualizadoEn: now, actividadId: act.id };
+      db.MovimientosMinisterios.push(mv);
+      Object.assign(ins, { pagoMonto: act.cuota, fechaPago: f, movId: mv.id });
+    }
+    db.Inscripciones.push(ins);
+  });
+  db.MovimientosMinisterios.push({ id: id(), ministerioId: jov.id, fecha: dateIn(curMonth, Math.max(1, diaHoy - 1)), mes: curMonth, tipo: 'gasto', categoria: 'Actividad / evento', descripcion: 'Reserva de cabañas', monto: 40000, archivoId: 'demo-40000-Reserva%20de%20caba%C3%B1as', origen: 'manual', refId: '', creadoPor: liderJov.id, creadoEn: now, actualizadoEn: now, actividadId: act.id });
 
   saveJSON(DB_KEY, db);
 }

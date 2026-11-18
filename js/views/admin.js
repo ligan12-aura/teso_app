@@ -33,7 +33,7 @@ export function render(root, ctx) {
         <tbody>${data.ministerios.map((m) => {
           const lid = data.usuarios.filter((u) => u.ministerioId === m.id && u.rol === 'lider');
           return `<tr class="${m.activo ? '' : 'inactive'}">
-            <td><span class="min-dot" style="background:${m.color}">${esc(m.icono)}</span> <b>${esc(m.nombre)}</b></td>
+            <td><span class="min-dot" style="background:${m.color}">${esc(m.icono)}</span> <b>${esc(m.nombre)}</b>${m.actividades === 'si' ? ' <span class="tag tag-verde">Integrantes y actividades</span>' : ''}</td>
             <td>${lid.length ? lid.map((u) => esc(u.nombre)).join(', ') : '<span class="muted">—</span>'}</td>
             <td class="num strong">${money(m.itemMensual)}</td>
             <td class="num">${m.presupuestoMensual ? money(m.presupuestoMensual) : '<span class="muted">sin límite</span>'}</td>
@@ -48,7 +48,7 @@ export function render(root, ctx) {
   if (tab === 'usuarios') {
     body.innerHTML = `
     <article class="card">
-      <header class="card-head wrap"><div><h3>Usuarios</h3><p class="muted">Tesorero y pastor ven todo. Los líderes solo su ministerio. Secretaría solo el registro de miembros.</p></div>
+      <header class="card-head wrap"><div><h3>Usuarios</h3><p class="muted">Administrador, tesorero y pastor ven todo. Los líderes solo su ministerio. Secretaría solo el registro de miembros.</p></div>
         <button class="btn btn-primary btn-sm" data-new>${icon('plus', 16)} Nuevo usuario</button></header>
       <div class="table-wrap"><table class="table">
         <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Ministerio</th><th>Estado</th><th></th></tr></thead>
@@ -56,7 +56,7 @@ export function render(root, ctx) {
           <tr class="${u.activo ? '' : 'inactive'}">
             <td><b>${esc(u.nombre)}</b>${u.email ? `<br><small class="muted">${esc(u.email)}</small>` : ''}</td>
             <td><code>${esc(u.usuario)}</code></td>
-            <td>${{ tesorero: '<span class="badge st-sent">Tesorero</span>', pastor: '<span class="badge st-sent">Pastor</span>', secretaria: '<span class="badge st-obs">Secretaría</span>' }[u.rol] || '<span class="badge st-open">Líder</span>'}</td>
+            <td>${{ admin: '<span class="badge st-sent">Administrador</span>', tesorero: '<span class="badge st-sent">Tesorero</span>', pastor: '<span class="badge st-sent">Pastor</span>', secretaria: '<span class="badge st-obs">Secretaría</span>' }[u.rol] || '<span class="badge st-open">Líder</span>'}</td>
             <td>${minName[u.ministerioId] ? `${esc(minName[u.ministerioId].icono)} ${esc(minName[u.ministerioId].nombre)}` : '<span class="muted">—</span>'}</td>
             <td>${u.activo ? (u.debeCambiarPass ? '<span class="badge st-obs">Clave temporal</span>' : '<span class="badge st-ok">Activo</span>') : '<span class="badge st-open">Inactivo</span>'}</td>
             <td class="row-actions"><button class="icon-btn sm" data-edit="${u.id}">${icon('edit', 16)}</button></td>
@@ -178,6 +178,7 @@ function editMinisterio(ctx, m = null) {
       <p class="muted small">El ítem es lo que se transfiere cada mes; el presupuesto es el máximo que el ministerio puede gastar en el mes.</p>
       <div class="field"><span>Ícono</span><div class="picker">${ICONOS.map((i) => `<label><input type="radio" name="icono" value="${i}" ${i === ico ? 'checked' : ''}><span>${i}</span></label>`).join('')}</div></div>
       <div class="field"><span>Color</span><div class="picker colors">${COLORES.map((c) => `<label><input type="radio" name="color" value="${c}" ${c === color ? 'checked' : ''}><span style="background:${c}"></span></label>`).join('')}</div></div>
+      <label class="check"><input type="checkbox" name="actividades" ${m?.actividades === 'si' ? 'checked' : ''}> Listado de integrantes y actividades con cuota <small class="muted">(p. ej. jóvenes)</small></label>
       ${m ? `<label class="check"><input type="checkbox" name="activo" ${m.activo ? 'checked' : ''}> Ministerio activo</label>` : ''}`,
     onOpen(f) { formatoPesos(f.itemMensual); formatoPesos(f.presupuestoMensual); },
     async onSubmit(f) {
@@ -185,6 +186,7 @@ function editMinisterio(ctx, m = null) {
       d.itemMensual = pesos(d.itemMensual);
       d.presupuestoMensual = pesos(d.presupuestoMensual);
       if (m) { d.id = m.id; d.activo = f.activo.checked; }
+      d.actividades = f.actividades.checked ? 'si' : 'no';
       await call('saveMinisterio', d);
       toast('Ministerio guardado');
       await ctx.refresh();
@@ -200,7 +202,7 @@ function editUsuario(ctx, u = null) {
       <label class="field"><span>Nombre completo</span><input name="nombre" value="${esc(u?.nombre || '')}" required></label>
       <div class="form-row">
         <label class="field"><span>Usuario (para ingresar)</span><input name="usuario" value="${esc(u?.usuario || '')}" autocapitalize="none" required placeholder="ej: alabanza"></label>
-        <label class="field"><span>Rol</span><select name="rol">${[['lider', 'Líder de ministerio'], ['tesorero', 'Tesorero'], ['pastor', 'Pastor'], ['secretaria', 'Secretaría (solo miembros)']].map(([v, l]) => `<option value="${v}" ${(u?.rol || 'lider') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field"><span>Rol</span><select name="rol">${[['lider', 'Líder de ministerio'], ['tesorero', 'Tesorero'], ['pastor', 'Pastor'], ['admin', 'Administrador (todo)'], ['secretaria', 'Secretaría (solo miembros)']].map(([v, l]) => `<option value="${v}" ${(u?.rol || 'lider') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
       <p class="muted small" data-rol-ayuda style="margin-top:-6px"></p>
       <label class="field" data-min><span>Ministerio</span><select name="ministerioId"><option value="">— Selecciona —</option>${mins.map((m) => `<option value="${m.id}" ${u?.ministerioId === m.id ? 'selected' : ''}>${esc(m.icono)} ${esc(m.nombre)}</option>`).join('')}</select></label>
@@ -212,7 +214,7 @@ function editUsuario(ctx, u = null) {
       const sync = () => {
         f.querySelector('[data-min]').hidden = f.rol.value !== 'lider';
         const ayuda = f.querySelector('[data-rol-ayuda]');
-        if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', secretaria: 'Solo accede a Miembros: puede agregar y editar sus datos. No ve dinero ni diezmos.' }[f.rol.value];
+        if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', admin: 'Permiso para todo: tesorería, ministerios y sus actividades, diezmos, miembros, usuarios y configuración.', secretaria: 'Solo accede a Miembros: puede agregar y editar sus datos. No ve dinero ni diezmos.' }[f.rol.value];
       };
       f.rol.addEventListener('change', sync); sync();
     },

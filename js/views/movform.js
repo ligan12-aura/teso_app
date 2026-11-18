@@ -118,6 +118,7 @@ export function abrirFormMovimiento(opts) {
       if (archivo) { d.archivo = { nombre: archivo.nombre, mime: archivo.mime, base64: archivo.base64 }; }
       if (mov) { d.id = mov.id; d.quitarArchivo = !!d.quitarArchivo; }
       if (opts.ministerioId) d.ministerioId = opts.ministerioId;
+      if (opts.extra) Object.assign(d, opts.extra);
       await call(opts.action, d);
       toast(!esGeneral && d.tipo === 'gasto' && !archivo && !mov?.archivoId ? 'Registrado. Recuerda subir la boleta después.' : mov ? 'Movimiento actualizado' : 'Movimiento registrado');
       await ctx.refresh();

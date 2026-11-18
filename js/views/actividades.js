@@ -1,0 +1,379 @@
+// Listado de integrantes (p. ej. jóvenes) y actividades con cuota de un ministerio.
+// Lo usa el líder del ministerio y también tesorería/administración.
+import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, mesLargo } from '../ui.js';
+import { call } from '../api.js';
+import { abrirFormMovimiento } from './movform.js';
+import { edad } from './miembros.js';
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const filtros = { q: '', tipo: 'activos' };
+
+export const etiquetaIntegrantes = (m) => (/j[oó]ven/i.test(m.nombre) ? 'Jóvenes' : 'Integrantes');
+const singular = (m) => (/j[oó]ven/i.test(m.nombre) ? 'joven' : 'integrante');
+export const integrantesDe = (data, mid) => (data.integrantes || []).filter((i) => i.ministerioId === mid);
+export const actividadesDe = (data, mid) => (data.actividades || []).filter((a) => a.ministerioId === mid);
+
+// Totales de una actividad: confirmados, pagos y el flujo de entradas y salidas
+export function resumenActividad(data, a) {
+  const ins = (data.inscripciones || []).filter((x) => x.actividadId === a.id);
+  const movs = data.movMinisterios.filter((x) => x.actividadId === a.id);
+  const suma = (l) => l.reduce((s, x) => s + x.monto, 0);
+  const cuotas = suma(movs.filter((x) => x.origen === 'cuota'));
+  const otrosIngresos = suma(movs.filter((x) => x.tipo === 'ingreso' && x.origen !== 'cuota'));
+  const gastos = suma(movs.filter((x) => x.tipo === 'gasto'));
+  const pagados = ins.filter((x) => x.movId).length;
+  return {
+    ins, movs, cuotas, otrosIngresos, gastos, pagados,
+    ingresos: cuotas + otrosIngresos,
+    resultado: cuotas + otrosIngresos - gastos,
+    porCobrar: (ins.length - pagados) * (a.cuota || 0)
+  };
+}
+
+// Pestañas del ministerio (Finanzas · Jóvenes · Actividades)
+export function tabsMinisterio(m, base, activo) {
+  const t = [['', 'Finanzas', 'wallet'], ['integrantes', etiquetaIntegrantes(m), 'users'], ['actividades', 'Actividades', 'sparkle']];
+  return `<nav class="min-tabs" aria-label="Secciones del ministerio">${t.map(([k, l, ic]) => `<a href="#/${base}${k ? '/' + k : ''}" class="${activo === k ? 'active' : ''}">${icon(ic, 16)} ${l}</a>`).join('')}</nav>`;
+}
+
+function cabecera(m, base, esTes, activo, titulo, acciones = '') {
+  return `
+  ${esTes ? `<a class="back" href="#/ministerios">${icon('chevL', 16)} Ministerios</a>` : ''}
+  <section class="page-head">
+    <div><span class="eyebrow">${esc(m.icono)} ${esc(m.nombre)}</span><h1>${titulo}</h1></div>
+    <div class="head-actions">${acciones}</div>
+  </section>
+  ${tabsMinisterio(m, base, activo)}`;
+}
+
+// Punto de entrada desde la vista del ministerio
+export function renderSeccion(root, ctx, m, { esTes, base, sub, subId }) {
+  if (sub === 'integrantes') return renderIntegrantes(root, ctx, m, base, esTes);
+  if (sub === 'actividad' && subId) return renderActividad(root, ctx, m, base, esTes, subId);
+  return renderActividades(root, ctx, m, base, esTes);
+}
+
+// =================================================================
+// Integrantes
+// =================================================================
+function renderIntegrantes(root, ctx, m, base, esTes) {
+  const { data } = ctx;
+  const hoy = data.hoy;
+  const todos = integrantesDe(data, m.id).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const activos = todos.filter((i) => i.activo);
+  const miembros = activos.filter((i) => i.esMiembro).length;
+  const mesHoy = +hoy.slice(5, 7);
+  const cumple = activos.filter((i) => i.fechaNacimiento && +i.fechaNacimiento.slice(5, 7) === mesHoy)
+    .sort((a, b) => a.fechaNacimiento.slice(8).localeCompare(b.fechaNacimiento.slice(8)));
+  const q = filtros.q.toLowerCase();
+  const lista = todos.filter((i) => {
+    if (filtros.tipo === 'activos' && !i.activo) return false;
+    if (filtros.tipo === 'miembros' && !(i.activo && i.esMiembro)) return false;
+    if (filtros.tipo === 'nomiembros' && !(i.activo && !i.esMiembro)) return false;
+    if (filtros.tipo === 'inactivos' && i.activo) return false;
+    return !q || `${i.nombre} ${i.celular} ${i.email}`.toLowerCase().includes(q);
+  });
+  const lbl = etiquetaIntegrantes(m);
+
+  root.innerHTML = `
+  ${cabecera(m, base, esTes, 'integrantes', lbl, `<button class="btn btn-primary" data-nuevo>${icon('plus', 16)} Agregar ${singular(m)}</button>`)}
+  <section class="kpis kpis-4">
+    <article class="kpi"><span class="kpi-label">${icon('users', 15)} ${lbl} activos</span><strong class="kpi-value">${activos.length}</strong><span class="kpi-sub">${todos.length - activos.length ? `${todos.length - activos.length} inactivo${todos.length - activos.length > 1 ? 's' : ''}` : 'en el listado'}</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('church', 15)} Miembros de la iglesia</span><strong class="kpi-value">${miembros}</strong><span class="kpi-sub">enlazados a su ficha de Miembros</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('user', 15)} No miembros</span><strong class="kpi-value">${activos.length - miembros}</strong><span class="kpi-sub">aún no bautizados u otra iglesia</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('gift', 15)} Cumpleaños de ${MESES[mesHoy - 1]}</span><strong class="kpi-value">${cumple.length}</strong><span class="kpi-sub">${cumple.length ? cumple.slice(0, 3).map((i) => `${esc(i.nombre.split(' ')[0])} (${+i.fechaNacimiento.slice(8)})`).join(', ') + (cumple.length > 3 ? '…' : '') : 'nadie este mes'}</span></article>
+  </section>
+  <article class="card">
+    <header class="card-head wrap"><div><h3>Listado</h3><p class="muted">${lista.length} de ${todos.length}</p></div></header>
+    <div class="filters">
+      <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar por nombre, celular o correo…" value="${esc(filtros.q)}" data-q></div>
+      <div class="seg seg-sm">
+        ${[['activos', 'Activos'], ['miembros', 'Miembros'], ['nomiembros', 'No miembros'], ['inactivos', 'Inactivos']].map(([k, l]) => `<label><input type="radio" name="ftipo" value="${k}" ${filtros.tipo === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+      </div>
+    </div>
+    ${todos.length ? (lista.length ? `<div class="table-wrap"><table class="table">
+      <thead><tr><th>Nombre</th><th>Nacimiento</th><th>Celular</th><th class="hide-sm">Correo</th><th></th></tr></thead>
+      <tbody>${lista.map((i) => {
+        const e = edad(i.fechaNacimiento, hoy);
+        return `<tr class="${i.activo ? '' : 'inactive'}">
+          <td><b>${esc(i.nombre)}</b>${i.esMiembro ? ' <span class="tag tag-verde">Miembro</span>' : ''}${i.notas ? `<br><small class="muted">${esc(i.notas)}</small>` : ''}</td>
+          <td class="nowrap">${i.fechaNacimiento ? `${fecha(i.fechaNacimiento)}<br><small class="muted">${e} años</small>` : '<span class="falta">—</span>'}</td>
+          <td class="nowrap">${i.celular ? `<a class="link" href="tel:${esc(i.celular.replace(/[^\d+]/g, ''))}">${esc(i.celular)}</a>` : '<span class="falta">—</span>'}</td>
+          <td class="hide-sm">${i.email ? `<a class="link" href="mailto:${esc(i.email)}">${esc(i.email)}</a>` : '<span class="falta">—</span>'}</td>
+          <td class="row-actions"><button class="icon-btn sm" data-edit="${i.id}" title="Editar">${icon('edit', 16)}</button></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>` : emptyState('Nadie coincide con la búsqueda', 'search'))
+    : emptyState(`Aún no hay ${lbl.toLowerCase()} en el listado. Usa <b>Agregar ${singular(m)}</b>.`, 'users')}
+  </article>`;
+
+  root.querySelector('[data-nuevo]').addEventListener('click', () => editarIntegrante(ctx, m));
+  root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editarIntegrante(ctx, m, todos.find((i) => i.id === b.dataset.edit))));
+  root.querySelectorAll('[name=ftipo]').forEach((r) => r.addEventListener('change', () => { filtros.tipo = r.value; renderIntegrantes(root, ctx, m, base, esTes); }));
+  const qi = root.querySelector('[data-q]');
+  qi.addEventListener('input', () => {
+    clearTimeout(qi._t);
+    qi._t = setTimeout(() => { filtros.q = qi.value; renderIntegrantes(root, ctx, m, base, esTes); const n = root.querySelector('[data-q]'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250);
+  });
+}
+
+function editarIntegrante(ctx, m, it = null) {
+  const { data } = ctx;
+  const enlazados = new Set(integrantesDe(data, m.id).filter((i) => i.miembroId && i.id !== it?.id).map((i) => i.miembroId));
+  const opciones = (data.miembrosEnlace || []).filter((x) => !enlazados.has(x.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  // si su ficha de miembro ya no está activa, igual se muestra la opción actual
+  if (it?.miembroId && !opciones.some((x) => x.id === it.miembroId)) opciones.unshift({ id: it.miembroId, nombre: it.nombre });
+  return modal({
+    title: it ? `Ficha · ${esc(it.nombre)}` : `Agregar ${singular(m)}`,
+    body: `
+      <label class="field"><span>¿Es miembro de la iglesia?</span>
+        <select name="miembroId"><option value="">No es miembro (sin bautizar u otra iglesia)</option>${opciones.map((x) => `<option value="${x.id}" ${x.id === it?.miembroId ? 'selected' : ''}>Sí · ${esc(x.nombre)}</option>`).join('')}</select>
+        <small class="hint">Si es miembro, elígelo: sus datos se toman de su ficha en Miembros y no se registra dos veces.</small></label>
+      <div class="note" data-nota-miembro hidden>${icon('church', 16)}<span>Nombre, contacto y fecha de nacimiento se toman de la ficha de Miembros (los actualiza secretaría o tesorería).</span></div>
+      <div data-propios>
+        <label class="field"><span>Nombre y apellidos</span><input name="nombre" maxlength="80" value="${esc(it && !it.esMiembro ? it.nombre : '')}"></label>
+        <div class="form-row">
+          <label class="field"><span>Celular</span><input name="celular" inputmode="tel" placeholder="+56 9 1234 5678" value="${esc(it && !it.esMiembro ? it.celular : '')}"></label>
+          <label class="field"><span>Fecha de nacimiento</span><input type="date" name="fechaNacimiento" max="${data.hoy}" value="${esc(it && !it.esMiembro ? it.fechaNacimiento : '')}"></label>
+        </div>
+        <label class="field"><span>Correo</span><input type="email" name="email" placeholder="nombre@correo.cl" value="${esc(it && !it.esMiembro ? it.email : '')}"></label>
+      </div>
+      <label class="field"><span>Notas</span><input name="notas" maxlength="300" placeholder="Ej: contacto de su apoderado" value="${esc(it?.notas || '')}"></label>
+      ${it ? `<label class="check"><input type="checkbox" name="activo" ${it.activo ? 'checked' : ''}> Activo en el ministerio</label>
+      <button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar del listado</button>` : ''}`,
+    submitLabel: it ? 'Guardar' : 'Agregar',
+    onOpen(f, { close }) {
+      const sync = () => {
+        const es = !!f.miembroId.value;
+        f.querySelector('[data-propios]').hidden = es;
+        f.querySelector('[data-nota-miembro]').hidden = !es;
+      };
+      f.miembroId.addEventListener('change', sync); sync();
+      f.querySelector('[data-borrar]')?.addEventListener('click', async () => {
+        close(null);
+        if (!(await confirmar(`¿Eliminar a <b>${esc(it.nombre)}</b> del listado? Si ya no participa, es mejor dejarlo inactivo.`, { boton: 'Eliminar', danger: true }))) return;
+        try { await call('deleteIntegrante', { id: it.id }); toast('Eliminado del listado'); await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
+      });
+    },
+    async onSubmit(f) {
+      const d = formData(f);
+      if (d.miembroId) { d.nombre = ''; d.celular = ''; d.email = ''; d.fechaNacimiento = ''; }
+      else if (!d.nombre) throw new Error('Escribe el nombre');
+      d.ministerioId = m.id;
+      if (it) { d.id = it.id; d.activo = f.activo.checked; }
+      await call('saveIntegrante', d);
+      toast(it ? 'Ficha actualizada' : 'Agregado al listado');
+      await ctx.refresh();
+    }
+  });
+}
+
+// =================================================================
+// Actividades
+// =================================================================
+function renderActividades(root, ctx, m, base, esTes) {
+  const { data } = ctx;
+  const acts = actividadesDe(data, m.id).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const res = acts.map((a) => ({ a, r: resumenActividad(data, a) }));
+  const tot = res.reduce((s, x) => ({ ing: s.ing + x.r.ingresos, gas: s.gas + x.r.gastos }), { ing: 0, gas: 0 });
+
+  root.innerHTML = `
+  ${cabecera(m, base, esTes, 'actividades', 'Actividades', `<button class="btn btn-primary" data-nueva>${icon('plus', 16)} Nueva actividad</button>`)}
+  <section class="kpis kpis-4">
+    <article class="kpi"><span class="kpi-label">${icon('sparkle', 15)} Actividades</span><strong class="kpi-value">${acts.length}</strong><span class="kpi-sub">${acts.filter((a) => a.estado !== 'cerrada').length} abiertas</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--green)"></i> Entradas</span><strong class="kpi-value">${money(tot.ing)}</strong><span class="kpi-sub">cuotas y otros ingresos</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--rose)"></i> Salidas</span><strong class="kpi-value">${money(tot.gas)}</strong><span class="kpi-sub">gastos de las actividades</span></article>
+    <article class="kpi kpi-dark"><span class="kpi-label">Resultado</span><strong class="kpi-value">${money(tot.ing - tot.gas)}</strong><span class="kpi-sub">${tot.ing - tot.gas < 0 ? 'cubierto con la caja del ministerio' : 'entradas menos salidas'}</span></article>
+  </section>
+  ${acts.length ? `<section class="act-grid">${res.map(({ a, r }) => `
+    <a class="card act-card" href="#/${base}/actividad/${a.id}">
+      <div class="act-top"><div><h3>${esc(a.nombre)}</h3><span class="muted">${fecha(a.fecha)} · cuota ${a.cuota ? money(a.cuota) : 'sin cuota'}</span></div>${a.estado === 'cerrada' ? '<span class="badge st-open">Cerrada</span>' : '<span class="badge st-ok">Abierta</span>'}</div>
+      <div class="act-stats">
+        <div><span>Confirmados</span><b>${r.ins.length}</b></div>
+        <div><span>Pagaron</span><b>${r.pagados}/${r.ins.length}</b></div>
+        <div><span>Entradas</span><b class="ingreso">${money(r.ingresos)}</b></div>
+        <div><span>Salidas</span><b class="gasto">${money(r.gastos)}</b></div>
+      </div>
+      <div class="act-res ${r.resultado < 0 ? 'neg' : ''}"><span>Resultado</span><b>${money(r.resultado)}</b></div>
+    </a>`).join('')}</section>`
+    : `<article class="card">${emptyState('Aún no hay actividades. Crea una con <b>Nueva actividad</b>: defines la cuota, eliges a los confirmados y registras quién pagó.', 'sparkle')}</article>`}`;
+
+  root.querySelector('[data-nueva]').addEventListener('click', () => editarActividad(ctx, m, base));
+}
+
+function editarActividad(ctx, m, base, a = null) {
+  return modal({
+    title: a ? 'Editar actividad' : 'Nueva actividad',
+    body: `
+      <label class="field"><span>Nombre</span><input name="nombre" maxlength="80" required placeholder="Ej: Campamento de verano" value="${esc(a?.nombre || '')}"></label>
+      <div class="form-row">
+        <label class="field"><span>Fecha de la actividad</span><input type="date" name="fecha" required value="${esc(a?.fecha || ctx.data.hoy)}"></label>
+        <label class="field"><span>Cuota por persona ($)</span><input name="cuota" inputmode="numeric" placeholder="0 = sin cuota" value="${a?.cuota ? a.cuota.toLocaleString('es-CL') : ''}"></label>
+      </div>
+      <label class="field"><span>Descripción (opcional)</span><input name="descripcion" maxlength="300" value="${esc(a?.descripcion || '')}"></label>
+      ${a ? `<label class="field"><span>Estado</span><select name="estado"><option value="abierta" ${a.estado !== 'cerrada' ? 'selected' : ''}>Abierta</option><option value="cerrada" ${a.estado === 'cerrada' ? 'selected' : ''}>Cerrada (terminada)</option></select></label>` : ''}`,
+    submitLabel: a ? 'Guardar' : 'Crear actividad',
+    onOpen(f) { formatoPesos(f.cuota); },
+    async onSubmit(f) {
+      const d = formData(f);
+      d.cuota = pesos(d.cuota);
+      d.ministerioId = m.id;
+      if (a) d.id = a.id;
+      const r = await call('saveActividad', d);
+      toast(a ? 'Actividad actualizada' : 'Actividad creada');
+      if (!a) location.hash = `#/${base}/actividad/${r.id}`;
+      await ctx.refresh();
+    }
+  });
+}
+
+function renderActividad(root, ctx, m, base, esTes, aid) {
+  const { data } = ctx;
+  const a = actividadesDe(data, m.id).find((x) => x.id === aid);
+  if (!a) {
+    root.innerHTML = `${cabecera(m, base, esTes, 'actividades', 'Actividades')}${emptyState('Actividad no encontrada', 'alert')}`;
+    return;
+  }
+  const r = resumenActividad(data, a);
+  const integ = Object.fromEntries(integrantesDe(data, m.id).map((i) => [i.id, i]));
+  const activosTot = integrantesDe(data, m.id).filter((i) => i.activo).length;
+  const ins = [...r.ins].sort((x, y) => (integ[x.integranteId]?.nombre || '').localeCompare(integ[y.integranteId]?.nombre || '', 'es'));
+  const cuotasMovs = r.movs.filter((x) => x.origen === 'cuota');
+  const otros = r.movs.filter((x) => x.origen !== 'cuota').sort((x, y) => (y.fecha + y.creadoEn).localeCompare(x.fecha + x.creadoEn));
+  const lbl = etiquetaIntegrantes(m).toLowerCase();
+
+  root.innerHTML = `
+  ${cabecera(m, base, esTes, 'actividades', esc(a.nombre), `
+    <button class="btn btn-ghost" data-editar>${icon('edit', 16)} Editar</button>
+    <button class="btn btn-ghost danger-txt" data-eliminar>${icon('trash', 16)} Eliminar</button>`)}
+  <p class="act-meta">${icon('clock', 15)} ${cap(fecha(a.fecha))} · Cuota ${a.cuota ? `<b>${money(a.cuota)}</b> por persona` : '<b>sin cuota</b>'} · ${a.estado === 'cerrada' ? '<span class="badge st-open">Cerrada</span>' : '<span class="badge st-ok">Abierta</span>'}${a.descripcion ? `<br><span class="muted">${esc(a.descripcion)}</span>` : ''}</p>
+  <section class="kpis kpis-4">
+    <article class="kpi"><span class="kpi-label">${icon('users', 15)} Confirmados</span><strong class="kpi-value">${r.ins.length}</strong><span class="kpi-sub">de ${activosTot} ${lbl} activos</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('checkCircle', 15)} Cuotas pagadas</span><strong class="kpi-value">${r.pagados} <small class="kpi-pct">de ${r.ins.length}</small></strong><span class="kpi-sub">recaudado ${money(r.cuotas)}${r.porCobrar ? ` · falta <b>${money(r.porCobrar)}</b>` : ''}</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--rose)"></i> Gastos</span><strong class="kpi-value">${money(r.gastos)}</strong><span class="kpi-sub">${r.otrosIngresos ? `otros ingresos ${money(r.otrosIngresos)}` : 'asociados a la actividad'}</span></article>
+    <article class="kpi kpi-dark"><span class="kpi-label">Resultado de la actividad</span><strong class="kpi-value">${money(r.resultado)}</strong><span class="kpi-sub">${r.resultado < 0 ? 'la diferencia sale de la caja del ministerio' : 'entradas menos salidas'}</span></article>
+  </section>
+
+  <section class="grid-2-1">
+    <article class="card">
+      <header class="card-head wrap"><div><h3>Confirmados</h3><p class="muted">Registra el pago cuando cada uno entregue su cuota: entra como ingreso del ministerio con esa fecha</p></div>
+        <button class="btn btn-primary btn-sm" data-confirmar>${icon('users', 16)} Elegir confirmados</button></header>
+      ${ins.length ? `<ul class="ins-list">${ins.map((x) => {
+        const i = integ[x.integranteId];
+        return `<li>
+          <div><b>${esc(i?.nombre || '—')}</b>${i?.esMiembro ? ' <span class="tag tag-verde">Miembro</span>' : ''}${i?.celular ? `<br><small class="muted">${esc(i.celular)}</small>` : ''}</div>
+          ${x.movId ? `<div class="ins-pago"><span class="badge st-ok">${icon('check', 13)} Pagó ${money(x.pagoMonto)}</span><small class="muted">${fecha(x.fechaPago)}</small><button class="link-btn" data-anular="${x.id}">Anular</button></div>`
+            : `<div class="ins-pago"><span class="badge st-obs">Pendiente</span><button class="btn btn-soft-green btn-sm" data-pagar="${x.id}">${icon('down', 15)} Registrar pago</button></div>`}
+        </li>`;
+      }).join('')}</ul>` : emptyState(`Aún no hay confirmados. Usa <b>Elegir confirmados</b> para marcarlos desde el listado de ${lbl}.`, 'users')}
+    </article>
+
+    <article class="card">
+      <header class="card-head wrap"><div><h3>Entradas y salidas</h3><p class="muted">Todo queda también en las finanzas del ministerio</p></div>
+        <div class="head-actions"><button class="btn btn-primary btn-sm" data-mov="gasto">${icon('camera', 15)} Gasto</button><button class="btn btn-soft-green btn-sm" data-mov="ingreso">${icon('plus', 15)} Otro ingreso</button></div></header>
+      <ul class="mov-list">
+        ${cuotasMovs.length ? `<li><span class="ml-ico ingreso">${icon('users', 16)}</span><div class="ml-main"><strong>Cuotas pagadas</strong><span>${cuotasMovs.length} pago${cuotasMovs.length > 1 ? 's' : ''}</span></div><div class="ml-right"><b class="ingreso">+${money(r.cuotas)}</b></div></li>` : ''}
+        ${otros.map((x) => `<li>
+          <span class="ml-ico ${x.tipo}">${icon(x.tipo === 'ingreso' ? 'down' : 'up', 16)}</span>
+          <div class="ml-main"><strong>${esc(x.descripcion || x.categoria)}</strong><span>${esc(x.categoria)} · ${fecha(x.fecha)}</span></div>
+          <div class="ml-right"><b class="${x.tipo}">${x.tipo === 'ingreso' ? '+' : '−'}${money(x.monto)}</b>
+            <div class="ml-actions">${x.tipo === 'gasto' && !x.archivoId ? `<span class="chip-warn">${icon('alert', 13)} Sin boleta</span>` : ''}<button class="icon-btn sm" data-edit="${x.id}" title="Editar">${icon('edit', 15)}</button><button class="icon-btn sm danger" data-del="${x.id}" title="Eliminar">${icon('trash', 15)}</button></div></div>
+        </li>`).join('')}
+      </ul>
+      ${!r.movs.length ? emptyState('Sin entradas ni salidas todavía', 'receipt') : ''}
+      <div class="act-tot">
+        <div><span>Entradas</span><b class="ingreso">${money(r.ingresos)}</b></div>
+        <div><span>Salidas</span><b class="gasto">${money(r.gastos)}</b></div>
+        <div class="${r.resultado < 0 ? 'neg' : ''}"><span>Resultado</span><b>${money(r.resultado)}</b></div>
+      </div>
+    </article>
+  </section>`;
+
+  const accion = async (act, payload, ok) => {
+    try { await call(act, payload); toast(ok); await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
+  };
+  root.querySelector('[data-editar]').addEventListener('click', () => editarActividad(ctx, m, base, a));
+  root.querySelector('[data-eliminar]').addEventListener('click', async () => {
+    if (r.movs.length) return toast('La actividad tiene pagos o gastos registrados. Anúlalos o elimínalos antes de borrarla.', 'err');
+    if (!(await confirmar(`¿Eliminar la actividad <b>${esc(a.nombre)}</b> y su lista de confirmados?`, { boton: 'Eliminar', danger: true }))) return;
+    try { await call('deleteActividad', { id: a.id }); toast('Actividad eliminada'); location.hash = `#/${base}/actividades`; await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
+  });
+  root.querySelector('[data-confirmar]').addEventListener('click', () => elegirConfirmados(ctx, m, a, r));
+  root.querySelectorAll('[data-pagar]').forEach((b) => b.addEventListener('click', () => {
+    const x = r.ins.find((y) => y.id === b.dataset.pagar);
+    registrarPago(ctx, a, x, integ[x.integranteId]);
+  }));
+  root.querySelectorAll('[data-anular]').forEach((b) => b.addEventListener('click', async () => {
+    const x = r.ins.find((y) => y.id === b.dataset.anular);
+    if (!(await confirmar(`Se anulará el pago de <b>${esc(integ[x.integranteId]?.nombre || '')}</b> por <b>${money(x.pagoMonto)}</b> y se quitará el ingreso del ${fecha(x.fechaPago)} de las finanzas del ministerio.`, { boton: 'Anular pago', danger: true }))) return;
+    await accion('anularPagoCuota', { inscripcionId: x.id }, 'Pago anulado');
+  }));
+  const formMov = (tipo, mov) => abrirFormMovimiento({
+    ctx, ambito: 'ministerio', tipo, mov, ministerioId: esTes ? m.id : undefined, extra: { actividadId: a.id },
+    action: mov ? 'updateMovMinisterio' : 'addMovMinisterio',
+    titulo: mov ? 'Editar movimiento' : tipo === 'gasto' ? `Gasto · ${a.nombre}` : `Ingreso · ${a.nombre}`
+  });
+  root.querySelectorAll('[data-mov]').forEach((b) => b.addEventListener('click', () => formMov(b.dataset.mov)));
+  root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => formMov(null, r.movs.find((x) => x.id === b.dataset.edit))));
+  root.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+    const x = r.movs.find((y) => y.id === b.dataset.del);
+    if (!(await confirmar(`Se eliminará <b>${esc(x.descripcion || x.categoria)}</b> por <b>${money(x.monto)}</b>.`, { boton: 'Eliminar', danger: true }))) return;
+    await accion('deleteMovMinisterio', { id: x.id }, 'Movimiento eliminado');
+  }));
+}
+
+function elegirConfirmados(ctx, m, a, r) {
+  const ya = new Map(r.ins.map((x) => [x.integranteId, x]));
+  const lista = integrantesDe(ctx.data, m.id).filter((i) => i.activo || ya.has(i.id)).sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
+  if (!lista.length) return toast(`Primero agrega ${etiquetaIntegrantes(m).toLowerCase()} al listado`, 'err');
+  return modal({
+    title: `Confirmados · ${esc(a.nombre)}`,
+    body: `
+      <div class="pick-tools"><div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar…" data-buscar></div>
+        <button type="button" class="link-btn" data-todos>Marcar todos</button><button type="button" class="link-btn" data-ninguno>Ninguno</button></div>
+      <ul class="pick-list">${lista.map((i) => {
+        const x = ya.get(i.id);
+        return `<li data-nombre="${esc(i.nombre.toLowerCase())}"><label class="check"><input type="checkbox" name="i" value="${i.id}" ${x ? 'checked' : ''} ${x?.movId ? 'disabled data-pagado' : ''}> ${esc(i.nombre)}${x?.movId ? ' <small class="muted">· ya pagó</small>' : ''}${!i.activo ? ' <small class="muted">· inactivo</small>' : ''}</label></li>`;
+      }).join('')}</ul>
+      <p class="muted small" data-cuenta></p>`,
+    submitLabel: 'Guardar confirmados',
+    onOpen(f) {
+      const cajas = [...f.querySelectorAll('[name=i]')];
+      const contar = () => { f.querySelector('[data-cuenta]').textContent = `${cajas.filter((c) => c.checked).length} confirmados`; };
+      cajas.forEach((c) => c.addEventListener('change', contar)); contar();
+      f.querySelector('[data-buscar]').addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase();
+        f.querySelectorAll('.pick-list li').forEach((li) => { li.hidden = q && !li.dataset.nombre.includes(q); });
+      });
+      f.querySelector('[data-todos]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.closest('li').hidden) c.checked = true; }); contar(); });
+      f.querySelector('[data-ninguno]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.disabled && !c.closest('li').hidden) c.checked = false; }); contar(); });
+    },
+    async onSubmit(f) {
+      const ids = [...f.querySelectorAll('[name=i]')].filter((c) => c.checked).map((c) => c.value);
+      const res = await call('setConfirmados', { actividadId: a.id, integranteIds: ids });
+      toast(`${res.confirmados} confirmados`);
+      await ctx.refresh();
+    }
+  });
+}
+
+function registrarPago(ctx, a, ins, it) {
+  return modal({
+    title: `Pago de cuota · ${esc(it?.nombre || '')}`,
+    body: `
+      <div class="form-row">
+        <label class="field"><span>Monto ($)</span><input name="monto" inputmode="numeric" class="input-money" value="${a.cuota ? a.cuota.toLocaleString('es-CL') : ''}" required></label>
+        <label class="field"><span>Fecha en que pagó</span><input type="date" name="fecha" value="${ctx.data.hoy}" max="${ctx.data.hoy}" required></label>
+      </div>
+      <p class="muted small">Se registra como ingreso del ministerio (“Cuota de actividad”) en esa fecha, y queda en la rendición de ese mes.</p>`,
+    submitLabel: 'Registrar pago',
+    onOpen(f) { formatoPesos(f.monto); },
+    async onSubmit(f) {
+      const d = formData(f);
+      const monto = pesos(d.monto);
+      if (!monto) throw new Error('Ingresa el monto');
+      await call('registrarPagoCuota', { inscripcionId: ins.id, monto, fecha: d.fecha });
+      toast(`Pago registrado en ${mesLargo(d.fecha.slice(0, 7))}`);
+      await ctx.refresh();
+    }
+  });
+}
