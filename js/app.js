@@ -259,7 +259,7 @@ async function route() {
   app.innerHTML = shell(activeNav);
   app.querySelectorAll('[data-logout]').forEach((b) => b.addEventListener('click', logout));
   app.querySelector('[data-mas]')?.addEventListener('click', (e) => abrirMas(activeNav, e.detail === 0));
-  app.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('click', () => abrirAyuda(state.user.rol, location.hash.replace(/^#\//, '').split('/')[0])));
+  app.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('click', () => abrirAyuda(state.user.rol, location.hash.replace(/^#\//, ''), { conActividades: !!state.data?.ministerios?.some((m) => m.actividades === 'si') })));
   app.querySelector('[data-export]')?.addEventListener('click', () => descargarPlanillaGeneral(state.data).catch((e) => toast(e.message, 'err')));
   const root = app.querySelector('#view');
   const ctx = {

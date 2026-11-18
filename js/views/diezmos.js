@@ -125,6 +125,8 @@ export function render(root, ctx) {
   const noDiezmaron = elMes.filter((x) => !x.meses[mi]);
   const noHabMes = todos.filter((x) => !x.habilitado && activoEn(x, mi));
   const noHabConDiezmo = noHabMes.filter((x) => x.meses[mi] > 0).length;
+  // diezmos de hermanos que ese mes aún no eran miembros (antes de su ingreso) o ya estaban de baja
+  const fueraConDiezmo = todos.filter((x) => x.habilitado && !activoEn(x, mi) && x.meses[mi] > 0).length;
   const pctMes = elMes.length ? Math.round((diezmaron.length / elMes.length) * 100) : 0;
   const ant = mi ? `${anio}-${pad(mi)}` : `${anio - 1}-12`;
   const totalAnt = data.diezmos.filter((d) => d.fecha.slice(0, 7) === ant).reduce((a, d) => a + d.monto, 0);
@@ -176,7 +178,7 @@ export function render(root, ctx) {
 
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (futuro ? 'mes aún no transcurrido' : totalAnt ? '' : 'sin diezmos el mes anterior') : `<b class="${variacion >= 0 ? 'ingreso' : 'gasto'}">${variacion >= 0 ? '▲' : '▼'} ${Math.abs(variacion)}%</b> vs. ${mesLargo(ant)} (${money(totalAnt)})`}</span></article>
-    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Diezmaron</span><strong class="kpi-value">${diezmaron.length} <small class="kpi-pct">${pctMes}%</small></strong><span class="kpi-sub">de ${elMes.length} hermanos habilitados para diezmar${noHabConDiezmo ? ` · además ${noHabConDiezmo} no habilitado${noHabConDiezmo > 1 ? 's' : ''}` : ''}</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Diezmaron</span><strong class="kpi-value">${diezmaron.length} <small class="kpi-pct">${pctMes}%</small></strong><span class="kpi-sub">de ${elMes.length} hermanos habilitados para diezmar${noHabConDiezmo ? ` · además ${noHabConDiezmo} no habilitado${noHabConDiezmo > 1 ? 's' : ''}` : ''}${fueraConDiezmo ? ` · además ${fueraConDiezmo} fuera de su período de miembro` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.sin.color}"></i> No diezmaron</span><strong class="kpi-value">${futuro ? '—' : noDiezmaron.length}</strong><span class="kpi-sub">${futuro ? 'mes por venir' : 'habilitados sin diezmo registrado'}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('receipt', 15)} Promedio por diezmo</span><strong class="kpi-value">${money(promedio)}</strong><span class="kpi-sub">${regsMes.length} diezmo${regsMes.length === 1 ? '' : 's'} registrado${regsMes.length === 1 ? '' : 's'} (matrimonio = 1)</span></article>
   </section>

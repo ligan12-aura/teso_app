@@ -31,7 +31,8 @@ const TEMAS = {
       <h4>El ciclo de cada mes</h4>${FLUJO}
       <h4>Qué ve cada persona</h4>
       <ul class="hp-list">
-        <li><b>Tesorero:</b> todo. Tesorería general, todos los ministerios, rendiciones y configuración.</li>
+        <li><b>Administrador, tesorero y pastor:</b> todo. Tesorería general, todos los ministerios y sus actividades, rendiciones, diezmos, miembros y configuración.</li>
+        <li><b>Secretaría:</b> solo el registro de Miembros. No ve dinero ni diezmos.</li>
         <li><b>Líder de ministerio:</b> solo su ministerio. No ve la tesorería general ni los otros ministerios.</li>
       </ul>
       ${tip('Puedes abrir esta guía cuando quieras con el botón <b>Ayuda</b>. Siempre se abre en el tema de la pantalla donde estás.')}`
@@ -157,6 +158,16 @@ const TEMAS = {
         <li><b>Boletas:</b> se guardan en la carpeta privada <i>“Tesorería El Redentor · Boletas”</i> de Google Drive, ordenadas por ministerio y mes.</li>
       </ul>
       ${tip('No modifiques a mano las hojas de la planilla: la app usa la columna <b>id</b> para encontrar cada registro. Para corregir algo, hazlo desde la app.', 'warn')}`
+    },
+    {
+      id: 'actividades', titulo: 'Integrantes y actividades', ico: 'users', html: `
+      <p>Un ministerio puede tener su propio <b>listado de integrantes</b> (por ejemplo, Jóvenes) y <b>actividades con cuota</b>. Se activa en Configuración → Ministerios con la casilla “Listado de integrantes y actividades”. Ese ministerio muestra las pestañas <b>Finanzas · Jóvenes · Actividades</b>.</p>
+      <ul class="hp-list">
+        <li><b>Enlazar con Miembros:</b> solo tesorería puede indicar que un integrante es miembro de la iglesia (“¿Es miembro de la iglesia?”). El líder ve su nombre, pero no los datos de su ficha.</li>
+        <li><b>Pagos de cuota:</b> entran como ingreso del ministerio en la fecha del pago y se anulan desde la actividad.</li>
+        <li><b>Resultado:</b> entradas − salidas de cada actividad; si es negativo, la diferencia sale de la caja del ministerio.</li>
+        <li>Si desactivas el listado de un ministerio que ya tenía cuotas pagadas, esas cuotas siguen en sus finanzas y se pueden quitar desde ahí con ${btn('trash', '')}.</li>
+      </ul>`
     }
   ],
   lider: [
@@ -215,7 +226,7 @@ const TEMAS = {
       <h4>Listado de jóvenes</h4>
       <ul class="hp-list">
         <li>Registra nombre, celular, correo y fecha de nacimiento de cada joven, sea o no miembro de la iglesia.</li>
-        <li>Si el joven <b>es miembro</b>, elígelo en “¿Es miembro de la iglesia?”: sus datos se toman de su ficha en Miembros y no se registra dos veces.</li>
+        <li>Si el joven <b>es miembro</b> de la iglesia, pídele al tesorero que lo enlace a su ficha de Miembros: así no se registra dos veces.</li>
         <li>Si ya no participa, desmarca <b>Activo</b> en vez de eliminarlo.</li>
       </ul>
       <h4>Actividades con cuota</h4>
@@ -255,11 +266,18 @@ TEMAS.secretaria = [
   TEMAS.lider.find((t) => t.id === 'perfil')
 ];
 
-const RUTA_A_TEMA = { inicio: 'inicio', general: 'general', ministerios: 'ministerios', ministerio: 'ministerios', rendiciones: 'rendiciones', diezmos: 'diezmos', miembros: 'miembros', admin: 'admin', 'mi-ministerio': 'mi-ministerio', perfil: 'perfil' };
+const RUTA_A_TEMA = { integrantes: 'actividades', actividades: 'actividades', actividad: 'actividades', inicio: 'inicio', general: 'general', ministerios: 'ministerios', ministerio: 'ministerios', rendiciones: 'rendiciones', diezmos: 'diezmos', miembros: 'miembros', admin: 'admin', 'mi-ministerio': 'mi-ministerio', perfil: 'perfil' };
 
-export function abrirAyuda(rol, ruta = '') {
-  const temas = TEMAS[rol] || TEMAS.lider;
-  let actual = temas.find((t) => t.id === RUTA_A_TEMA[ruta]) ? RUTA_A_TEMA[ruta] : temas[0].id;
+// ruta: la ruta completa (p. ej. "mi-ministerio/actividad/x"); conActividades: el ministerio del líder usa actividades
+export function abrirAyuda(rol, ruta = '', { conActividades = false } = {}) {
+  let temas = TEMAS[rol] || TEMAS.lider;
+  // el tema de actividades solo lo ve el líder cuyo ministerio las tiene activadas
+  if (!TEMAS[rol] || rol === 'lider') temas = temas.filter((t) => t.id !== 'actividades' || conActividades);
+  const partes = String(ruta).split('/');
+  const sub = partes.find((x) => ['integrantes', 'actividades', 'actividad'].includes(x));
+  const clave = RUTA_A_TEMA[sub] || RUTA_A_TEMA[partes[0]] || partes[0];
+  const base = RUTA_A_TEMA[partes[0]];
+  let actual = temas.find((t) => t.id === clave) ? clave : temas.find((t) => t.id === base) ? base : temas[0].id;
   return modal({
     title: `${icon('help', 20)} Guía de uso`,
     wide: true,

@@ -265,13 +265,14 @@ var TesoCore = (function () {
         base.diezmos = [];
         // Listado propio y actividades: solo si el ministerio lo tiene habilitado
         var conAct = base.ministerios.some(function (m) { return m.actividades === 'si'; });
-        base.integrantes = conAct ? vistaIntegrantes(all('Integrantes').filter(own)) : [];
+        // El líder no recibe datos de las fichas de Miembros: solo el nombre del enlazado
+        base.integrantes = conAct ? vistaIntegrantes(all('Integrantes').filter(own), true) : [];
         base.actividades = conAct ? all('Actividades').filter(own) : [];
         var actIds = {};
         base.actividades.forEach(function (a) { actIds[a.id] = 1; });
         base.inscripciones = conAct ? all('Inscripciones').filter(function (x) { return actIds[x.actividadId]; }) : [];
-        // Para enlazar a un integrante con su ficha de miembro basta el nombre
-        base.miembrosEnlace = conAct ? miembrosEnlace() : [];
+        // El enlace con la ficha de Miembros lo hace tesorería: el líder no recibe el registro de miembros
+        base.miembrosEnlace = [];
         base.extra = {};
         // El líder no recibe saldo de caja ni presupuesto de la tesorería general
         base.config = { nombreIglesia: base.config.nombreIglesia };
@@ -383,10 +384,12 @@ var TesoCore = (function () {
         id: uid(), ministerioId: m.id, mes: mes, archivoId: archivoId, origen: 'manual', creadoPor: user.id, creadoEn: now, actualizadoEn: now, actividadId: actividadId
       }));
     }
-    function movMinisterioPropio(user, id) {
+    function movMinisterioPropio(user, id, paraBorrar) {
       var mov = find('MovimientosMinisterios', id);
       if (!mov) throw TesoError('Movimiento no encontrado');
       if (!esAdmin(user) && mov.ministerioId !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
+      // Si el ministerio ya no usa actividades, una cuota se puede quitar desde Finanzas (no editar)
+      if (mov.origen === 'cuota' && paraBorrar && getMinisterio(mov.ministerioId).actividades !== 'si') return mov;
       if (mov.origen === 'cuota') throw TesoError('Esta cuota se administra desde su actividad: ahí puedes anular el pago.');
       if (mov.origen === 'transferencia') throw TesoError('El ítem mensual se registra al transferirlo; si hubo un error, anúlalo desde el panel de rendición del ministerio (botón Anular).');
       if (!esAdmin(user) && (mov.categoria === SALDO_INICIAL || transferenciaDeMov(mov.id))) {
@@ -431,11 +434,15 @@ var TesoCore = (function () {
       return update('MovimientosMinisterios', mov.id, Object.assign(d, { mes: mes, archivoId: archivoId, actualizadoEn: env.now(), actividadId: actividadId }));
     }
     function deleteMovMinisterio(user, p) {
-      var mov = movMinisterioPropio(user, p.id);
+      var mov = movMinisterioPropio(user, p.id, true);
       exigirEditable(user, mov.ministerioId, mov.mes);
       var t = transferenciaDeMov(mov.id);
       borrarArchivo(mov.archivoId);
       remove('MovimientosMinisterios', mov.id);
+      // cuota borrada: la inscripción queda pendiente de pago
+      if (mov.origen === 'cuota' && mov.refId && find('Inscripciones', mov.refId)) {
+        update('Inscripciones', mov.refId, { pagoMonto: 0, fechaPago: '', movId: '', actualizadoEn: env.now() });
+      }
       // Un ítem importado borrado deja de contar como transferido (se puede volver a transferir)
       if (t) remove('Transferencias', t.id);
       return { id: mov.id };
@@ -447,12 +454,14 @@ var TesoCore = (function () {
         .map(function (m) { return { id: m.id, nombre: m.nombre }; });
     }
     // Un integrante enlazado a un miembro toma sus datos de la ficha de Miembros (no se registra dos veces)
-    function vistaIntegrantes(lista) {
+    // soloNombre: para el líder, que no debe recibir contacto ni fecha de nacimiento de la ficha de Miembros
+    function vistaIntegrantes(lista, soloNombre) {
       var mb = {};
       all('Miembros').forEach(function (m) { mb[m.id] = m; });
       return lista.map(function (i) {
         var m = i.miembroId && mb[i.miembroId];
         if (!m) return Object.assign({}, i, { esMiembro: false });
+        if (soloNombre) return Object.assign({}, i, { nombre: m.nombre, esMiembro: true });
         return Object.assign({}, i, {
           nombre: m.nombre, celular: m.celular || i.celular, email: m.email || i.email,
           fechaNacimiento: m.fechaNacimiento || i.fechaNacimiento, esMiembro: true
@@ -460,14 +469,15 @@ var TesoCore = (function () {
       });
     }
     function nombreIntegrante(it) { return vistaIntegrantes([it])[0].nombre; }
-    function ministerioConActividades(user, mid) {
+    // aunqueDesactivado: para deshacer pagos de un ministerio al que se le quitó el listado (no se crean cosas nuevas)
+    function ministerioConActividades(user, mid, aunqueDesactivado) {
       if (!esAdmin(user)) {
         if (!user.ministerioId) throw TesoError('Tu usuario no tiene un ministerio asignado. Habla con el tesorero.');
         if (mid && mid !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
         mid = user.ministerioId;
       }
       var m = getMinisterio(mid);
-      if (m.actividades !== 'si') throw TesoError('Este ministerio no tiene habilitado el listado de integrantes y actividades. Se activa en Configuración → Ministerios.');
+      if (m.actividades !== 'si' && !aunqueDesactivado) throw TesoError('Este ministerio no tiene habilitado el listado de integrantes y actividades. Se activa en Configuración → Ministerios.');
       return m;
     }
     function actividadValida(mid, aid) {
@@ -481,16 +491,24 @@ var TesoCore = (function () {
       var actual = p.id ? find('Integrantes', p.id) : null;
       if (p.id && !actual) throw TesoError('Integrante no encontrado');
       var m = ministerioConActividades(user, actual ? actual.ministerioId : p.ministerioId);
-      var miembroId = String(p.miembroId || '');
+      // Solo quien ve el registro de Miembros (tesorería) puede enlazar a un integrante con su ficha;
+      // el líder conserva el enlace que ya tenía
+      var admin = esAdmin(user);
+      var miembroId = admin ? String(p.miembroId || '') : (actual ? String(actual.miembroId || '') : '');
       var mb = null;
       if (miembroId) {
         mb = find('Miembros', miembroId);
-        if (!mb) throw TesoError('Ese miembro no está en el registro de la iglesia');
+        // ficha eliminada: el integrante queda sin enlace en vez de bloquearse
+        if (!mb && actual && miembroId === actual.miembroId) miembroId = '';
+        else if (!mb) throw TesoError('Ese miembro no está en el registro de la iglesia');
+      }
+      if (mb) {
         var dup = all('Integrantes').some(function (i) { return i.ministerioId === m.id && i.miembroId === miembroId && (!actual || i.id !== actual.id); });
         if (dup) throw TesoError(mb.nombre + ' ya está en el listado');
       }
       var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim();
       if (!nombre && mb) nombre = mb.nombre;
+      if (!nombre && actual) nombre = actual.nombre;
       if (!nombre) throw TesoError('Escribe el nombre');
       if (nombre.length > 80) throw TesoError('El nombre es demasiado largo');
       var fn = String(p.fechaNacimiento || '').trim();
@@ -504,7 +522,7 @@ var TesoCore = (function () {
         activo: p.activo === undefined ? (actual ? actual.activo : true) : toBool(p.activo), actualizadoEn: now
       };
       var r = actual ? update('Integrantes', actual.id, d) : insert('Integrantes', Object.assign(d, { id: uid(), creadoEn: now }));
-      return vistaIntegrantes([r])[0];
+      return vistaIntegrantes([r], !admin)[0];
     }
     function deleteIntegrante(user, p) {
       var it = find('Integrantes', p.id);
@@ -516,10 +534,10 @@ var TesoCore = (function () {
       remove('Integrantes', it.id);
       return { id: it.id };
     }
-    function actividadDe(user, id) {
+    function actividadDe(user, id, aunqueDesactivado) {
       var a = find('Actividades', id);
       if (!a) throw TesoError('Actividad no encontrada');
-      ministerioConActividades(user, a.ministerioId);
+      ministerioConActividades(user, a.ministerioId, aunqueDesactivado);
       return a;
     }
     function saveActividad(user, p) {
@@ -530,6 +548,9 @@ var TesoCore = (function () {
       if (!nombre) throw TesoError('Escribe el nombre de la actividad');
       if (nombre.length > 80) throw TesoError('El nombre es demasiado largo');
       if (!isDate(p.fecha) || p.fecha < '2000-01-01') throw TesoError('Fecha de la actividad inválida');
+      // hasta dos años hacia adelante (evita fechas como el año 9999)
+      var tope = (Number(env.today().slice(0, 4)) + 2) + env.today().slice(4);
+      if (p.fecha > tope) throw TesoError('La fecha de la actividad es demasiado lejana (máximo dos años hacia adelante)');
       var cuota = Math.round(Number(p.cuota) || 0);
       if (cuota < 0 || cuota > MAX_MONTO) throw TesoError('Cuota inválida');
       var now = env.now();
@@ -557,12 +578,13 @@ var TesoCore = (function () {
       all('Integrantes').forEach(function (i) { if (i.ministerioId === a.ministerioId) integ[i.id] = i; });
       Object.keys(ids).forEach(function (id) { if (!integ[id]) throw TesoError('Integrante no encontrado en el listado'); });
       var existentes = all('Inscripciones').filter(function (x) { return x.actividadId === a.id; });
+      // Primero se valida todo: si alguien que ya pagó quedaría fuera, no se cambia nada
+      var pagadoFuera = existentes.filter(function (x) { return !ids[x.integranteId] && x.movId; })[0];
+      if (pagadoFuera) throw TesoError(nombreIntegrante(integ[pagadoFuera.integranteId] || { nombre: 'Un integrante' }) + ' ya pagó su cuota: anula el pago antes de quitarlo de la actividad.');
       var ya = {};
       existentes.forEach(function (x) {
         ya[x.integranteId] = 1;
-        if (ids[x.integranteId]) return;
-        if (x.movId) throw TesoError(nombreIntegrante(integ[x.integranteId] || { nombre: 'Un integrante' }) + ' ya pagó su cuota: anula el pago antes de quitarlo de la actividad.');
-        remove('Inscripciones', x.id);
+        if (!ids[x.integranteId]) remove('Inscripciones', x.id);
       });
       var now = env.now();
       var nuevos = Object.keys(ids).filter(function (id) { return !ya[id]; }).map(function (id) {
@@ -592,7 +614,7 @@ var TesoCore = (function () {
     function anularPagoCuota(user, p) {
       var ins = find('Inscripciones', p.inscripcionId);
       if (!ins) throw TesoError('Inscripción no encontrada');
-      var a = actividadDe(user, ins.actividadId);
+      var a = actividadDe(user, ins.actividadId, true);
       if (!ins.movId) throw TesoError('Esta inscripción no tiene un pago registrado');
       var mov = find('MovimientosMinisterios', ins.movId);
       if (mov) {
@@ -946,6 +968,11 @@ var TesoCore = (function () {
         throw TesoError(esAdmin(user) ? 'Este miembro tiene diezmos registrados. Márcalo como inactivo en vez de eliminarlo.' : 'Este miembro no se puede eliminar. Márcalo como inactivo.');
       }
       if (mb.conyugeId) { var c = find('Miembros', mb.conyugeId); if (c && c.conyugeId === mb.id) update('Miembros', c.id, { conyugeId: '' }); }
+      // Los integrantes de ministerios enlazados a esta ficha quedan como no miembros con su nombre
+      // (el contacto de la ficha no se copia: el líder no debe recibir datos del registro de Miembros)
+      all('Integrantes').forEach(function (i) {
+        if (i.miembroId === mb.id) update('Integrantes', i.id, { miembroId: '', nombre: mb.nombre, actualizadoEn: env.now() });
+      });
       remove('Miembros', mb.id);
       return { id: mb.id };
     }

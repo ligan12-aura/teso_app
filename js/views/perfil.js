@@ -12,7 +12,7 @@ export function render(root, ctx) {
       <h3>${esc(u.nombre)}</h3>
       <p class="muted">@${esc(u.usuario)} · ${ROL_LABEL[u.rol] || ''}</p>
       ${min ? `<span class="badge" style="background:${min.color}22;color:${min.color}">${esc(min.icono)} ${esc(min.nombre)}</span>` : ''}
-      <div class="note" style="margin-top:18px;text-align:left">${icon('lock', 16)} ${{ tesorero: 'Tienes acceso completo a la tesorería y a todos los ministerios.', pastor: 'Tienes acceso completo a la tesorería, los ministerios, los diezmos y los miembros.', secretaria: 'Puedes agregar y editar los datos de los miembros de la iglesia. La información financiera es visible solo para tesorería.' }[u.rol] || 'Solo puedes ver y registrar movimientos de tu ministerio. La información general de la iglesia es visible solo para tesorería.'}</div>
+      <div class="note" style="margin-top:18px;text-align:left">${icon('lock', 16)} ${{ admin: 'Eres administrador: tienes permiso para todo, incluidos usuarios, configuración, diezmos, miembros y las actividades de los ministerios.', tesorero: 'Tienes acceso completo a la tesorería y a todos los ministerios.', pastor: 'Tienes acceso completo a la tesorería, los ministerios, los diezmos y los miembros.', secretaria: 'Puedes agregar y editar los datos de los miembros de la iglesia. La información financiera es visible solo para tesorería.' }[u.rol] || 'Solo puedes ver y registrar movimientos de tu ministerio. La información general de la iglesia es visible solo para tesorería.'}</div>
     </article>
     <article class="card">
       <header class="card-head"><div><h3>Cambiar contraseña</h3></div></header>

@@ -1,6 +1,7 @@
 // Listado de integrantes (p. ej. jóvenes) y actividades con cuota de un ministerio.
 // Lo usa el líder del ministerio y también tesorería/administración.
-import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, mesLargo } from '../ui.js';
+import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, mesLargo, esAdmin } from '../ui.js';
+import { rendicionDe } from '../calc.js';
 import { call } from '../api.js';
 import { abrirFormMovimiento } from './movform.js';
 import { edad } from './miembros.js';
@@ -118,19 +119,24 @@ function renderIntegrantes(root, ctx, m, base, esTes) {
 
 function editarIntegrante(ctx, m, it = null) {
   const { data } = ctx;
+  // Solo tesorería (quien ve el registro de Miembros) enlaza a un integrante con su ficha
+  const puedeEnlazar = esAdmin(ctx.user);
   const enlazados = new Set(integrantesDe(data, m.id).filter((i) => i.miembroId && i.id !== it?.id).map((i) => i.miembroId));
   const opciones = (data.miembrosEnlace || []).filter((x) => !enlazados.has(x.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   // si su ficha de miembro ya no está activa, igual se muestra la opción actual
-  if (it?.miembroId && !opciones.some((x) => x.id === it.miembroId)) opciones.unshift({ id: it.miembroId, nombre: it.nombre });
+  if (it?.esMiembro && it.miembroId && !opciones.some((x) => x.id === it.miembroId)) opciones.unshift({ id: it.miembroId, nombre: it.nombre });
+  const enlazado = !!it?.esMiembro;
   return modal({
     title: it ? `Ficha · ${esc(it.nombre)}` : `Agregar ${singular(m)}`,
     body: `
-      <label class="field"><span>¿Es miembro de la iglesia?</span>
-        <select name="miembroId"><option value="">No es miembro (sin bautizar u otra iglesia)</option>${opciones.map((x) => `<option value="${x.id}" ${x.id === it?.miembroId ? 'selected' : ''}>Sí · ${esc(x.nombre)}</option>`).join('')}</select>
-        <small class="hint">Si es miembro, elígelo: sus datos se toman de su ficha en Miembros y no se registra dos veces.</small></label>
-      <div class="note" data-nota-miembro hidden>${icon('church', 16)}<span>Nombre, contacto y fecha de nacimiento se toman de la ficha de Miembros (los actualiza secretaría o tesorería).</span></div>
+      ${puedeEnlazar ? `<label class="field"><span>¿Es miembro de la iglesia?</span>
+        <select name="miembroId"><option value="">No es miembro (sin bautizar u otra iglesia)</option>${opciones.map((x) => `<option value="${x.id}" ${enlazado && x.id === it?.miembroId ? 'selected' : ''}>Sí · ${esc(x.nombre)}</option>`).join('')}</select>
+        <small class="hint">Si es miembro, elígelo: sus datos se toman de su ficha en Miembros y no se registra dos veces.</small></label>`
+        : `<input type="hidden" name="miembroId" value="${enlazado ? esc(it.miembroId) : ''}">${!it ? `<p class="muted small">Si es miembro de la iglesia, pídele al tesorero que lo enlace a su ficha de Miembros.</p>` : ''}`}
+      <div class="note" data-nota-miembro hidden>${icon('church', 16)}<span>${puedeEnlazar ? 'Nombre, contacto y fecha de nacimiento se toman de la ficha de Miembros (los actualiza secretaría o tesorería).' : 'Está enlazado a su ficha de Miembros: sus datos personales los administra secretaría o tesorería.'}</span></div>
       <div data-propios>
         <label class="field"><span>Nombre y apellidos</span><input name="nombre" maxlength="80" value="${esc(it && !it.esMiembro ? it.nombre : '')}"></label>
+        ${it && !it.esMiembro && it.miembroId ? '<p class="muted small">Su ficha de Miembros ya no existe: quedó como no miembro.</p>' : ''}
         <div class="form-row">
           <label class="field"><span>Celular</span><input name="celular" inputmode="tel" placeholder="+56 9 1234 5678" value="${esc(it && !it.esMiembro ? it.celular : '')}"></label>
           <label class="field"><span>Fecha de nacimiento</span><input type="date" name="fechaNacimiento" max="${data.hoy}" value="${esc(it && !it.esMiembro ? it.fechaNacimiento : '')}"></label>
@@ -147,7 +153,8 @@ function editarIntegrante(ctx, m, it = null) {
         f.querySelector('[data-propios]').hidden = es;
         f.querySelector('[data-nota-miembro]').hidden = !es;
       };
-      f.miembroId.addEventListener('change', sync); sync();
+      if (puedeEnlazar) f.miembroId.addEventListener('change', sync);
+      sync();
       f.querySelector('[data-borrar]')?.addEventListener('click', async () => {
         close(null);
         if (!(await confirmar(`¿Eliminar a <b>${esc(it.nombre)}</b> del listado? Si ya no participa, es mejor dejarlo inactivo.`, { boton: 'Eliminar', danger: true }))) return;
@@ -240,6 +247,9 @@ function renderActividad(root, ctx, m, base, esTes, aid) {
   const cuotasMovs = r.movs.filter((x) => x.origen === 'cuota');
   const otros = r.movs.filter((x) => x.origen !== 'cuota').sort((x, y) => (y.fecha + y.creadoEn).localeCompare(x.fecha + x.creadoEn));
   const lbl = etiquetaIntegrantes(m).toLowerCase();
+  // Para el líder, los meses con rendición enviada o aprobada quedan cerrados (igual que en Finanzas)
+  const mesAbierto = (mes) => esTes || ['abierta', 'observada'].includes(rendicionDe(data, m.id, mes)?.estado || 'abierta');
+  const hoyAbierto = mesAbierto(data.hoy.slice(0, 7));
 
   root.innerHTML = `
   ${cabecera(m, base, esTes, 'actividades', esc(a.nombre), `
@@ -261,22 +271,23 @@ function renderActividad(root, ctx, m, base, esTes, aid) {
         const i = integ[x.integranteId];
         return `<li>
           <div><b>${esc(i?.nombre || '—')}</b>${i?.esMiembro ? ' <span class="tag tag-verde">Miembro</span>' : ''}${i?.celular ? `<br><small class="muted">${esc(i.celular)}</small>` : ''}</div>
-          ${x.movId ? `<div class="ins-pago"><span class="badge st-ok">${icon('check', 13)} Pagó ${money(x.pagoMonto)}</span><small class="muted">${fecha(x.fechaPago)}</small><button class="link-btn" data-anular="${x.id}">Anular</button></div>`
-            : `<div class="ins-pago"><span class="badge st-obs">Pendiente</span><button class="btn btn-soft-green btn-sm" data-pagar="${x.id}">${icon('down', 15)} Registrar pago</button></div>`}
+          ${x.movId ? `<div class="ins-pago"><span class="badge st-ok">${icon('check', 13)} Pagó ${money(x.pagoMonto)}</span><small class="muted">${fecha(x.fechaPago)}</small>${mesAbierto(x.fechaPago.slice(0, 7)) ? `<button class="link-btn" data-anular="${x.id}">Anular</button>` : `<small class="muted" title="La rendición de ese mes ya fue enviada">${icon('lock', 12)} mes cerrado</small>`}</div>`
+            : `<div class="ins-pago"><span class="badge st-obs">Pendiente</span>${hoyAbierto ? `<button class="btn btn-soft-green btn-sm" data-pagar="${x.id}">${icon('down', 15)} Registrar pago</button>` : ''}</div>`}
         </li>`;
       }).join('')}</ul>` : emptyState(`Aún no hay confirmados. Usa <b>Elegir confirmados</b> para marcarlos desde el listado de ${lbl}.`, 'users')}
     </article>
 
     <article class="card">
       <header class="card-head wrap"><div><h3>Entradas y salidas</h3><p class="muted">Todo queda también en las finanzas del ministerio</p></div>
-        <div class="head-actions"><button class="btn btn-primary btn-sm" data-mov="gasto">${icon('camera', 15)} Gasto</button><button class="btn btn-soft-green btn-sm" data-mov="ingreso">${icon('plus', 15)} Otro ingreso</button></div></header>
+        ${hoyAbierto ? `<div class="head-actions"><button class="btn btn-primary btn-sm" data-mov="gasto">${icon('camera', 15)} Gasto</button><button class="btn btn-soft-green btn-sm" data-mov="ingreso">${icon('plus', 15)} Otro ingreso</button></div>` : ''}</header>
+      ${hoyAbierto ? '' : `<div class="note">${icon('lock', 16)}<span>La rendición de ${mesLargo(data.hoy.slice(0, 7))} ya fue enviada: no se pueden registrar pagos ni gastos hasta que el tesorero la observe o comience el mes siguiente.</span></div>`}
       <ul class="mov-list">
         ${cuotasMovs.length ? `<li><span class="ml-ico ingreso">${icon('users', 16)}</span><div class="ml-main"><strong>Cuotas pagadas</strong><span>${cuotasMovs.length} pago${cuotasMovs.length > 1 ? 's' : ''}</span></div><div class="ml-right"><b class="ingreso">+${money(r.cuotas)}</b></div></li>` : ''}
         ${otros.map((x) => `<li>
           <span class="ml-ico ${x.tipo}">${icon(x.tipo === 'ingreso' ? 'down' : 'up', 16)}</span>
           <div class="ml-main"><strong>${esc(x.descripcion || x.categoria)}</strong><span>${esc(x.categoria)} · ${fecha(x.fecha)}</span></div>
           <div class="ml-right"><b class="${x.tipo}">${x.tipo === 'ingreso' ? '+' : '−'}${money(x.monto)}</b>
-            <div class="ml-actions">${x.tipo === 'gasto' && !x.archivoId ? `<span class="chip-warn">${icon('alert', 13)} Sin boleta</span>` : ''}<button class="icon-btn sm" data-edit="${x.id}" title="Editar">${icon('edit', 15)}</button><button class="icon-btn sm danger" data-del="${x.id}" title="Eliminar">${icon('trash', 15)}</button></div></div>
+            <div class="ml-actions">${x.tipo === 'gasto' && !x.archivoId ? `<span class="chip-warn">${icon('alert', 13)} Sin boleta</span>` : ''}${mesAbierto(x.mes) ? `<button class="icon-btn sm" data-edit="${x.id}" title="Editar">${icon('edit', 15)}</button><button class="icon-btn sm danger" data-del="${x.id}" title="Eliminar">${icon('trash', 15)}</button>` : ''}</div></div>
         </li>`).join('')}
       </ul>
       ${!r.movs.length ? emptyState('Sin entradas ni salidas todavía', 'receipt') : ''}
@@ -300,7 +311,7 @@ function renderActividad(root, ctx, m, base, esTes, aid) {
   root.querySelector('[data-confirmar]').addEventListener('click', () => elegirConfirmados(ctx, m, a, r));
   root.querySelectorAll('[data-pagar]').forEach((b) => b.addEventListener('click', () => {
     const x = r.ins.find((y) => y.id === b.dataset.pagar);
-    registrarPago(ctx, a, x, integ[x.integranteId]);
+    registrarPago(ctx, a, x, integ[x.integranteId], mesAbierto);
   }));
   root.querySelectorAll('[data-anular]').forEach((b) => b.addEventListener('click', async () => {
     const x = r.ins.find((y) => y.id === b.dataset.anular);
@@ -356,7 +367,7 @@ function elegirConfirmados(ctx, m, a, r) {
   });
 }
 
-function registrarPago(ctx, a, ins, it) {
+function registrarPago(ctx, a, ins, it, mesAbierto = () => true) {
   return modal({
     title: `Pago de cuota · ${esc(it?.nombre || '')}`,
     body: `
@@ -371,6 +382,7 @@ function registrarPago(ctx, a, ins, it) {
       const d = formData(f);
       const monto = pesos(d.monto);
       if (!monto) throw new Error('Ingresa el monto');
+      if (d.fecha && !mesAbierto(d.fecha.slice(0, 7))) throw new Error(`La rendición de ${mesLargo(d.fecha.slice(0, 7))} ya fue enviada: elige una fecha de un mes abierto.`);
       await call('registrarPagoCuota', { inscripcionId: ins.id, monto, fecha: d.fecha });
       toast(`Pago registrado en ${mesLargo(d.fecha.slice(0, 7))}`);
       await ctx.refresh();

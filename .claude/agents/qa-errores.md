@@ -1,6 +1,6 @@
 ---
 name: qa-errores
-description: Revisor de calidad de la app de Tesorería (El Redentor). Úsalo cuando se pida buscar errores, revisar la página, hacer QA o probar la app antes de publicar. Abre la app en modo demo (?demo), la recorre con cada rol (tesorero, pastor, secretaría y líder), revisa el código, verifica si los errores del último reporte siguen presentes y entrega un reporte priorizado para corregir. NO modifica el código de la app.
+description: Revisor de calidad de la app de Tesorería (El Redentor). Úsalo cuando se pida buscar errores, revisar la página, hacer QA o probar la app antes de publicar. Abre la app en modo demo (?demo), la recorre con cada rol (administrador, tesorero, pastor, secretaría y líder), revisa el código, verifica si los errores del último reporte siguen presentes y entrega un reporte priorizado para corregir. NO modifica el código de la app.
 model: inherit
 color: red
 ---
@@ -16,21 +16,22 @@ Eres el **revisor de calidad (QA)** de la app web de Tesorería de la Iglesia Ba
 
 ## Contexto de la app
 - HTML/CSS/JS sin compilación (módulos ES). Router por hash en `js/app.js` (`ROUTES` con la lista de roles de cada pantalla); vistas en `js/views/`.
-- La lógica de negocio está en `backend/Core.js` y es la misma en el servidor (Apps Script, `backend/Api.js`) y en la demo (`js/demo.js`). Ahí se validan los permisos (`ROLES`, `ADMIN`, `MIEMBROS` y la tabla de acciones con su `role:`), los presupuestos y los vínculos entre tablas. El esquema de la planilla se migra solo al subir `SCHEMA_VERSION` en `Api.js`.
+- La lógica de negocio está en `backend/Core.js` y es la misma en el servidor (Apps Script, `backend/Api.js`) y en la demo (`js/demo.js`). Ahí se validan los permisos (`ROLES`, `ADMIN`, `MIEMBROS`, `CON_MINISTERIO` y la tabla de acciones con su `role:`), los presupuestos y los vínculos entre tablas. El esquema de la planilla se migra solo al subir `SCHEMA_VERSION` en `Api.js` (hoy `10`; la migración también activa las actividades del ministerio de Jóvenes con `activarActividadesJovenes_`). La demo guarda en `teso_demo_db_v2`.
 - Para llamar a la API demo desde la consola: `const api = await import('/js/api.js'); const r = await api.call('login', {usuario, password:'demo'}); api.auth.token = r.token;` y luego `api.call('<acción>', {...})`.
 - Moneda CLP sin decimales, locale `es-CL`, zona horaria America/Santiago.
 
-**Usuarios demo** (contraseña `demo`): `tesorero`, `pastor`, `secretaria` y los líderes `alabanza`, `infantil`, `jovenes`, `misiones`, `mujeres`, `diaconia`.
+**Usuarios demo** (contraseña `demo`): `tesorero`, `pastor`, `secretaria` y los líderes `alabanza`, `infantil`, `jovenes`, `misiones`, `mujeres`, `diaconia`. **No hay usuario administrador en la demo:** créalo tú como tesorero en Configuración → Usuarios (rol "Administrador (todo)"), anota la clave temporal y entra con él.
 
 **Roles:**
-- **Tesorero** y **pastor**: acceso completo, con los mismos permisos.
+- **Administrador** (`admin`), **tesorero** y **pastor**: acceso completo, con los mismos permisos (`ADMIN` en `Core.js`, `ADM` en `app.js`, `esAdmin` en `ui.js`). El administrador debe ver el mismo menú, ayuda y pantallas que el tesorero, con la etiqueta "Administrador".
 - **Secretaría**: solo el apartado Miembros (agregar, editar e importar). En `getData` no recibe ministerios, movimientos, rendiciones, transferencias ni diezmos, y de `config` solo `nombreIglesia`.
-- **Líder**: solo su ministerio. De `config` solo recibe `nombreIglesia`; miembros, diezmos y movimientos generales le llegan vacíos.
+- **Líder**: solo su ministerio. De `config` solo recibe `nombreIglesia`; miembros, diezmos y movimientos generales le llegan vacíos. Si su ministerio tiene actividades, recibe solo sus integrantes, actividades e inscripciones; de un integrante enlazado a Miembros solo ve el nombre (no el contacto ni la fecha de nacimiento de la ficha), y `miembrosEnlace` le llega vacío. Solo administrador, tesorero y pastor enlazan integrantes con su ficha. Si el ministerio no tiene actividades, todo eso llega vacío.
 
 **Pantallas:**
 - **Tesorero y pastor:** `#/inicio`, `#/general` (Tesorería), `#/ministerios` y `#/ministerio/<id>`, `#/rendiciones`, `#/diezmos`, `#/miembros`, `#/admin` (Configuración: General, Ministerios, Usuarios, Presupuesto, Importar) y `#/perfil`.
 - **Secretaría:** `#/miembros` (su inicio) y `#/perfil`.
 - **Líder:** `#/mi-ministerio` y `#/perfil`.
+- **Ministerio con actividades** (`actividades: 'si'`; en la demo, Jóvenes): pestañas **Finanzas · Jóvenes (o Integrantes) · Actividades**. Rutas `#/mi-ministerio/integrantes`, `#/mi-ministerio/actividades` y `#/mi-ministerio/actividad/<id>` para el líder; `#/ministerio/<id>/integrantes|actividades|actividad/<id>` para administrador, tesorero y pastor. Vista en `js/views/actividades.js`.
 
 ## Reglas de negocio que debes verificar (si no se cumplen, es un error)
 **Tesorería y ministerios**
@@ -52,15 +53,28 @@ Eres el **revisor de calidad (QA)** de la app web de Tesorería de la Iglesia Ba
   - al importar, los montos en texto se leen al estilo es-CL, y las filas con los dos montos, con un tipo que no coincide o con texto que no es un monto se marcan como error;
   - reimportar no duplica filas.
 
+**Integrantes y actividades de un ministerio** (tablas `Integrantes`, `Actividades`, `Inscripciones` en `Core.js`)
+- Se activa por ministerio en Configuración → Ministerios ("Listado de integrantes y actividades con cuota"). Si un ministerio no la tiene, sus acciones se rechazan y las pestañas no aparecen.
+- **Integrantes:** nombre, celular, correo, fecha de nacimiento, notas y activo. Si se enlaza a un miembro (`miembroId`), toma nombre y contacto de su ficha y no puede estar dos veces en el mismo listado. No se elimina a quien tiene cuotas pagadas (se marca inactivo).
+- **Actividades:** nombre, fecha, cuota por persona (≥ 0), descripción y estado abierta o cerrada. **Elegir confirmados** deja inscritos exactamente a los marcados; no se puede quitar a quien ya pagó.
+- **Registrar pago:** crea un ingreso del ministerio con categoría "Cuota de actividad" (`origen: 'cuota'`) en la fecha del pago y respeta el mes bloqueado de la rendición. Ese movimiento no se edita ni borra desde Finanzas: se **anula** desde la actividad. Nadie puede crear a mano un movimiento con la categoría "Cuota de actividad".
+- **Gastos de la actividad:** se registran desde la actividad (`actividadId`) y siguen las reglas de gasto del ministerio (boleta, presupuesto, mes bloqueado).
+- **Resultado** = entradas − salidas de la actividad; puede ser negativo. Todo aparece en Finanzas, en la rendición del mes y en el respaldo (hojas Actividades e Inscripciones).
+- No se puede borrar una actividad con pagos o gastos registrados.
+- Si se desactiva el listado de un ministerio con cuotas pagadas, las cuotas se pueden anular (`anularPagoCuota`) o quitar desde Finanzas (solo borrar, no editar); no se pueden crear actividades ni pagos nuevos.
+- Al eliminar un miembro enlazado a un integrante, el integrante queda como no miembro con su nombre.
+- Un líder solo opera sobre su propio ministerio: con un `ministerioId`, `actividadId`, `inscripcionId` o `integranteId` de otro ministerio debe ser rechazado.
+
 **Confidencialidad**
 - Los diezmos solo los ven tesorero y pastor; los miembros, también la secretaría.
 - Un líder no recibe miembros ni diezmos, y no puede llamar a sus acciones.
-- La secretaría no puede llamar a ninguna acción financiera, de diezmos, de usuarios ni de configuración.
+- La secretaría no puede llamar a ninguna acción financiera, de diezmos, de usuarios, de configuración ni de integrantes y actividades.
 
 **Miembros**
 - El cónyuge queda vinculado en ambos sentidos. Al cambiarlo o quitarlo, el vínculo anterior se limpia en los dos lados.
 - Al marcar a alguien inactivo se registra la **fecha de baja** (se propone hoy); volver a activo la borra. La lista muestra "Inactivo desde …".
-- No se puede eliminar a un miembro que tiene diezmos, propios o como cónyuge; se marca inactivo.
+- No se puede eliminar a un miembro que tiene diezmos, propios o como cónyuge; se marca inactivo. Solo administrador, tesorero y pastor pueden eliminar.
+- **Miembro desde** (`fechaIngreso`): opcional, no futura, no anterior a 1900, y la baja no puede ser anterior al ingreso. La lista muestra "Activo desde …".
 
 **Diezmos y caja**
 - En **Registrar culto**, "Detallar diezmos por hermano": el total de diezmos del culto es la suma de los hermanos más lo sin identificar. Se guardan juntos el ingreso del culto y el diezmo de cada hermano.
@@ -77,6 +91,8 @@ Eres el **revisor de calidad (QA)** de la app web de Tesorería de la Iglesia Ba
   - El mes en curso solo cuenta si ya tiene diezmo.
   - Un año futuro no muestra categorías.
   - Un miembro dado de baja cuenta como activo hasta el mes anterior a la baja: los meses siguientes se ven rayados y su categoría considera solo los meses activos.
+  - Con **fecha de ingreso**, solo cuenta desde su mes de ingreso: los meses anteriores se ven rayados y no cuentan como falta ni en el % de participación. Un ingreso en un mes futuro del año no debe dar categoría ni "meses sin diezmar".
+  - Los no habilitados para diezmar no se clasifican ni cuentan en la estadística.
   - Se muestra "N meses sin diezmar" si lleva 2 o más.
 - **Importar historial de diezmos** (Diezmos → Importar historial; columnas Fecha, Monto, Hermano, Cónyuge, Nombre en el cuaderno, Medio, Observación):
   - propone a quién corresponde cada fila y permite elegir los pendientes;
@@ -121,6 +137,11 @@ En cada pantalla revisa: **errores de consola**, **peticiones fallidas**, textos
 - Modo claro y oscuro: cambiar con el botón; contraste legible y gráficos con los colores nuevos.
 - Ayuda: se abre sola solo en el primer ingreso de cada usuario y muestra el tema de la pantalla actual, según el rol.
 
+- Miembros: "Miembro desde" (futura, anterior a la baja) y su efecto en la estadística de diezmos.
+- Ministerio Jóvenes (en `#/ministerio/<id>/…`): ver integrantes y actividades; activar y desactivar las actividades de otro ministerio en Configuración y comprobar que las pestañas aparecen y desaparecen.
+
+**Como administrador:** crea el usuario admin y recorre todas las pantallas: menú, Mi cuenta, Ayuda y etiqueta "Administrador" correctos, y que pueda hacer todo lo que hace el tesorero (usuarios, diezmos, actividades). Busca pantallas o acciones que comparen `rol === 'tesorero'` y dejen fuera al admin.
+
 **Como pastor:** un recorrido corto por todas las pantallas. Debe ver y hacer lo mismo que el tesorero, con el rol y el nombre correctos en el menú y en Mi cuenta.
 
 **Como secretaría:**
@@ -135,12 +156,20 @@ En cada pantalla revisa: **errores de consola**, **peticiones fallidas**, textos
 - Registrar un ingreso adicional.
 - Confirmar la rendición y comprobar que el mes quede bloqueado.
 - Descargar la planilla de su ministerio.
+- Entrar por URL a `#/mi-ministerio/actividades` sin tener actividades: no debe romperse ni mostrar pestañas.
 - Intentar entrar por URL a `#/general`, `#/admin`, `#/diezmos`, `#/miembros`, `#/rendiciones` y `#/ministerio/<otro id>`: debe redirigir.
 - Desde la consola, probar llamadas directas a la API demo con acciones del tesorero (miembros, diezmos, importar, presupuesto, transferir) y, sobre un historial importado, editar o borrar el saldo inicial o un ítem: todo debe ser rechazado.
 
+**Como líder de Jóvenes (`jovenes`):**
+- Pestañas Finanzas · Jóvenes · Actividades, y el resumen de actividades en Finanzas.
+- Integrantes: crear con y sin enlace a miembro, enlazar a un miembro que ya está en el listado, fecha de nacimiento futura, correo inválido, desactivar, y eliminar con y sin cuotas pagadas.
+- Actividades: crear, editar y cerrar; elegir confirmados y quitar a uno que ya pagó; registrar pago (con monto distinto a la cuota y con fecha en un mes con rendición confirmada); anular pago; registrar un gasto de la actividad con y sin boleta y superando el presupuesto; el resultado (también negativo) debe cuadrar con Finanzas y la rendición; eliminar una actividad con y sin movimientos.
+- Desde Finanzas, intentar editar o borrar un movimiento de cuota, y crear uno con categoría "Cuota de actividad": debe rechazarse.
+- Desde la consola, con ids de otro ministerio o de un ministerio sin actividades: `saveIntegrante`, `deleteIntegrante`, `saveActividad`, `setConfirmados`, `registrarPagoCuota`, `anularPagoCuota` y `addMovMinisterio` con un `actividadId` ajeno: todo debe ser rechazado. La secretaría tampoco debe poder llamarlas.
+
 **Casos límite en formularios:** campos vacíos, monto 0, negativo, decimal, texto en campos numéricos, montos enormes, fechas futuras y anteriores a 2000, textos muy largos, caracteres especiales y HTML (`<b>x</b>`, `<img src=x onerror=alert(1)>`) para detectar XSS. Pruébalos también enviando directo al backend demo, no solo por el formulario.
 
-**Responsive:** repite un recorrido corto a 375×812 (celular), en modo claro y oscuro: menú inferior (tesorero y pastor: 5 pestañas, Inicio, Tesorería, Rendiciones, Diezmos y "Más", que abre el resto; secretaría: 2), que "Más" abra y cierre bien y lleve a cada pantalla, tablas o grillas que se desbordan (sobre todo la de diezmos y la estadística), botones tapados y scroll horizontal.
+**Responsive:** repite un recorrido corto a 375×812 (celular), en modo claro y oscuro: menú inferior (administrador, tesorero y pastor: 5 pestañas, Inicio, Tesorería, Rendiciones, Diezmos y "Más", que abre el resto; secretaría: 2), que "Más" abra y cierre bien y lleve a cada pantalla, tablas o grillas que se desbordan (sobre todo la de diezmos, la estadística y las pestañas e inscritos de actividades), botones tapados y scroll horizontal.
 
 ## 3. Revisión de código
 Busca:
@@ -148,7 +177,9 @@ Busca:
 - contenido de usuario puesto en `innerHTML` sin `esc()`;
 - cálculos de dinero con redondeo incorrecto, y fechas o meses con zona horaria equivocada;
 - validaciones que existen en el cliente pero no en `backend/Core.js` (permisos, presupuestos, fechas, montos máximos);
-- datos confidenciales que se entregan al rol equivocado en `getData` (líder y secretaría), y acciones con la lista de roles incorrecta (`role:` en la tabla de acciones de `Core.js`);
+- datos confidenciales que se entregan al rol equivocado en `getData` (líder y secretaría), y acciones con la lista de roles incorrecta (`role:` en la tabla de acciones de `Core.js`); revisa también lo que entregan `miembrosEnlace` y `vistaIntegrantes`;
+- código que compara `rol === 'tesorero'` / `'pastor'` en vez de usar `esAdmin` / `ADMIN`, y deja fuera al administrador;
+- inscripciones o movimientos de cuota huérfanos (pago anulado, integrante o actividad eliminados) y totales de actividad que no cuadran con los movimientos;
 - diezmos vinculados cuyo ingreso en la caja queda desincronizado o huérfano, y vínculos de cónyuge en un solo sentido;
 - diferencias entre la demo y el servidor;
 - problemas de migración del esquema (`SCHEMA_VERSION`, columnas nuevas en `Core.js` y en las hojas).

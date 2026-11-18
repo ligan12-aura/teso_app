@@ -103,7 +103,7 @@ export function editarMiembro(ctx, m = null) {
       <label class="field"><span>Nombre y apellidos</span><input name="nombre" value="${esc(m?.nombre || '')}" required maxlength="80"></label>
       <div class="form-row">
         <label class="field"><span>Estado</span><select name="estado"><option value="activo" ${m?.estado !== 'inactivo' ? 'selected' : ''}>Activo</option><option value="inactivo" ${m?.estado === 'inactivo' ? 'selected' : ''}>Inactivo (alejado)</option></select></label>
-        <label class="field"><span>Miembro desde</span><input type="date" name="fechaIngreso" value="${esc(m ? m.fechaIngreso || '' : ctx.data.hoy)}" max="${ctx.data.hoy}"></label>
+        <label class="field"><span>Miembro desde <small class="muted">(opcional)</small></span><input type="date" name="fechaIngreso" value="${esc(m?.fechaIngreso || '')}" max="${ctx.data.hoy}"><small class="hint">Déjalo vacío si ya era miembro: sus diezmos anteriores siguen contando.</small></label>
         <label class="field" data-baja ${m?.estado === 'inactivo' ? '' : 'hidden'}><span>Fecha de baja (desde cuándo no asiste)</span><input type="date" name="fechaBaja" value="${esc(m?.fechaBaja || '')}" max="${ctx.data.hoy}"></label>
         <label class="field"><span>Fecha de nacimiento</span><input type="date" name="fechaNacimiento" value="${esc(m?.fechaNacimiento || '')}" max="${ctx.data.hoy}"></label>
       </div>

@@ -90,6 +90,7 @@ export function render(root, ctx) {
             <div class="ml-actions">
               ${x.archivoId ? `<button class="chip-btn" data-ver="${x.id}">${icon('receipt', 14)} Boleta</button>` : x.tipo === 'gasto' ? `<span class="chip-warn">${icon('alert', 13)} Sin boleta</span>` : ''}
               ${editable && x.origen === 'manual' ? `<button class="icon-btn sm" data-edit="${x.id}" title="Editar">${icon('edit', 15)}</button><button class="icon-btn sm danger" data-del="${x.id}" title="Eliminar">${icon('trash', 15)}</button>` : ''}
+              ${editable && x.origen === 'cuota' && !conAct ? `<button class="icon-btn sm danger" data-del="${x.id}" title="Quitar cuota (el ministerio ya no usa actividades)">${icon('trash', 15)}</button>` : ''}
             </div>
           </div>
         </li>`).join('')}
