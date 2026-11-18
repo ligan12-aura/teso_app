@@ -112,7 +112,8 @@ const TEMAS = {
       <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ve el tesorero.</p>
       <h4>Registrar</h4>
       ${pasos(`<b>En el culto:</b> en Tesorería → ${btn('church', 'Registrar culto')} presiona <b>Detallar diezmos por hermano</b> y escribe cuánto dio cada uno (y lo que venga sin nombre). Se guarda el ingreso del culto en la caja y, a la vez, el diezmo de cada hermano.`, `<b>Fuera del culto</b> (transferencia, depósito): toca la celda del hermano en el mes, o usa ${btn('plus', 'Registrar diezmos')} para varios a la vez. Con <b>Sumar a la caja</b> marcado se crea también el ingreso en la tesorería general, con la misma fecha. Puedes adjuntar la <b>foto o captura del comprobante</b> de la transferencia como respaldo; se ve con el botón “Comprobante”.`, 'Si corriges o eliminas un diezmo sumado a la caja, su ingreso en la tesorería se actualiza o se elimina solo. Eliminar el diezmo de un hermano registrado en un culto no cambia el total del culto (ese dinero ya se recibió): solo pasa a “sin identificar”.')}
-      <h4>Categorías (solo hermanos activos)</h4>
+      <h4>Categorías (solo hermanos activos y habilitados para diezmar)</h4>
+      <p>En la ficha de cada miembro se indica si está <b>habilitado para diezmar</b>. Los no habilitados (por ejemplo, estudiantes o quienes no tienen ingresos) no se cuentan en la estadística; si igual dan un diezmo, se registra y suma al total del mes.</p>
       <ul class="hp-list">
         <li><span class="badge st-ok">Constante</span> diezmó en al menos el 80% de los meses transcurridos del año.</li>
         <li><span class="badge st-obs">Irregular</span> diezmó algunos meses. Si lleva 2 o más meses sin diezmar se indica bajo su nombre.</li>

@@ -1,8 +1,7 @@
 // Registro de miembros de la iglesia (solo tesorero): estado y datos de contacto
-import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha, esAdmin } from '../ui.js';
+import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha } from '../ui.js';
 import { call } from '../api.js';
 import { cargarExcelJS } from '../planillaDescarga.js';
-import { resumenDiezmos, CATEG_DIEZMO } from './diezmos.js';
 
 const filtros = { estado: 'todos', q: '' };
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -25,10 +24,7 @@ export function render(root, ctx) {
   const miembros = [...data.miembros].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const activos = miembros.filter((m) => m.estado === 'activo');
   const completas = miembros.filter(fichaCompleta).length;
-  const anio = Number(hoy.slice(0, 4));
   const nombreDe = Object.fromEntries(data.miembros.map((x) => [x.id, x.nombre]));
-  const verDiezmo = esAdmin(ctx.user);
-  const cat = resumenDiezmos(data, anio, true).porMiembro;
   const mesHoy = +hoy.slice(5, 7);
   const cumple = miembros.filter((m) => m.estado === 'activo' && m.fechaNacimiento && +m.fechaNacimiento.slice(5, 7) === mesHoy)
     .sort((a, b) => a.fechaNacimiento.slice(8).localeCompare(b.fechaNacimiento.slice(8)));
@@ -37,6 +33,7 @@ export function render(root, ctx) {
     if (filtros.estado === 'activos' && m.estado !== 'activo') return false;
     if (filtros.estado === 'inactivos' && m.estado !== 'inactivo') return false;
     if (filtros.estado === 'incompletas' && fichaCompleta(m)) return false;
+    if (filtros.estado === 'nohab' && m.habilitadoDiezmo !== 'no') return false;
     return !q || `${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas}`.toLowerCase().includes(q);
   });
 
@@ -68,22 +65,20 @@ export function render(root, ctx) {
     <div class="filters">
       <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar por nombre, celular, correo…" value="${esc(filtros.q)}" data-q></div>
       <div class="seg seg-sm">
-        ${[['todos', 'Todos'], ['activos', 'Activos'], ['inactivos', 'Inactivos'], ['incompletas', 'Ficha incompleta']].map(([k, l]) => `<label><input type="radio" name="fest" value="${k}" ${filtros.estado === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+        ${[['todos', 'Todos'], ['activos', 'Activos'], ['inactivos', 'Inactivos'], ['incompletas', 'Ficha incompleta'], ['nohab', 'No habilitados']].map(([k, l]) => `<label><input type="radio" name="fest" value="${k}" ${filtros.estado === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
     </div>
     ${miembros.length ? (lista.length ? `<div class="table-wrap"><table class="table miembros-table">
-      <thead><tr><th>Nombre</th><th>Estado</th><th>Nacimiento</th><th>Celular</th><th class="hide-sm">Correo</th><th class="hide-sm">Domicilio</th>${verDiezmo ? `<th>Diezmo ${anio}</th>` : ''}<th></th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Estado</th><th>Nacimiento</th><th>Celular</th><th class="hide-sm">Correo</th><th class="hide-sm">Domicilio</th><th></th></tr></thead>
       <tbody>${lista.map((m) => {
         const e = edad(m.fechaNacimiento, hoy);
-        const c = cat[m.id];
         return `<tr class="${m.estado === 'inactivo' ? 'inactive' : ''}">
-          <td><b>${esc(m.nombre)}</b>${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
+          <td><b>${esc(m.nombre)}</b>${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.habilitadoDiezmo === 'no' ? '<br><span class="tag tag-gris">No habilitado para diezmar</span>' : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
           <td>${m.estado === 'activo' ? '<span class="badge st-ok">Activo</span>' : `<span class="badge st-open">Inactivo</span>${m.fechaBaja ? `<br><small class="muted">desde ${fecha(m.fechaBaja)}</small>` : ''}`}</td>
           <td class="nowrap">${m.fechaNacimiento ? `${fecha(m.fechaNacimiento)}<br><small class="muted">${e} años</small>` : '<span class="falta">—</span>'}</td>
           <td class="nowrap">${m.celular ? `<a class="link" href="tel:${esc(m.celular.replace(/[^\d+]/g, ''))}">${esc(m.celular)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm">${m.email ? `<a class="link" href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm desc">${m.domicilio ? esc(m.domicilio) : '<span class="falta">—</span>'}</td>
-          ${verDiezmo ? `<td>${m.estado === 'activo' && c && c.cat ? `<span class="badge ${CATEG_DIEZMO[c.cat].cls}">${CATEG_DIEZMO[c.cat].label}</span>` : '<span class="muted">—</span>'}</td>` : ''}
           <td class="row-actions"><button class="icon-btn sm" data-edit="${m.id}" title="Editar ficha">${icon('edit', 16)}</button></td>
         </tr>`;
       }).join('')}</tbody></table></div>` : emptyState('Ningún miembro coincide con la búsqueda', 'search'))
@@ -117,6 +112,7 @@ export function editarMiembro(ctx, m = null) {
       </div>
       <label class="field"><span>Domicilio</span><input name="domicilio" placeholder="Calle, número, comuna" value="${esc(m?.domicilio || '')}"></label>
       <label class="field"><span>💍 Cónyuge (diezman como matrimonio)</span><select name="conyugeId"><option value="">— Sin cónyuge registrado —</option>${[...ctx.data.miembros].filter((x) => x.id !== m?.id).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((x) => `<option value="${x.id}" ${x.id === m?.conyugeId ? 'selected' : ''}>${esc(x.nombre)}${x.conyugeId && x.conyugeId !== m?.id ? ' (ya tiene cónyuge)' : ''}${x.estado === 'inactivo' ? ' · inactivo' : ''}</option>`).join('')}</select></label>
+      <label class="field"><span>Habilitado para diezmar</span><select name="habilitadoDiezmo"><option value="si" ${m?.habilitadoDiezmo !== 'no' ? 'selected' : ''}>Sí · trabaja o tiene ingresos</option><option value="no" ${m?.habilitadoDiezmo === 'no' ? 'selected' : ''}>No · estudiante o sin ingresos</option></select><small class="hint">Los no habilitados no se cuentan en la estadística de diezmos.</small></label>
       <label class="field"><span>Notas</span><input name="notas" maxlength="300" value="${esc(m?.notas || '')}"></label>
       ${m ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar miembro</button>` : ''}`,
     submitLabel: m ? 'Guardar ficha' : 'Agregar',

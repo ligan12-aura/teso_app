@@ -23,7 +23,7 @@ var TesoCore = (function () {
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
-    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja'],
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo'],
     Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId']
   };
   var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1 };
@@ -673,6 +673,8 @@ var TesoCore = (function () {
       if (baja && (!isDate(baja) || baja > env.today() || baja < '2000-01-01')) throw TesoError('Fecha de baja inválida');
       return {
         fechaBaja: baja,
+        // Habilitado para diezmar: 'no' = estudiante o sin ingresos (no cuenta en la estadística de diezmos)
+        habilitadoDiezmo: p.habilitadoDiezmo === 'no' ? 'no' : 'si',
         nombre: nombre, estado: estado, fechaNacimiento: fn,
         celular: String(p.celular || '').trim().slice(0, 30), email: email.slice(0, 120),
         domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300)

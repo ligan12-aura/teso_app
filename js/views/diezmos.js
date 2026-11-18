@@ -77,7 +77,9 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
     // "En el período": activo hoy, o que estuvo activo algún mes evaluado del año antes de su baja
     const enPeriodo = m.estado === 'activo' || evaluados > 0;
     const bajaEnAnio = m.estado !== 'activo' && m.fechaBaja && +m.fechaBaja.slice(0, 4) === anio ? +m.fechaBaja.slice(5, 7) : 0;
-    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat: enPeriodo ? cat : null, racha, enPeriodo, activoHasta, bajaEnAnio, ultimo: ultimoDe[m.id] || '' };
+    // Los no habilitados para diezmar (estudiantes, sin ingresos) no se clasifican ni cuentan en la estadística
+    const habilitado = m.habilitadoDiezmo !== 'no';
+    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat: enPeriodo && habilitado ? cat : null, racha, enPeriodo, habilitado, activoHasta, bajaEnAnio, ultimo: ultimoDe[m.id] || '' };
   });
   return { mesesPeriodo, porMiembro };
 }
@@ -90,7 +92,7 @@ export function render(root, ctx) {
   const mi = Number(mes.slice(5, 7)) - 1;
   const { mesesPeriodo, porMiembro } = resumenDiezmos(data, anio, true);
   const todos = Object.values(porMiembro).sort((a, b) => a.m.nombre.localeCompare(b.m.nombre, 'es'));
-  const activos = todos.filter((x) => x.enPeriodo);
+  const activos = todos.filter((x) => x.enPeriodo && x.habilitado);
   const cuenta = (c) => activos.filter((x) => x.cat === c).length;
   const nombreDe = Object.fromEntries(data.miembros.map((m) => [m.id, m.nombre]));
   const porId = Object.fromEntries(data.miembros.map((m) => [m.id, m]));
@@ -99,7 +101,8 @@ export function render(root, ctx) {
   const totales = Array(12).fill(0), registros = Array(12).fill(0);
   data.diezmos.forEach((d) => { if (d.fecha.startsWith(String(anio))) { const i = +d.fecha.slice(5, 7) - 1; totales[i] += d.monto; registros[i]++; } });
   const activoEn = (x, i) => x.activoHasta > i;
-  const elegibles = (i) => todos.filter((x) => activoEn(x, i));
+  // Solo cuentan los hermanos activos ese mes y habilitados para diezmar
+  const elegibles = (i) => todos.filter((x) => x.habilitado && activoEn(x, i));
   const participacion = totales.map((_, i) => {
     const el = elegibles(i);
     const con = el.filter((x) => x.meses[i] > 0).length;
@@ -112,6 +115,8 @@ export function render(root, ctx) {
   const elMes = elegibles(mi);
   const diezmaron = elMes.filter((x) => x.meses[mi] > 0);
   const noDiezmaron = elMes.filter((x) => !x.meses[mi]);
+  const noHabMes = todos.filter((x) => !x.habilitado && activoEn(x, mi));
+  const noHabConDiezmo = noHabMes.filter((x) => x.meses[mi] > 0).length;
   const pctMes = elMes.length ? Math.round((diezmaron.length / elMes.length) * 100) : 0;
   const ant = mi ? `${anio}-${pad(mi)}` : `${anio - 1}-12`;
   const totalAnt = data.diezmos.filter((d) => d.fecha.slice(0, 7) === ant).reduce((a, d) => a + d.monto, 0);
@@ -162,25 +167,25 @@ export function render(root, ctx) {
 
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (totalAnt ? '' : 'sin diezmos el mes anterior') : `<b class="${variacion >= 0 ? 'ingreso' : 'gasto'}">${variacion >= 0 ? '▲' : '▼'} ${Math.abs(variacion)}%</b> vs. ${mesLargo(ant)} (${money(totalAnt)})`}</span></article>
-    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Diezmaron</span><strong class="kpi-value">${diezmaron.length} <small class="kpi-pct">${pctMes}%</small></strong><span class="kpi-sub">de ${elMes.length} hermanos activos ese mes</span></article>
-    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.sin.color}"></i> No diezmaron</span><strong class="kpi-value">${futuro ? '—' : noDiezmaron.length}</strong><span class="kpi-sub">${futuro ? 'mes por venir' : 'hermanos activos sin diezmo registrado'}</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Diezmaron</span><strong class="kpi-value">${diezmaron.length} <small class="kpi-pct">${pctMes}%</small></strong><span class="kpi-sub">de ${elMes.length} hermanos habilitados para diezmar${noHabConDiezmo ? ` · además ${noHabConDiezmo} no habilitado${noHabConDiezmo > 1 ? 's' : ''}` : ''}</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.sin.color}"></i> No diezmaron</span><strong class="kpi-value">${futuro ? '—' : noDiezmaron.length}</strong><span class="kpi-sub">${futuro ? 'mes por venir' : 'habilitados sin diezmo registrado'}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('receipt', 15)} Promedio por diezmo</span><strong class="kpi-value">${money(promedio)}</strong><span class="kpi-sub">${regsMes.length} diezmo${regsMes.length === 1 ? '' : 's'} registrado${regsMes.length === 1 ? '' : 's'} (matrimonio = 1)</span></article>
   </section>
 
   <section class="grid-2-1">
     <article class="card">
-      <header class="card-head"><div><h3>Mes a mes · ${anio}</h3><p class="muted">Total diezmado cada mes y % de hermanos activos que diezmó · total del año <b>${money(totalAnio)}</b></p></div></header>
+      <header class="card-head"><div><h3>Mes a mes · ${anio}</h3><p class="muted">Total diezmado cada mes y % de hermanos habilitados que diezmó · total del año <b>${money(totalAnio)}</b></p></div></header>
       <div class="chart-box"><canvas id="ch-mes"></canvas></div>
     </article>
     <article class="card">
-      <header class="card-head"><div><h3>Hermanos en ${anio}</h3><p class="muted">Según los meses con diezmo en el año</p></div></header>
-      ${activos.length ? `<div class="donut-wrap"><div class="chart-box donut"><canvas id="ch-cat"></canvas><div class="donut-center"><span>Activos</span><strong>${activos.length}</strong></div></div>
-      <ul class="legend">${Object.entries(CATEG_DIEZMO).map(([k, c]) => `<li><i style="background:${c.color}"></i><span>${c.label}</span><b>${cuenta(k)}</b></li>`).join('')}</ul></div>` : emptyState('Sin hermanos activos')}
+      <header class="card-head"><div><h3>Hermanos en ${anio}</h3><p class="muted">Habilitados para diezmar, según los meses con diezmo en el año</p></div></header>
+      ${activos.length ? `<div class="donut-wrap"><div class="chart-box donut"><canvas id="ch-cat"></canvas><div class="donut-center"><span>Habilitados</span><strong>${activos.length}</strong></div></div>
+      <ul class="legend">${Object.entries(CATEG_DIEZMO).map(([k, c]) => `<li><i style="background:${c.color}"></i><span>${c.label}</span><b>${cuenta(k)}</b></li>`).join('')}</ul></div>` : emptyState('Sin hermanos habilitados para diezmar')}
     </article>
   </section>
 
   <article class="card">
-    <header class="card-head wrap"><div><h3>${nomMes}</h3><p class="muted">Toca un nombre para ver, registrar o editar su diezmo de este mes</p></div></header>
+    <header class="card-head wrap"><div><h3>${nomMes}</h3><p class="muted">Toca un nombre para ver, registrar o editar su diezmo de este mes${noHabMes.length ? ` · ${noHabMes.length} hermano${noHabMes.length > 1 ? 's' : ''} no habilitado${noHabMes.length > 1 ? 's' : ''} para diezmar no se cuenta${noHabMes.length > 1 ? 'n' : ''}` : ''}</p></div></header>
     <div class="dm-cols">
       <section>
         <h4 class="dm-tit">Diezmaron <span class="tag tag-verde">${regsMes.length}</span></h4>
@@ -189,7 +194,7 @@ export function render(root, ctx) {
       </section>
       <section>
         <h4 class="dm-tit">No diezmaron <span class="tag tag-gris">${futuro ? 0 : noDiezmaron.length}</span></h4>
-        ${!futuro && noDiezmaronFilas.length ? `<div class="dm-chips">${noDiezmaronFilas.map((x) => `<button class="dm-chip" data-abrir="${x.id}" title="${x.cat ? CATEG_DIEZMO[x.cat].label + ' en ' + anio : ''}">${x.cat ? `<i style="background:${CATEG_DIEZMO[x.cat].color}"></i>` : ''}${esc(x.nombre)}</button>`).join('')}</div>` : emptyState(futuro ? 'Mes por venir' : elMes.length ? '¡Todos los hermanos activos diezmaron!' : 'Sin hermanos activos este mes', 'users')}
+        ${!futuro && noDiezmaronFilas.length ? `<div class="dm-chips">${noDiezmaronFilas.map((x) => `<button class="dm-chip" data-abrir="${x.id}" title="${x.cat ? CATEG_DIEZMO[x.cat].label + ' en ' + anio : ''}">${x.cat ? `<i style="background:${CATEG_DIEZMO[x.cat].color}"></i>` : ''}${esc(x.nombre)}</button>`).join('')}</div>` : emptyState(futuro ? 'Mes por venir' : elMes.length ? '¡Todos los hermanos habilitados diezmaron!' : 'Sin hermanos habilitados este mes', 'users')}
       </section>
     </div>
   </article>
@@ -206,11 +211,11 @@ export function render(root, ctx) {
     ${lista.length ? `<div class="table-wrap diezmo-wrap"><table class="table diezmo-grid">
       <thead><tr><th class="dg-nombre">Hermano</th>${MESES_C.map((m, i) => `<th class="num ${i >= mesesPeriodo ? 'futuro' : ''} ${i === mi ? 'sel' : ''}">${m}</th>`).join('')}<th class="num">Total</th><th>Estado</th></tr></thead>
       <tbody>${lista.map((x) => `
-        <tr class="${!x.enPeriodo ? 'inactive' : ''}">
-          <td class="dg-nombre"><button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>${x.m.conyugeId && nombreDe[x.m.conyugeId] ? `<small class="dg-pareja">💍 ${esc(nombreDe[x.m.conyugeId])}</small>` : ''}${x.m.estado === 'activo' && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
+        <tr class="${!x.enPeriodo || !x.habilitado ? 'inactive' : ''}">
+          <td class="dg-nombre"><button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>${x.m.conyugeId && nombreDe[x.m.conyugeId] ? `<small class="dg-pareja">💍 ${esc(nombreDe[x.m.conyugeId])}</small>` : ''}${x.m.estado === 'activo' && x.habilitado && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
           ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${i === mi ? 'sel' : ''} ${x.m.estado !== 'activo' && i >= x.activoHasta && i < mesesPeriodo ? 'baja' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
           <td class="num strong">${x.total ? money(x.total) : '—'}</td>
-          <td>${x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : x.m.estado !== 'activo' ? '<span class="badge st-open">Inactivo</span>' : '<span class="muted">—</span>'}${x.bajaEnAnio ? `<small class="dg-baja">baja ${MESES_C[x.bajaEnAnio - 1].toLowerCase()}</small>` : ''}</td>
+          <td>${x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : x.m.estado !== 'activo' ? '<span class="badge st-open">Inactivo</span>' : !x.habilitado ? '<span class="tag tag-gris" title="Estudiante o sin ingresos: no se cuenta en la estadística">No habilitado</span>' : '<span class="muted">—</span>'}${x.bajaEnAnio ? `<small class="dg-baja">baja ${MESES_C[x.bajaEnAnio - 1].toLowerCase()}</small>` : ''}</td>
         </tr>`).join('')}</tbody>
       <tfoot><tr><td class="dg-nombre"><b>Total</b></td>${totales.map((v, i) => `<td class="num ${i === mi ? 'sel' : ''}"><b>${v ? moneyShort(v) : ''}</b></td>`).join('')}<td class="num"><b>${money(totalAnio)}</b></td><td></td></tr></tfoot>
     </table></div>` : emptyState(data.miembros.length ? 'Nadie coincide con los filtros' : 'Aún no hay miembros registrados', 'users')}
