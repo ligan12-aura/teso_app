@@ -111,7 +111,7 @@ const TEMAS = {
       id: 'diezmos', titulo: 'Diezmos', ico: 'heart', html: `
       <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ve el tesorero.</p>
       <h4>Registrar</h4>
-      ${pasos(`Presiona ${btn('plus', 'Registrar diezmos')} para anotar varios de una vez (por ejemplo, los sobres del domingo): elige la fecha y escribe el monto junto al nombre de cada hermano.`, 'Para un hermano en particular, toca la celda de su fila en el mes que corresponda: ahí puedes agregar, ver o eliminar sus diezmos de ese mes.')}
+      ${pasos(`<b>En el culto:</b> en Tesorería → ${btn('church', 'Registrar culto')} presiona <b>Detallar diezmos por hermano</b> y escribe cuánto dio cada uno (y lo que venga sin nombre). Se guarda el ingreso del culto en la caja y, a la vez, el diezmo de cada hermano.`, `<b>Fuera del culto</b> (transferencia, depósito): toca la celda del hermano en el mes, o usa ${btn('plus', 'Registrar diezmos')} para varios a la vez. Con <b>Sumar a la caja</b> marcado se crea también el ingreso en la tesorería general, con la misma fecha.`, 'Si corriges o eliminas un diezmo sumado a la caja, su ingreso en la tesorería se actualiza o se elimina solo. Eliminar el diezmo de un hermano registrado en un culto no cambia el total del culto (ese dinero ya se recibió): solo pasa a “sin identificar”.')}
       <h4>Categorías (solo hermanos activos)</h4>
       <ul class="hp-list">
         <li><span class="badge st-ok">Constante</span> diezmó en al menos el 80% de los meses transcurridos del año.</li>
@@ -119,7 +119,7 @@ const TEMAS = {
         <li><span class="badge st-sin">No diezma</span> no tiene diezmos en el año.</li>
       </ul>
       <h4>Conciliación</h4>
-      <p>El gráfico compara lo registrado por hermano con los diezmos ingresados en la tesorería general (al registrar el culto). La diferencia es lo que aún no está identificado por nombre. Este registro <b>no suma dinero a la caja</b>: solo identifica quién diezmó.</p>`
+      <p>El gráfico compara lo registrado por hermano con los diezmos ingresados en la tesorería general. La diferencia es lo que aún no está identificado por nombre (por ejemplo, sobres sin nombre).</p>`
     },
     {
       id: 'miembros', titulo: 'Miembros', ico: 'users', html: `

@@ -56,7 +56,7 @@ export async function descargarPlanillaGeneral(data) {
     .filter((m) => m.fecha.startsWith(String(anio)) && (!desde || m.fecha >= desde))
     .map((m) => ({
       id: m.id, fecha: m.fecha, tipo: m.tipo, categoria: m.categoria, descripcion: m.descripcion, monto: m.monto, medio: m.medio,
-      boleta: !!m.archivoId, observacion: m.origen === 'transferencia' ? 'Transferencia de ítem' : m.origen === 'importado' ? 'Importado del historial' : ''
+      boleta: !!m.archivoId, observacion: m.origen === 'transferencia' ? 'Transferencia de ítem' : m.origen === 'diezmo' ? 'Diezmo registrado por hermano' : m.origen === 'importado' ? 'Importado del historial' : ''
     }));
   const wb = construirPlanilla(ExcelJS, {
     ambito: 'general', titulo: 'Tesorería general', iglesia: data.config.nombreIglesia, anio, generado: generadoAhora(),

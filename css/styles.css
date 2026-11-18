@@ -869,3 +869,16 @@ input, select, textarea { font: inherit; color: inherit; }
   .help-pill .hp-txt { display: none; }
   .help-pill { padding: 6px 8px; }
 }
+
+/* Diezmos vinculados a la caja */
+.caja-check { align-items: flex-start; background: var(--green-soft); border-radius: 12px; padding: 10px 12px; font-weight: 500; }
+.caja-check input { margin-top: 3px; }
+.tag-verde { background: var(--green-soft); color: var(--green-ink, #1d7550); }
+.tag-gris { background: var(--line-2); color: var(--muted); }
+.det-diezmo { display: flex; flex-direction: column; gap: 10px; }
+.det-diezmo [data-detallar] { align-self: flex-start; }
+.det-panel { display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.det-sin { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 10px; font-size: 13.5px; }
+.det-resumen { font-size: 13px; color: var(--muted); text-align: right; }
+.det-resumen b { color: var(--ink); }
+.input-money.calculado { background: var(--gold-soft); border-style: dashed; }

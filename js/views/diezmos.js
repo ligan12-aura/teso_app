@@ -147,6 +147,13 @@ export function render(root, ctx) {
 }
 
 // ---------------- Diezmo de un hermano en un mes ----------------
+const opcionesMedio = (data) => data.medios.map((x) => `<option ${x === 'Transferencia' ? 'selected' : ''}>${x}</option>`).join('');
+function etiquetaCaja(data, d) {
+  const g = d.movGeneralId && data.movGenerales.find((x) => x.id === d.movGeneralId);
+  if (!g) return '<span class="tag tag-gris">solo registro</span>';
+  return g.origen === 'diezmo' ? '<span class="tag tag-verde">en caja</span>' : '<span class="tag">culto</span>';
+}
+
 function diezmoDelMes(ctx, m, mes) {
   const data = ctx.data;
   const regs = data.diezmos.filter((d) => d.miembroId === m.id && d.mes === mes).sort((a, b) => a.fecha.localeCompare(b.fecha));
@@ -155,22 +162,25 @@ function diezmoDelMes(ctx, m, mes) {
   return modal({
     title: `${esc(m.nombre)} · ${cap(mesLargo(mes))}`,
     body: `
-      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b><button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
+      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b><button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
         <p class="muted small">Total del mes: <b>${money(regs.reduce((a, d) => a + d.monto, 0))}</b>. Puedes agregar otro diezmo abajo.</p>` : '<p class="muted">Sin diezmos registrados este mes.</p>'}
       <div class="form-row">
         <label class="field"><span>Monto ($)</span><input name="monto" inputmode="numeric" class="input-money" placeholder="0" required></label>
         <label class="field"><span>Fecha</span><input type="date" name="fecha" value="${fechaDef}" min="${mes}-01" max="${mes === data.hoy.slice(0, 7) ? data.hoy : `${mes}-${pad(ultimo)}`}" required></label>
       </div>
       <div class="form-row">
-        <label class="field"><span>Medio</span><select name="medio">${data.medios.map((x) => `<option>${x}</option>`).join('')}</select></label>
+        <label class="field"><span>Medio</span><select name="medio">${opcionesMedio(data)}</select></label>
         <label class="field"><span>Nota (opcional)</span><input name="notas" maxlength="200"></label>
-      </div>`,
+      </div>
+      <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general)<br><small class="muted">Desmárcalo solo si este dinero ya está incluido en un culto registrado.</small></span></label>`,
     submitLabel: 'Registrar diezmo',
     onOpen(f, { close }) {
       formatoPesos(f.monto);
       f.querySelectorAll('[data-borrar]').forEach((b) => b.addEventListener('click', async () => {
         close(null);
-        if (!(await confirmar('¿Eliminar este diezmo del registro?', { boton: 'Eliminar', danger: true }))) return;
+        const reg = regs.find((x) => x.id === b.dataset.borrar);
+        const enCaja = reg && data.movGenerales.some((x) => x.id === reg.movGeneralId && x.origen === 'diezmo');
+        if (!(await confirmar(`¿Eliminar este diezmo del registro?${enCaja ? '<br><span class="muted">También se eliminará su ingreso en la tesorería general.</span>' : ''}`, { boton: 'Eliminar', danger: true }))) return;
         try { await call('deleteDiezmo', { id: b.dataset.borrar }); toast('Diezmo eliminado'); await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
       }));
     },
@@ -178,8 +188,8 @@ function diezmoDelMes(ctx, m, mes) {
       const d = formData(f);
       d.monto = pesos(d.monto);
       if (!d.monto) throw new Error('Ingresa el monto');
-      await call('saveDiezmo', { miembroId: m.id, ...d });
-      toast('Diezmo registrado');
+      await call('saveDiezmo', { miembroId: m.id, ...d, sumarACaja: !!f.sumarACaja.checked });
+      toast(f.sumarACaja.checked ? 'Diezmo registrado y sumado a la caja' : 'Diezmo registrado');
       await ctx.refresh();
     }
   });
@@ -192,11 +202,12 @@ function registrarLote(ctx) {
   return modal({
     title: 'Registrar diezmos',
     wide: true,
-    body: `<p class="muted">Escribe el diezmo de cada hermano. Solo se guardan las filas con monto.</p>
+    body: `<p class="muted">Para diezmos recibidos fuera del culto (transferencias, depósitos). Los del culto se detallan en <b>Tesorería → Registrar culto</b>. Solo se guardan las filas con monto.</p>
       <div class="form-row">
         <label class="field"><span>Fecha</span><input type="date" name="fecha" value="${data.hoy}" max="${data.hoy}" required></label>
-        <label class="field"><span>Medio</span><select name="medio">${data.medios.map((x) => `<option>${x}</option>`).join('')}</select></label>
+        <label class="field"><span>Medio</span><select name="medio">${opcionesMedio(data)}</select></label>
       </div>
+      <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general)<br><small class="muted">Desmárcalo solo si este dinero ya está incluido en un culto registrado.</small></span></label>
       <div class="search lote-buscar">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
       <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(m.nombre.toLowerCase())}"><span>${esc(m.nombre)}</span><input class="lote-monto" data-id="${m.id}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
       <div class="culto-total"><span data-cant>0 hermanos</span> · Total: <strong data-total>$0</strong></div>`,
@@ -218,8 +229,8 @@ function registrarLote(ctx) {
       const d = formData(f);
       const items = [...f.querySelectorAll('.lote-monto')].map((i) => ({ miembroId: i.dataset.id, monto: pesos(i.value) })).filter((x) => x.monto > 0);
       if (!items.length) throw new Error('Escribe al menos un monto');
-      const r = await call('saveDiezmosLote', { fecha: d.fecha, medio: d.medio, items });
-      toast(`${r.creados} diezmo${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}`);
+      const r = await call('saveDiezmosLote', { fecha: d.fecha, medio: d.medio, items, sumarACaja: !!f.sumarACaja.checked });
+      toast(`${r.creados} diezmo${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}${r.enCaja ? (r.creados > 1 ? ' y sumados' : ' y sumado') + ' a la caja' : ''}`);
       await ctx.refresh();
     }
   });
