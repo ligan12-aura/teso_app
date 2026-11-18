@@ -62,18 +62,12 @@ export function movsMinisterio(data, mid) {
   return data.movMinisterios.filter((m) => m.ministerioId === mid);
 }
 // ---------------- Presupuestos ----------------
-// Ministerio: presupuesto del mes = ítem mensual + ingresos extra del mismo mes
+// Ministerio: presupuesto mensual fijo definido por el tesorero (independiente del ítem). 0 = sin límite
 export function presupuestoMinisterio(data, mid, mes, excluirId = '') {
   const m = data.ministerios.find((x) => x.id === mid);
-  let extra = 0, gastado = 0;
-  data.movMinisterios.forEach((x) => {
-    if (x.ministerioId !== mid || x.mes !== mes || x.id === excluirId) return;
-    if (x.tipo === 'gasto') gastado += x.monto;
-    else if (x.origen !== 'transferencia') extra += x.monto;
-  });
-  const item = m ? m.itemMensual : 0;
-  const limite = item + extra;
-  return { item, extra, limite, gastado, disponible: limite - gastado };
+  const gastado = data.movMinisterios.reduce((a, x) => (x.ministerioId === mid && x.mes === mes && x.id !== excluirId && x.tipo === 'gasto' ? a + x.monto : a), 0);
+  const limite = m ? Number(m.presupuestoMensual) || 0 : 0;
+  return { limite, gastado, disponible: limite - gastado };
 }
 // Tesorería general: un presupuesto mensual para todos sus gastos, incluidos los ítems (0 = sin límite)
 export const presupuestoGeneralMensual = (data) => Number(data.config.presupuestoGeneral) || 0;
@@ -101,7 +95,8 @@ export function resumenMinisterio(data, mid, mes) {
     movs: delMes, saldoInicial, ...s, item, sinBoleta, boletas,
     saldoFinal: saldoInicial + s.neto,
     presupuesto: p.limite, disponiblePres: p.disponible,
-    uso: p.limite > 0 ? s.gastos / p.limite : (s.gastos > 0 ? 1.01 : 0)
+    sinPresupuesto: !p.limite,
+    uso: p.limite > 0 ? s.gastos / p.limite : 0
   };
 }
 export function saldoMinisterio(data, mid) {

@@ -98,7 +98,7 @@ export function render(root, ctx) {
       <div class="min-rings">
         ${ministerios.map((m) => {
           const r = resumenMinisterio(data, m.id, mes);
-          return `<a class="min-ring" href="#/ministerio/${m.id}">${ring(r.uso, m.color, 58, 6)}<span>${esc(m.icono)} ${esc(m.nombre)}</span><small>${moneyShort(r.gastos)} de ${moneyShort(r.presupuesto)}</small></a>`;
+          return `<a class="min-ring" href="#/ministerio/${m.id}">${ring(r.uso, m.color, 58, 6)}<span>${esc(m.icono)} ${esc(m.nombre)}</span><small>${r.sinPresupuesto ? `${moneyShort(r.gastos)} · sin presupuesto` : `${moneyShort(r.gastos)} de ${moneyShort(r.presupuesto)}`}</small></a>`;
         }).join('')}
       </div>
     </article>

@@ -25,16 +25,17 @@ export function render(root, ctx) {
     const total = data.ministerios.filter((m) => m.activo).reduce((a, m) => a + m.itemMensual, 0);
     body.innerHTML = `
     <article class="card">
-      <header class="card-head wrap"><div><h3>Ministerios e ítems mensuales</h3><p class="muted">Total asignado al mes: <b>${money(total)}</b></p></div>
+      <header class="card-head wrap"><div><h3>Ministerios</h3><p class="muted">Total de ítems al mes: <b>${money(total)}</b></p></div>
         <button class="btn btn-primary btn-sm" data-new>${icon('plus', 16)} Nuevo ministerio</button></header>
       ${data.ministerios.length ? `<div class="table-wrap"><table class="table">
-        <thead><tr><th>Ministerio</th><th>Líder</th><th class="num">Ítem mensual</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Ministerio</th><th>Líder</th><th class="num">Ítem mensual</th><th class="num">Presupuesto</th><th>Estado</th><th></th></tr></thead>
         <tbody>${data.ministerios.map((m) => {
           const lid = data.usuarios.filter((u) => u.ministerioId === m.id && u.rol === 'lider');
           return `<tr class="${m.activo ? '' : 'inactive'}">
             <td><span class="min-dot" style="background:${m.color}">${esc(m.icono)}</span> <b>${esc(m.nombre)}</b></td>
             <td>${lid.length ? lid.map((u) => esc(u.nombre)).join(', ') : '<span class="muted">—</span>'}</td>
             <td class="num strong">${money(m.itemMensual)}</td>
+            <td class="num">${m.presupuestoMensual ? money(m.presupuestoMensual) : '<span class="muted">sin límite</span>'}</td>
             <td>${m.activo ? '<span class="badge st-ok">Activo</span>' : '<span class="badge st-open">Inactivo</span>'}</td>
             <td class="row-actions"><button class="icon-btn sm" data-edit="${m.id}">${icon('edit', 16)}</button></td></tr>`;
         }).join('')}</tbody></table></div>` : emptyState('Crea el primer ministerio', 'grid')}
@@ -86,12 +87,13 @@ export function render(root, ctx) {
         </div>
       </article>
       <article class="card">
-        <header class="card-head"><div><h3>Presupuesto de cada ministerio (ítem mensual)</h3><p class="muted">El líder no puede gastar más que su ítem del mes (más los ingresos extra que registre) y el tesorero no puede transferir más que el ítem.</p></div></header>
+        <header class="card-head"><div><h3>Ministerios: ítem y presupuesto</h3><p class="muted"><b>Ítem mensual:</b> lo que tesorería transfiere cada mes (la transferencia no puede superarlo). <b>Presupuesto mensual:</b> el máximo que el ministerio puede gastar en el mes; déjalo en 0 para no limitar.</p></div></header>
         ${activos.length ? `<div class="table-wrap"><table class="table pres-table">
-          <thead><tr><th>Ministerio</th><th class="num">Ítem mensual</th></tr></thead>
+          <thead><tr><th>Ministerio</th><th class="num">Ítem mensual</th><th class="num">Presupuesto mensual</th></tr></thead>
           <tbody>${activos.map((m) => `<tr><td><span class="min-dot" style="background:${m.color}">${esc(m.icono)}</span> <b>${esc(m.nombre)}</b></td>
-            <td class="num"><input class="pres-input" data-item="${m.id}" inputmode="numeric" value="${m.itemMensual ? m.itemMensual.toLocaleString('es-CL') : ''}" placeholder="0"></td></tr>`).join('')}</tbody>
-          <tfoot><tr><td><b>Total ítems</b></td><td class="num"><b data-total-items></b></td></tr></tfoot>
+            <td class="num"><input class="pres-input" data-item="${m.id}" inputmode="numeric" value="${m.itemMensual ? m.itemMensual.toLocaleString('es-CL') : ''}" placeholder="0"></td>
+            <td class="num"><input class="pres-input" data-pres="${m.id}" inputmode="numeric" value="${m.presupuestoMensual ? m.presupuestoMensual.toLocaleString('es-CL') : ''}" placeholder="Sin límite"></td></tr>`).join('')}</tbody>
+          <tfoot><tr><td><b>Totales</b></td><td class="num"><b data-total-items></b></td><td class="num"><b data-total-pres></b></td></tr></tfoot>
         </table></div>
         <div class="note warn" data-aviso hidden>${icon('alert', 16)}<span>Los ítems suman más que el presupuesto general: no alcanzaría para transferirlos todos.</span></div>` : emptyState('Aún no hay ministerios activos.', 'grid')}
       </article>
@@ -100,12 +102,14 @@ export function render(root, ctx) {
     const form = body.querySelector('[data-pres-form]');
     const gen = form.presupuestoGeneral;
     const items = [...form.querySelectorAll('[data-item]')];
+    const presMin = [...form.querySelectorAll('[data-pres]')];
     const recalcular = () => {
       const t = items.reduce((a, i) => a + pesos(i.value), 0);
       const tot = form.querySelector('[data-total-items]'); if (tot) tot.textContent = money(t);
+      const tp = form.querySelector('[data-total-pres]'); if (tp) tp.textContent = money(presMin.reduce((a, i) => a + pesos(i.value), 0));
       const av = form.querySelector('[data-aviso]'); if (av) av.hidden = !(pesos(gen.value) && t > pesos(gen.value));
     };
-    [gen, ...items].forEach((i) => { formatoPesos(i); i.addEventListener('input', recalcular); });
+    [gen, ...items, ...presMin].forEach((i) => { formatoPesos(i); i.addEventListener('input', recalcular); });
     form.querySelector('[data-usar]')?.addEventListener('click', (e) => { gen.value = Number(e.currentTarget.dataset.usar).toLocaleString('es-CL'); recalcular(); });
     recalcular();
     form.addEventListener('submit', async (e) => {
@@ -113,10 +117,12 @@ export function render(root, ctx) {
       const btn = form.querySelector('[type=submit]'); btn.disabled = true; btn.classList.add('loading');
       try {
         await call('saveConfig', { presupuestoGeneral: pesos(gen.value) });
-        for (const i of items) {
-          const m = activos.find((x) => x.id === i.dataset.item);
-          const v = pesos(i.value);
-          if (m && v !== m.itemMensual) await call('saveMinisterio', { id: m.id, nombre: m.nombre, color: m.color, icono: m.icono, itemMensual: v, activo: m.activo });
+        for (const m of activos) {
+          const item = pesos(items.find((i) => i.dataset.item === m.id)?.value);
+          const pres = pesos(presMin.find((i) => i.dataset.pres === m.id)?.value);
+          if (item !== m.itemMensual || pres !== (m.presupuestoMensual || 0)) {
+            await call('saveMinisterio', { id: m.id, nombre: m.nombre, color: m.color, icono: m.icono, itemMensual: item, presupuestoMensual: pres, activo: m.activo });
+          }
         }
         toast('Presupuesto guardado');
         await ctx.refresh();
@@ -162,14 +168,19 @@ function editMinisterio(ctx, m = null) {
     title: m ? `Editar ${esc(m.nombre)}` : 'Nuevo ministerio',
     body: `
       <label class="field"><span>Nombre</span><input name="nombre" value="${esc(m?.nombre || '')}" required maxlength="40"></label>
-      <label class="field"><span>Ítem mensual ($)</span><input name="itemMensual" inputmode="numeric" value="${m ? m.itemMensual.toLocaleString('es-CL') : ''}" placeholder="0"></label>
+      <div class="form-row">
+        <label class="field"><span>Ítem mensual ($)</span><input name="itemMensual" inputmode="numeric" value="${m ? m.itemMensual.toLocaleString('es-CL') : ''}" placeholder="0"></label>
+        <label class="field"><span>Presupuesto mensual ($)</span><input name="presupuestoMensual" inputmode="numeric" value="${m && m.presupuestoMensual ? m.presupuestoMensual.toLocaleString('es-CL') : ''}" placeholder="Sin límite"></label>
+      </div>
+      <p class="muted small">El ítem es lo que se transfiere cada mes; el presupuesto es el máximo que el ministerio puede gastar en el mes.</p>
       <div class="field"><span>Ícono</span><div class="picker">${ICONOS.map((i) => `<label><input type="radio" name="icono" value="${i}" ${i === ico ? 'checked' : ''}><span>${i}</span></label>`).join('')}</div></div>
       <div class="field"><span>Color</span><div class="picker colors">${COLORES.map((c) => `<label><input type="radio" name="color" value="${c}" ${c === color ? 'checked' : ''}><span style="background:${c}"></span></label>`).join('')}</div></div>
       ${m ? `<label class="check"><input type="checkbox" name="activo" ${m.activo ? 'checked' : ''}> Ministerio activo</label>` : ''}`,
-    onOpen(f) { formatoPesos(f.itemMensual); },
+    onOpen(f) { formatoPesos(f.itemMensual); formatoPesos(f.presupuestoMensual); },
     async onSubmit(f) {
       const d = formData(f);
       d.itemMensual = pesos(d.itemMensual);
+      d.presupuestoMensual = pesos(d.presupuestoMensual);
       if (m) { d.id = m.id; d.activo = f.activo.checked; }
       await call('saveMinisterio', d);
       toast('Ministerio guardado');

@@ -180,7 +180,7 @@ function seed() {
     ['Mujeres', '#c2577a', '🌷', 60000, 'Ruth Contreras', 'mujeres'],
     ['Diaconía', '#7a8b3a', '🤝', 80000, 'Jorge Silva', 'diaconia']
   ].map(([nombre, color, icono, itemMensual, lider, usuario]) => {
-    const m = { id: id(), nombre, color, icono, itemMensual, activo: true, creadoEn: now };
+    const m = { id: id(), nombre, color, icono, itemMensual, presupuestoMensual: itemMensual, activo: true, creadoEn: now };
     db.Ministerios.push(m);
     user(lider, usuario, 'lider', m.id);
     return m;

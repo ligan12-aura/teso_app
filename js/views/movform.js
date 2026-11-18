@@ -81,7 +81,8 @@ export function abrirFormMovimiento(opts) {
           lim = p.limite; gastado = p.gastado; etiqueta = 'la tesorería';
         } else {
           const p = presupuestoMinisterio(data, midForm, mesF, mov?.id);
-          lim = p.limite; gastado = p.gastado; etiqueta = 'tu ministerio';
+          if (!p.limite) { hint.hidden = true; return; }
+          lim = p.limite; gastado = p.gastado; etiqueta = 'el ministerio';
         }
         const disp = lim - gastado;
         const excede = monto > disp;

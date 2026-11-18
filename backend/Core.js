@@ -17,14 +17,14 @@ var TesoCore = (function () {
   // ---------------------------------------------------------------
   var TABLES = {
     Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn'],
-    Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn'],
+    Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn', 'presupuestoMensual'],
     MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo'],
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn'],
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor']
   };
-  var NUMERIC = { monto: 1, itemMensual: 1 };
+  var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1 };
   var BOOL = { activo: 1, debeCambiarPass: 1 };
 
   // Tipos de gasto/ingreso de la tesorería general: cada grupo reúne varias categorías
@@ -267,24 +267,23 @@ var TesoCore = (function () {
       return { fecha: p.fecha, tipo: tipo, categoria: cat, descripcion: String(p.descripcion || '').trim().slice(0, 300), monto: monto };
     }
     // ---------------- Presupuestos ----------------
-    // Ministerio: lo gastado en el mes no puede superar su ítem mensual (presupuesto)
-    // más los ingresos adicionales que el mismo ministerio registró ese mes.
+    // Ministerio: presupuesto mensual fijo que define el tesorero (independiente del ítem).
+    // Lo gastado en el mes no puede superarlo. 0 = sin límite.
     function presupuestoMinisterio(m, mes, excluirId) {
-      var movs = all('MovimientosMinisterios').filter(function (x) { return x.ministerioId === m.id && x.mes === mes && x.id !== excluirId; });
-      var extra = 0, gastado = 0;
-      movs.forEach(function (x) {
-        if (x.tipo === 'gasto') gastado += x.monto;
-        else if (x.origen !== 'transferencia') extra += x.monto;
+      var gastado = 0;
+      all('MovimientosMinisterios').forEach(function (x) {
+        if (x.ministerioId === m.id && x.mes === mes && x.id !== excluirId && x.tipo === 'gasto') gastado += x.monto;
       });
-      var limite = m.itemMensual + extra;
-      return { limite: limite, gastado: gastado, disponible: limite - gastado, extra: extra };
+      var limite = m.presupuestoMensual || 0;
+      return { limite: limite, gastado: gastado, disponible: limite - gastado };
     }
     function exigirPresupuestoMinisterio(m, mes, monto, excluirId) {
       var b = presupuestoMinisterio(m, mes, excluirId);
+      if (!b.limite) return;
       if (b.gastado + monto > b.limite) {
         throw TesoError('Este gasto supera el presupuesto de ' + m.nombre + ' para ' + labelMes(mes) + '. ' +
-          'Presupuesto: ' + pesos(b.limite) + (b.extra ? ' (ítem ' + pesos(m.itemMensual) + ' + ingresos extra ' + pesos(b.extra) + ')' : '') +
-          ' · ya gastado: ' + pesos(b.gastado) + ' · disponible: ' + pesos(Math.max(0, b.disponible)) + '.', 'PRESUPUESTO');
+          'Presupuesto: ' + pesos(b.limite) + ' · ya gastado: ' + pesos(b.gastado) + ' · disponible: ' + pesos(Math.max(0, b.disponible)) +
+          '. Si es necesario, el tesorero puede ajustar el presupuesto del ministerio.', 'PRESUPUESTO');
       }
     }
     // Tesorería general: un presupuesto fijo mensual para TODOS sus gastos
@@ -410,8 +409,8 @@ var TesoCore = (function () {
       var monto = Math.round(Number(p.monto !== undefined && p.monto !== '' ? p.monto : m.itemMensual));
       if (!(monto > 0)) throw TesoError('El monto a transferir debe ser mayor a 0');
       if (monto > MAX_MONTO) throw TesoError('El monto es demasiado grande');
-      if (!(m.itemMensual > 0)) throw TesoError('Primero define el ítem mensual (presupuesto) de ' + m.nombre + ' en Configuración → Ministerios.');
-      if (monto > m.itemMensual) throw TesoError('La transferencia no puede superar el presupuesto mensual (ítem) de ' + m.nombre + ': ' + pesos(m.itemMensual) + '.', 'PRESUPUESTO');
+      if (!(m.itemMensual > 0)) throw TesoError('Primero define el ítem mensual de ' + m.nombre + ' en Configuración → Ministerios.');
+      if (monto > m.itemMensual) throw TesoError('La transferencia no puede superar el ítem mensual de ' + m.nombre + ': ' + pesos(m.itemMensual) + '.', 'PRESUPUESTO');
       var prev = prevMonth(mes);
       if (!p.forzar) {
         var tieneHistoria = transf.some(function (t) { return t.ministerioId === m.id && t.mes < mes; }) ||
@@ -541,12 +540,18 @@ var TesoCore = (function () {
     function saveMinisterio(user, p) {
       var nombre = String(p.nombre || '').trim();
       if (!nombre) throw TesoError('El ministerio necesita un nombre');
+      var actual = p.id ? find('Ministerios', p.id) : null;
+      var monto = function (v, previo) {
+        if (v === undefined || v === null || v === '') return previo || 0;
+        return Math.min(MAX_MONTO, Math.max(0, Math.round(Number(v) || 0)));
+      };
       var d = {
         nombre: nombre,
-        color: /^#[0-9a-fA-F]{6}$/.test(p.color) ? p.color : '#3a6ea5',
-        icono: String(p.icono || '⛪').slice(0, 4),
-        itemMensual: Math.min(MAX_MONTO, Math.max(0, Math.round(Number(p.itemMensual) || 0))),
-        activo: p.activo === undefined ? true : toBool(p.activo)
+        color: /^#[0-9a-fA-F]{6}$/.test(p.color) ? p.color : (actual ? actual.color : '#3a6ea5'),
+        icono: String(p.icono || (actual ? actual.icono : '⛪')).slice(0, 4),
+        itemMensual: monto(p.itemMensual, actual && actual.itemMensual),
+        presupuestoMensual: monto(p.presupuestoMensual, actual && actual.presupuestoMensual),
+        activo: p.activo === undefined ? (actual ? actual.activo : true) : toBool(p.activo)
       };
       if (p.id) return update('Ministerios', p.id, d);
       return insert('Ministerios', Object.assign(d, { id: uid(), creadoEn: env.now() }));

@@ -18,7 +18,7 @@ export function render(root, ctx) {
 
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label">${icon('grid', 15)} Ministerios activos</span><strong class="kpi-value">${mins.length}</strong></article>
-    <article class="kpi"><span class="kpi-label">${icon('wallet', 15)} Presupuesto del mes</span><strong class="kpi-value">${money(totDisp)}</strong><span class="kpi-sub">ítems + ingresos extra de los ministerios</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('wallet', 15)} Presupuesto del mes</span><strong class="kpi-value">${money(totDisp)}</strong><span class="kpi-sub">suma de los presupuestos de los ministerios</span></article>
     <article class="kpi"><span class="kpi-label">${icon('up', 15)} Gastado en ${mesNombre(mes)}</span><strong class="kpi-value">${money(totGastos)}</strong></article>
     <article class="kpi ${totSinBoleta ? 'kpi-warn' : ''}"><span class="kpi-label">${icon('receipt', 15)} Gastos sin boleta</span><strong class="kpi-value">${totSinBoleta}</strong><span class="kpi-sub">${totSinBoleta ? 'revisar respaldo' : 'todo respaldado'}</span></article>
   </section>
@@ -37,7 +37,7 @@ export function render(root, ctx) {
         </header>
         <div class="min-bar">
           <div class="progress"><span style="width:${Math.min(100, r.uso * 100)}%;${r.uso > 1 ? 'background:var(--rose)' : ''}"></span></div>
-          <div class="min-bar-txt"><span>Gastado <b>${money(r.gastos)}</b></span><span>${r.uso > 1 ? '<b class="gasto">sobre</b> ' : ''}presupuesto ${money(disp)}</span></div>
+          <div class="min-bar-txt"><span>Gastado <b>${money(r.gastos)}</b></span><span>${r.sinPresupuesto ? 'sin presupuesto' : `${r.uso > 1 ? '<b class="gasto">sobre</b> ' : ''}presupuesto ${money(disp)}`}</span></div>
         </div>
         <div class="min-spark"><canvas data-spark="${m.id}"></canvas></div>
         <footer>

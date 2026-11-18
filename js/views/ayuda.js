@@ -115,7 +115,7 @@ const TEMAS = {
       ${pasos(`Presiona ${btn('plus', 'Nuevo usuario')}.`, 'Escribe el nombre, un usuario corto (ej: <code>alabanza</code>), el rol <b>Líder</b> y su ministerio.', 'Inventa una <b>contraseña temporal</b> y envíasela junto con el enlace de la página.', 'Al entrar por primera vez, el líder deberá crear su propia contraseña.')}
       ${tip('Si un líder olvida su contraseña, edita su usuario y escribe una nueva contraseña temporal.')}
       <h4>Presupuesto</h4>
-      <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. En la misma pantalla se fija el <b>ítem mensual</b> de cada ministerio, que es su presupuesto. Solo el tesorero puede cambiar estos montos.</p>
+      <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. En la misma pantalla se fijan, por separado, el <b>ítem mensual</b> de cada ministerio (lo que se le transfiere; la transferencia no puede superarlo) y su <b>presupuesto mensual</b> (lo máximo que puede gastar en el mes). Solo el tesorero puede cambiar estos montos.</p>
       <h4>Importar historial</h4>
       <p>Carga el libro de entradas y salidas (una hoja por mes). La app clasifica cada línea, compara los totales con los del libro y no duplica lo que ya importaste, así que puedes volver a usarlo cuando el libro tenga meses nuevos.</p>
       <h4>General</h4>
@@ -147,7 +147,7 @@ const TEMAS = {
         <li><b>Saldo inicial:</b> lo que sobró de meses anteriores.</li>
         <li><b>Ingresos:</b> el ítem mensual que te transfirió tesorería más otros ingresos.</li>
         <li><b>Gastos:</b> lo que has rendido, y cuántos gastos tienen boleta.</li>
-        <li><b>Presupuesto del mes:</b> tu ítem mensual más los ingresos extra que registres ese mes. No puedes gastar más que eso; al rendir un gasto verás cuánto te queda disponible.</li>
+        <li><b>Presupuesto del mes:</b> el máximo que puede gastar tu ministerio en el mes, definido por tesorería. No puedes gastar más que eso; al rendir un gasto verás cuánto te queda disponible.</li>
         <li><b>Saldo al cierre:</b> lo que debería quedarte al final del mes.</li>
       </ul>
       <p>El ítem mensual aparece solo, con fondo dorado ${icon('transfer', 13)}, cuando tesorería lo transfiere.</p>`
