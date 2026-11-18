@@ -77,7 +77,7 @@ function renderIntegrantes(root, ctx, m, base, esTes) {
   const lbl = etiquetaIntegrantes(m);
 
   root.innerHTML = `
-  ${cabecera(m, base, esTes, 'integrantes', lbl, `<button class="btn btn-primary" data-nuevo>${icon('plus', 16)} Agregar ${singular(m)}</button>`)}
+  ${cabecera(m, base, esTes, 'integrantes', lbl, `${esAdmin(ctx.user) ? `<button class="btn btn-ghost" data-varios>${icon('church', 16)} Agregar miembros</button>` : ''}<button class="btn btn-primary" data-nuevo>${icon('plus', 16)} Agregar ${singular(m)}</button>`)}
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label">${icon('users', 15)} ${lbl} activos</span><strong class="kpi-value">${activos.length}</strong><span class="kpi-sub">${todos.length - activos.length ? `${todos.length - activos.length} inactivo${todos.length - activos.length > 1 ? 's' : ''}` : 'en el listado'}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('church', 15)} Miembros de la iglesia</span><strong class="kpi-value">${miembros}</strong><span class="kpi-sub">enlazados a su ficha de Miembros</span></article>
@@ -108,12 +108,60 @@ function renderIntegrantes(root, ctx, m, base, esTes) {
   </article>`;
 
   root.querySelector('[data-nuevo]').addEventListener('click', () => editarIntegrante(ctx, m));
+  root.querySelector('[data-varios]')?.addEventListener('click', () => agregarVariosMiembros(ctx, m));
   root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editarIntegrante(ctx, m, todos.find((i) => i.id === b.dataset.edit))));
   root.querySelectorAll('[name=ftipo]').forEach((r) => r.addEventListener('change', () => { filtros.tipo = r.value; renderIntegrantes(root, ctx, m, base, esTes); }));
   const qi = root.querySelector('[data-q]');
   qi.addEventListener('input', () => {
     clearTimeout(qi._t);
     qi._t = setTimeout(() => { filtros.q = qi.value; renderIntegrantes(root, ctx, m, base, esTes); const n = root.querySelector('[data-q]'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250);
+  });
+}
+
+// Elegir de una vez a varios miembros de la iglesia para el listado (solo tesorería, que ve el registro)
+function agregarVariosMiembros(ctx, m) {
+  const { data } = ctx;
+  const ya = new Set(integrantesDe(data, m.id).filter((i) => i.esMiembro).map((i) => i.miembroId));
+  const fichas = Object.fromEntries((data.miembros || []).map((x) => [x.id, x]));
+  const lista = (data.miembrosEnlace || []).filter((x) => !ya.has(x.id))
+    .map((x) => ({ ...x, edad: edad(fichas[x.id]?.fechaNacimiento, data.hoy) }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  if (!lista.length) return toast('Todos los miembros activos ya están en el listado');
+  return modal({
+    title: `Agregar miembros · ${esc(etiquetaIntegrantes(m))}`,
+    body: `
+      <p class="muted small">Marca a los miembros de la iglesia que participan en ${esc(m.nombre)}. Quedan enlazados a su ficha: sus datos se toman de Miembros.</p>
+      <div class="pick-tools"><div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar…" data-buscar></div>
+        <select data-edad><option value="">Todas las edades</option><option value="25">Hasta 25 años</option><option value="30">Hasta 30 años</option><option value="35">Hasta 35 años</option></select>
+        <button type="button" class="link-btn" data-todos>Marcar visibles</button><button type="button" class="link-btn" data-ninguno>Ninguno</button></div>
+      <ul class="pick-list">${lista.map((x) => `<li data-nombre="${esc(x.nombre.toLowerCase())}" data-edad="${x.edad ?? ''}"><label class="check"><input type="checkbox" name="mb" value="${x.id}"> ${esc(x.nombre)}${x.edad != null ? ` <small class="muted">· ${x.edad} años</small>` : ''}</label></li>`).join('')}</ul>
+      <p class="muted small" data-cuenta></p>`,
+    submitLabel: 'Agregar al listado',
+    onOpen(f) {
+      const cajas = [...f.querySelectorAll('[name=mb]')];
+      const contar = () => { const n = cajas.filter((c) => c.checked).length; f.querySelector('[data-cuenta]').textContent = `${n} seleccionado${n === 1 ? '' : 's'}`; };
+      const filtrar = () => {
+        const q = f.querySelector('[data-buscar]').value.toLowerCase();
+        const max = +f.querySelector('[data-edad]').value || 0;
+        f.querySelectorAll('.pick-list li').forEach((li) => {
+          const e = li.dataset.edad === '' ? null : +li.dataset.edad;
+          li.hidden = (q && !li.dataset.nombre.includes(q)) || (max && (e == null || e > max));
+        });
+      };
+      cajas.forEach((c) => c.addEventListener('change', contar)); contar();
+      f.querySelector('[data-buscar]').addEventListener('input', filtrar);
+      f.querySelector('[data-edad]').addEventListener('change', filtrar);
+      f.querySelector('[data-todos]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.closest('li').hidden) c.checked = true; }); contar(); });
+      f.querySelector('[data-ninguno]').addEventListener('click', () => { cajas.forEach((c) => { c.checked = false; }); contar(); });
+    },
+    async onSubmit(f) {
+      const ids = [...f.querySelectorAll('[name=mb]')].filter((c) => c.checked).map((c) => c.value);
+      if (!ids.length) throw new Error('Marca al menos un miembro');
+      const r = await call('agregarMiembrosIntegrantes', { ministerioId: m.id, miembroIds: ids });
+      const n = r.agregados + r.enlazados;
+      toast(`${n} agregado${n === 1 ? '' : 's'} al listado${r.enlazados ? ` (${r.enlazados} ya estaba${r.enlazados === 1 ? '' : 'n'} y se enlazó)` : ''}`);
+      await ctx.refresh();
+    }
   });
 }
 

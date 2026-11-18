@@ -533,6 +533,38 @@ var TesoCore = (function () {
       var r = actual ? update('Integrantes', actual.id, d) : insert('Integrantes', Object.assign(d, { id: uid(), creadoEn: now }));
       return vistaIntegrantes([r])[0];
     }
+    // Agrega de una vez al listado del ministerio a varios miembros de la iglesia (quedan enlazados a su ficha).
+    // Si ya hay en el listado una persona sin enlazar con el mismo nombre (única), se enlaza en vez de duplicarla.
+    function agregarMiembrosIntegrantes(user, p) {
+      var m = ministerioConActividades(user, p.ministerioId);
+      var ids = (p.miembroIds || []).map(String);
+      if (!ids.length) throw TesoError('Elige al menos un miembro');
+      if (ids.length > 300) throw TesoError('Demasiados a la vez');
+      var lista = all('Integrantes').filter(function (i) { return i.ministerioId === m.id; });
+      var enlazado = {};
+      lista.forEach(function (i) { if (i.miembroId) enlazado[i.miembroId] = true; });
+      var now = env.now(), agregados = 0, enlazados = 0, omitidos = 0, vistos = {};
+      ids.forEach(function (mid) {
+        if (vistos[mid]) return;
+        vistos[mid] = true;
+        var mb = find('Miembros', mid);
+        if (!mb || enlazado[mid]) { omitidos++; return; }
+        var clave = normalNombre(mb.nombre);
+        var mismos = lista.filter(function (i) { return normalNombre(i.nombre) === clave && !(i.miembroId && find('Miembros', i.miembroId)); });
+        if (mismos.length === 1) {
+          var it = mismos[0];
+          update('Integrantes', it.id, { miembroId: mid, activo: true, actualizadoEn: now });
+          it.miembroId = mid;
+          enlazados++;
+        } else {
+          var nuevo = insert('Integrantes', { id: uid(), ministerioId: m.id, nombre: mb.nombre, celular: '', email: '', fechaNacimiento: '', miembroId: mid, notas: '', activo: true, creadoEn: now, actualizadoEn: now });
+          lista.push(nuevo);
+          agregados++;
+        }
+        enlazado[mid] = true;
+      });
+      return { agregados: agregados, enlazados: enlazados, omitidos: omitidos };
+    }
     function deleteIntegrante(user, p) {
       var it = find('Integrantes', p.id);
       if (!it) throw TesoError('Integrante no encontrado');
@@ -1269,6 +1301,7 @@ var TesoCore = (function () {
       deleteDiezmo: { fn: deleteDiezmo, role: T, write: true },
       saveIntegrante: { fn: saveIntegrante, role: CON_MINISTERIO, write: true },
       deleteIntegrante: { fn: deleteIntegrante, role: CON_MINISTERIO, write: true },
+      agregarMiembrosIntegrantes: { fn: agregarMiembrosIntegrantes, role: ADMIN, write: true },
       saveActividad: { fn: saveActividad, role: CON_MINISTERIO, write: true },
       deleteActividad: { fn: deleteActividad, role: CON_MINISTERIO, write: true },
       setConfirmados: { fn: setConfirmados, role: CON_MINISTERIO, write: true },
