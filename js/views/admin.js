@@ -46,10 +46,15 @@ export function render(root, ctx) {
   }
 
   if (tab === 'usuarios') {
+    // Solo el administrador gestiona usuarios (si aún no hay ninguno, tesorero y pastor crean el primero)
+    const hayAdmin = data.usuarios.some((u) => u.rol === 'admin' && u.activo);
+    const puede = ctx.user.rol === 'admin' || !hayAdmin;
     body.innerHTML = `
     <article class="card">
       <header class="card-head wrap"><div><h3>Usuarios</h3><p class="muted">Administrador, tesorero y pastor ven todo. Los líderes solo su ministerio. Secretaría solo el registro de miembros.</p></div>
-        <button class="btn btn-primary btn-sm" data-new>${icon('plus', 16)} Nuevo usuario</button></header>
+        ${puede ? `<button class="btn btn-primary btn-sm" data-new>${icon('plus', 16)} Nuevo usuario</button>` : ''}</header>
+      ${!puede ? `<div class="note">${icon('lock', 16)}<span>Solo el <b>administrador</b> puede agregar, modificar o desactivar usuarios.</span></div>`
+        : !hayAdmin ? `<div class="note">${icon('alert', 16)}<span>Aún no hay un <b>administrador</b>. Crea uno (o cambia tu usuario a Administrador): desde entonces, solo el administrador podrá agregar, modificar o desactivar usuarios.</span></div>` : ''}
       <div class="table-wrap"><table class="table">
         <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Ministerio</th><th>Estado</th><th></th></tr></thead>
         <tbody>${data.usuarios.map((u) => `
@@ -59,10 +64,10 @@ export function render(root, ctx) {
             <td>${{ admin: '<span class="badge st-sent">Administrador</span>', tesorero: '<span class="badge st-sent">Tesorero</span>', pastor: '<span class="badge st-sent">Pastor</span>', secretaria: '<span class="badge st-obs">Secretaría</span>' }[u.rol] || '<span class="badge st-open">Líder</span>'}</td>
             <td>${minName[u.ministerioId] ? `${esc(minName[u.ministerioId].icono)} ${esc(minName[u.ministerioId].nombre)}` : '<span class="muted">—</span>'}</td>
             <td>${u.activo ? (u.debeCambiarPass ? '<span class="badge st-obs">Clave temporal</span>' : '<span class="badge st-ok">Activo</span>') : '<span class="badge st-open">Inactivo</span>'}</td>
-            <td class="row-actions"><button class="icon-btn sm" data-edit="${u.id}">${icon('edit', 16)}</button></td>
+            <td class="row-actions">${puede ? `<button class="icon-btn sm" data-edit="${u.id}">${icon('edit', 16)}</button>` : ''}</td>
           </tr>`).join('')}</tbody></table></div>
     </article>`;
-    body.querySelector('[data-new]').addEventListener('click', () => editUsuario(ctx));
+    body.querySelector('[data-new]')?.addEventListener('click', () => editUsuario(ctx));
     body.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editUsuario(ctx, data.usuarios.find((u) => u.id === b.dataset.edit))));
   }
 
@@ -214,7 +219,7 @@ function editUsuario(ctx, u = null) {
       const sync = () => {
         f.querySelector('[data-min]').hidden = f.rol.value !== 'lider';
         const ayuda = f.querySelector('[data-rol-ayuda]');
-        if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', admin: 'Permiso para todo: tesorería, ministerios y sus actividades, diezmos, miembros, usuarios y configuración.', secretaria: 'Solo accede a Miembros: puede agregar y editar sus datos. No ve dinero ni diezmos.' }[f.rol.value];
+        if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', admin: 'Permiso para todo, y es el único que puede agregar, modificar o desactivar usuarios.', secretaria: 'Solo accede a Miembros: puede agregar y editar sus datos. No ve dinero ni diezmos.' }[f.rol.value];
       };
       f.rol.addEventListener('change', sync); sync();
     },

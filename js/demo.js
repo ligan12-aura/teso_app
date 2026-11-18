@@ -4,8 +4,8 @@
  * Sirve para probar la app sin configurar Google.
  */
 
-const DB_KEY = 'teso_demo_db_v2';
-try { localStorage.removeItem('teso_demo_db_v1'); } catch (e) { /* sin almacenamiento */ }
+const DB_KEY = 'teso_demo_db_v3';
+try { localStorage.removeItem('teso_demo_db_v1'); localStorage.removeItem('teso_demo_db_v2'); } catch (e) { /* sin almacenamiento */ }
 const FILES_KEY = 'teso_demo_files_v1';
 const SECRET_KEY = 'teso_demo_secret';
 
@@ -174,6 +174,7 @@ function seed() {
   const tesoreroId = (user('Daniel Muñoz', 'tesorero', 'tesorero'), db.Usuarios[0].id);
   user('Pastor Samuel Ríos', 'pastor', 'pastor');
   user('Marta Lagos', 'secretaria', 'secretaria');
+  user('Rodrigo Fuentes', 'admin', 'admin');
 
   const mins = [
     ['Alabanza', '#7c5cbf', '🎵', 120000, 'Camila Rojas', 'alabanza'],

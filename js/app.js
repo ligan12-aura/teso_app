@@ -108,6 +108,7 @@ function renderLogin(msg = '') {
           <strong>${icon('sparkle', 15)} Modo demostración</strong>
           <p>Datos de ejemplo guardados solo en este navegador. Contraseña para todos: <code>demo</code></p>
           <div class="demo-users">
+            <button type="button" data-u="admin">Administrador</button>
             <button type="button" data-u="tesorero">Tesorero</button>
             <button type="button" data-u="pastor">Pastor</button>
             <button type="button" data-u="secretaria">Secretaría</button>

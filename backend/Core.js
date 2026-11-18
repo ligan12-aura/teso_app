@@ -1244,7 +1244,12 @@ var TesoCore = (function () {
       if (p.id) return update('Ministerios', p.id, d);
       return insert('Ministerios', Object.assign(d, { id: uid(), creadoEn: env.now() }));
     }
+    // Solo el administrador agrega, modifica o desactiva usuarios. Mientras no exista ningún administrador
+    // activo, tesorero y pastor pueden hacerlo (para crear el primero).
+    function hayAdminActivo() { return all('Usuarios').some(function (u) { return u.rol === 'admin' && toBool(u.activo); }); }
+    function puedeGestionarUsuarios(user) { return user.rol === 'admin' || (ADMIN.indexOf(user.rol) >= 0 && !hayAdminActivo()); }
     function saveUsuario(user, p) {
+      if (!puedeGestionarUsuarios(user)) throw TesoError('Solo el administrador puede agregar, modificar o desactivar usuarios', 'FORBIDDEN');
       var usuario = String(p.usuario || '').trim().toLowerCase();
       if (!/^[a-z0-9._-]{3,30}$/.test(usuario)) throw TesoError('El usuario debe tener 3-30 caracteres (letras, números, punto o guion)');
       var nombre = String(p.nombre || '').trim();
@@ -1256,6 +1261,7 @@ var TesoCore = (function () {
       if (dup) throw TesoError('Ese nombre de usuario ya existe');
       var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, email: String(p.email || '').trim(), activo: p.activo === undefined ? true : toBool(p.activo) };
       if (p.id === user.id && (!d.activo || ADMIN.indexOf(d.rol) < 0)) throw TesoError('No puedes quitarte a ti mismo el acceso completo ni desactivarte');
+      if (p.id === user.id && user.rol === 'admin' && d.rol !== 'admin') throw TesoError('No puedes quitarte a ti mismo el rol de administrador: pídeselo a otro administrador');
       var pass = String(p.password || '');
       if (pass) {
         if (pass.length < 6) throw TesoError('La contraseña debe tener al menos 6 caracteres');
