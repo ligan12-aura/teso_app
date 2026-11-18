@@ -24,7 +24,7 @@ var TesoCore = (function () {
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
     Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId'],
-    Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId']
+    Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId']
   };
   var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1 };
   var BOOL = { activo: 1, debeCambiarPass: 1 };
@@ -772,16 +772,20 @@ var TesoCore = (function () {
     function saveDiezmo(user, p) {
       var d = datosDiezmo(p);
       var now = env.now();
+      // comprobante (foto o PDF de la transferencia), opcional
+      var archivoNuevo = guardarArchivo(p.archivo, ['Comprobantes diezmos', d.mes]);
       if (p.id) {
         var actual = find('Diezmos', p.id);
         if (!actual) throw TesoError('Registro no encontrado');
+        if (archivoNuevo) { borrarArchivo(actual.archivoId); d.archivoId = archivoNuevo; }
+        else if (p.quitarArchivo) { borrarArchivo(actual.archivoId); d.archivoId = ''; }
         var g = movDeDiezmo(actual);
         if (g) update('MovimientosGenerales', g.id, { fecha: d.fecha, mes: d.mes, monto: d.monto, medio: d.medio, descripcion: 'Diezmo' + (d.medio ? ' · ' + d.medio.toLowerCase() : ''), actualizadoEn: now });
         return update('Diezmos', p.id, Object.assign(d, { actualizadoEn: now }));
       }
       var id = uid();
       var movId = p.sumarACaja ? ingresoDeDiezmo(user, d, id).id : '';
-      return insert('Diezmos', Object.assign(d, { id: id, creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: movId }));
+      return insert('Diezmos', Object.assign(d, { id: id, creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: movId, archivoId: archivoNuevo }));
     }
     function saveDiezmosLote(user, p) {
       var items = (p.items || []).filter(function (it) { return Number(it.monto) > 0; });
@@ -841,6 +845,7 @@ var TesoCore = (function () {
       if (!x) throw TesoError('Registro no encontrado');
       var g = movDeDiezmo(x);
       if (g) remove('MovimientosGenerales', g.id);
+      borrarArchivo(x.archivoId);
       remove('Diezmos', String(p.id));
       return { id: p.id };
     }

@@ -1,5 +1,6 @@
 // Control de diezmos por hermano (solo tesorero)
-import { icon, esc, money, moneyShort, modal, formData, toast, confirmar, emptyState, fecha, chart, COLOR, pesos, formatoPesos, cap, mesLargo } from '../ui.js';
+import { icon, esc, money, moneyShort, modal, formData, toast, confirmar, emptyState, fecha, chart, COLOR, pesos, formatoPesos, cap, mesLargo, fileToPayload, verArchivo } from '../ui.js';
+import { isDemo } from '../api.js';
 import { call } from '../api.js';
 import { editarMiembro } from './miembros.js';
 import { importarHistorialDiezmos } from './diezmosImportar.js';
@@ -196,7 +197,7 @@ function diezmoDelMes(ctx, m, mes) {
   return modal({
     title: `${esc(m.nombre)} · ${cap(mesLargo(mes))}`,
     body: `
-      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.conyugeId ? `<br><small class="muted">💍 Matrimonio: ${esc(nombreDe[d.miembroId] || '')} y ${esc(nombreDe[d.conyugeId] || '')}</small>` : ''}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b><button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
+      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.conyugeId ? `<br><small class="muted">💍 Matrimonio: ${esc(nombreDe[d.miembroId] || '')} y ${esc(nombreDe[d.conyugeId] || '')}</small>` : ''}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b>${d.archivoId ? `<button type="button" class="chip-btn" data-ver="${d.id}">${icon('receipt', 14)} Comprobante</button>` : ''}<button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
         <p class="muted small">Total del mes: <b>${money(regs.reduce((a, d) => a + d.monto, 0))}</b>. Puedes agregar otro diezmo abajo.</p>` : '<p class="muted">Sin diezmos registrados este mes.</p>'}
       <div class="form-row">
         <label class="field"><span>Monto ($)</span><input name="monto" inputmode="numeric" class="input-money" placeholder="0" required></label>
@@ -206,11 +207,38 @@ function diezmoDelMes(ctx, m, mes) {
         <label class="field"><span>Medio</span><select name="medio">${opcionesMedio(data)}</select></label>
         <label class="field"><span>Nota (opcional)</span><input name="notas" maxlength="200"></label>
       </div>
+      <div class="field">
+        <span>Comprobante (opcional)</span>
+        <label class="upload">
+          <input type="file" name="archivo" accept="image/*,application/pdf">
+          <div class="upload-ui">
+            <div class="upload-preview" hidden></div>
+            <div class="upload-cta">${icon('camera', 22)}<span><strong>Foto o captura de la transferencia</strong><small>JPG, PNG o PDF · queda guardado como respaldo</small></span></div>
+          </div>
+        </label>
+      </div>
       ${conyuge ? `<label class="check pareja-check"><input type="checkbox" name="matrimonio" checked> <span>💍 <b>Diezmo del matrimonio</b> con ${esc(conyuge.nombre)}<br><small class="muted">Cuenta como diezmo de ambos hermanos.</small></span></label>` : ''}
       <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general)<br><small class="muted">Desmárcalo solo si este dinero ya está incluido en un culto registrado.</small></span></label>`,
     submitLabel: 'Registrar diezmo',
     onOpen(f, { close }) {
       formatoPesos(f.monto);
+      const file = f.archivo;
+      const prev = f.querySelector('.upload-preview');
+      file.addEventListener('change', async () => {
+        const fl = file.files[0];
+        if (!fl) return;
+        prev.hidden = false;
+        prev.innerHTML = '<div class="spinner sm"></div>';
+        try {
+          const p = await fileToPayload(fl, isDemo ? 900 : 1600, isDemo ? 0.6 : 0.78);
+          file._payload = p;
+          prev.innerHTML = p.preview ? `<img src="${p.preview}" alt="Vista previa del comprobante">` : `<span class="has-file">${icon('file', 20)} ${esc(fl.name)}</span>`;
+        } catch (e) { prev.innerHTML = `<span class="err">${esc(e.message)}</span>`; file.value = ''; file._payload = null; }
+      });
+      f.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => {
+        const reg = regs.find((x) => x.id === b.dataset.ver);
+        if (reg) verArchivo(reg.archivoId, `Comprobante · ${m.nombre} · ${money(reg.monto)}`);
+      }));
       f.querySelectorAll('[data-borrar]').forEach((b) => b.addEventListener('click', async () => {
         close(null);
         const reg = regs.find((x) => x.id === b.dataset.borrar);
@@ -224,6 +252,8 @@ function diezmoDelMes(ctx, m, mes) {
       d.monto = pesos(d.monto);
       if (!d.monto) throw new Error('Ingresa el monto');
       delete d.matrimonio;
+      const comp = f.archivo._payload;
+      if (comp) d.archivo = { nombre: comp.nombre, mime: comp.mime, base64: comp.base64 };
       await call('saveDiezmo', { miembroId: m.id, conyugeId: conyuge && f.matrimonio?.checked ? conyuge.id : '', ...d, sumarACaja: !!f.sumarACaja.checked });
       toast(f.sumarACaja.checked ? 'Diezmo registrado y sumado a la caja' : 'Diezmo registrado');
       await ctx.refresh();

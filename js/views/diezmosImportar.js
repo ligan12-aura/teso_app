@@ -126,14 +126,25 @@ export function importarHistorialDiezmos(ctx) {
         try {
           const crudas = await leer(file);
           if (!crudas.length) throw new Error('No encontré filas con Fecha y Monto. Revisa que la primera fila de la tabla tenga esos encabezados.');
+          const vistos = {};
+          const porContenido = {};
+          data.diezmos.forEach((d) => {
+            const m = /Cuaderno: ([^·]+)/.exec(d.notas || '');
+            if (m) { const k = `${d.fecha}|${d.monto}|${norm(m[1])}`; porContenido[k] = (porContenido[k] || 0) + 1; }
+          });
           filas = crudas.map((x) => {
             const h = buscarMiembro(miembros, x.hermano);
             const c = buscarMiembro(miembros, x.conyuge);
             const esMatrimonio = !!x.conyuge || /^(FAM|MATRIMONIO)\b/.test(norm(x.cuaderno)) || /\w-\w/.test(x.cuaderno);
             let conyugeId = c.id;
             if (!conyugeId && h.id && esMatrimonio) conyugeId = miembros.find((m) => m.id === h.id)?.conyugeId || '';
-            const refId = `historial:${x.fecha}:${x.monto}:${hash(norm(x.cuaderno || x.hermano))}:${x.fila}`;
-            return { ...x, miembroId: h.id, conyugeId, ambiguo: h.ambiguo, esMatrimonio, refId, existe: existentes.has(refId) };
+            // Identificador estable (no depende de la fila, para poder agregar meses al mismo archivo)
+            const base = `historial:${x.fecha}:${x.monto}:${hash(norm(x.cuaderno || x.hermano))}`;
+            vistos[base] = (vistos[base] || 0) + 1;
+            const refId = vistos[base] > 1 ? `${base}#${vistos[base]}` : base;
+            // También se reconoce lo importado antes por fecha, monto y nombre del cuaderno
+            const yaPorContenido = (porContenido[`${x.fecha}|${x.monto}|${norm(x.cuaderno || x.hermano)}`] || 0) >= vistos[base];
+            return { ...x, miembroId: h.id, conyugeId, ambiguo: h.ambiguo, esMatrimonio, refId, existe: existentes.has(refId) || yaPorContenido };
           });
           pintar();
         } catch (er) {
