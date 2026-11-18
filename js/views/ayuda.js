@@ -125,7 +125,7 @@ const TEMAS = {
       id: 'miembros', titulo: 'Miembros', ico: 'users', html: `
       <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Solo lo ve el tesorero.</p>
       <ul class="hp-list">
-        <li><b>Activo / Inactivo:</b> los inactivos (alejados) no se consideran en el resumen de diezmos, pero su historial se conserva.</li>
+        <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b>. En el resumen de diezmos cuenta como activo hasta el mes anterior a la baja, y desde ahí deja de contar; su historial se conserva. Un miembro con diezmos no se puede eliminar: se marca inactivo.</li>
         <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
         <li><b>💍 Matrimonio:</b> al elegir el cónyuge, ambos quedan unidos. Al registrar diezmos, el matrimonio aparece en una sola fila y su diezmo cuenta para los dos hermanos.</li>
         <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>

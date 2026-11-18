@@ -43,7 +43,15 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
   const hoyY = Number(data.hoy.slice(0, 4)), hoyM = Number(data.hoy.slice(5, 7));
   const mesesPeriodo = anio < hoyY ? 12 : anio === hoyY ? hoyM : 0;
   const porMiembro = {};
-  const miembros = data.miembros.filter((m) => incluirInactivos || m.estado === 'activo');
+  // Meses del año en que el hermano estuvo activo: todos si sigue activo; si se dio de baja,
+  // hasta el mes anterior a la baja; inactivo sin fecha de baja = no cuenta en el año
+  const mesesActivo = (m) => {
+    if (m.estado === 'activo') return 12;
+    if (!m.fechaBaja) return 0;
+    const y = +m.fechaBaja.slice(0, 4), mo = +m.fechaBaja.slice(5, 7);
+    return y > anio ? 12 : y < anio ? 0 : mo - 1;
+  };
+  const miembros = data.miembros.filter((m) => incluirInactivos || m.estado === 'activo' || mesesActivo(m) > 0);
   const ultimoDe = {};
   data.diezmos.forEach((d) => [d.miembroId, d.conyugeId].filter(Boolean).forEach((id) => { if (!ultimoDe[id] || d.fecha > ultimoDe[id]) ultimoDe[id] = d.fecha; }));
   miembros.forEach((m) => {
@@ -56,7 +64,8 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
       if (d.conyugeId) pareja[i] = true;
     });
     // El mes en curso solo cuenta si ya tiene diezmo: mientras no termina, no es una falta
-    const evaluados = anio === hoyY && !meses[hoyM - 1] ? hoyM - 1 : mesesPeriodo;
+    const activoHasta = mesesActivo(m);
+    const evaluados = Math.min(anio === hoyY && !meses[hoyM - 1] ? hoyM - 1 : mesesPeriodo, activoHasta);
     const conDiezmo = meses.slice(0, evaluados).filter((v) => v > 0).length;
     const total = meses.reduce((a, v) => a + v, 0);
     // Sin meses evaluables (año futuro o enero recién empezado) no hay categoría
@@ -64,7 +73,10 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
     // meses seguidos sin diezmar hasta el último mes evaluado (dentro del año)
     let racha = 0;
     for (let i = evaluados - 1; i >= 0 && !meses[i]; i--) racha++;
-    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat, racha, ultimo: ultimoDe[m.id] || '' };
+    // "En el período": activo hoy, o que estuvo activo algún mes evaluado del año antes de su baja
+    const enPeriodo = m.estado === 'activo' || evaluados > 0;
+    const bajaEnAnio = m.estado !== 'activo' && m.fechaBaja && +m.fechaBaja.slice(0, 4) === anio ? +m.fechaBaja.slice(5, 7) : 0;
+    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat: enPeriodo ? cat : null, racha, enPeriodo, activoHasta, bajaEnAnio, ultimo: ultimoDe[m.id] || '' };
   });
   return { mesesPeriodo, porMiembro };
 }
@@ -76,7 +88,8 @@ export function render(root, ctx) {
   const anio = vista.anio;
   const { mesesPeriodo, porMiembro } = resumenDiezmos(data, anio, true);
   const todos = Object.values(porMiembro).sort((a, b) => a.m.nombre.localeCompare(b.m.nombre, 'es'));
-  const activos = todos.filter((x) => x.m.estado === 'activo');
+  const activos = todos.filter((x) => x.enPeriodo);
+  const conBaja = activos.filter((x) => x.m.estado !== 'activo').length;
   const cuenta = (c) => activos.filter((x) => x.cat === c).length;
   const pct = (n) => (activos.length ? Math.round((n / activos.length) * 100) : 0);
   const identificado = Array(12).fill(0), tesoreria = Array(12).fill(0);
@@ -84,7 +97,7 @@ export function render(root, ctx) {
   data.movGenerales.forEach((m) => { if (m.tipo === 'ingreso' && m.categoria === 'Diezmos' && m.fecha.startsWith(String(anio))) tesoreria[+m.fecha.slice(5, 7) - 1] += m.monto; });
   const totId = identificado.reduce((a, v) => a + v, 0), totTes = tesoreria.reduce((a, v) => a + v, 0);
   const q = vista.q.toLowerCase();
-  const lista = todos.filter((x) => (vista.inactivos || x.m.estado === 'activo') && (vista.filtro === 'todos' || (x.m.estado === 'activo' && x.cat === vista.filtro)) && (!q || x.m.nombre.toLowerCase().includes(q)));
+  const lista = todos.filter((x) => (vista.inactivos || x.enPeriodo) && (vista.filtro === 'todos' || (x.enPeriodo && x.cat === vista.filtro)) && (!q || x.m.nombre.toLowerCase().includes(q)));
   const maxCelda = Math.max(1, ...todos.flatMap((x) => x.meses));
   const nombreDe = Object.fromEntries(data.miembros.map((m) => [m.id, m.nombre]));
 
@@ -101,7 +114,7 @@ export function render(root, ctx) {
   ${!data.miembros.length ? `<div class="note">${icon('users', 16)}<span>Para llevar el control de diezmos primero carga a los hermanos en <a class="link" href="#/miembros">Miembros</a> (puedes importar el listado en Excel).</span></div>` : ''}
 
   <section class="kpis kpis-4">
-    <article class="kpi"><span class="kpi-label">${icon('users', 15)} Hermanos activos</span><strong class="kpi-value">${activos.length}</strong><span class="kpi-sub">${mesesPeriodo ? `${mesesPeriodo} mes${mesesPeriodo > 1 ? 'es' : ''} considerados de ${anio}` : 'año sin meses transcurridos'}</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('users', 15)} Hermanos activos</span><strong class="kpi-value">${activos.length}</strong><span class="kpi-sub">${mesesPeriodo ? `${mesesPeriodo} mes${mesesPeriodo > 1 ? 'es' : ''} considerados de ${anio}` : 'año sin meses transcurridos'}${conBaja ? ` · incluye ${conBaja} que dejó${conBaja > 1 ? 'aron' : ''} de asistir (hasta su baja)` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Constantes</span><strong class="kpi-value">${cuenta('constante')} <small class="kpi-pct">${pct(cuenta('constante'))}%</small></strong><span class="kpi-sub">${CATEG_DIEZMO.constante.desc}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.irregular.color}"></i> Irregulares</span><strong class="kpi-value">${cuenta('irregular')} <small class="kpi-pct">${pct(cuenta('irregular'))}%</small></strong><span class="kpi-sub">${CATEG_DIEZMO.irregular.desc}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.sin.color}"></i> No diezman</span><strong class="kpi-value">${cuenta('sin')} <small class="kpi-pct">${pct(cuenta('sin'))}%</small></strong><span class="kpi-sub">${CATEG_DIEZMO.sin.desc}</span></article>
@@ -132,11 +145,11 @@ export function render(root, ctx) {
     ${lista.length ? `<div class="table-wrap diezmo-wrap"><table class="table diezmo-grid">
       <thead><tr><th class="dg-nombre">Hermano</th>${MESES_C.map((m, i) => `<th class="num ${i >= mesesPeriodo ? 'futuro' : ''}">${m}</th>`).join('')}<th class="num">Total</th><th>Estado</th></tr></thead>
       <tbody>${lista.map((x) => `
-        <tr class="${x.m.estado === 'inactivo' ? 'inactive' : ''}">
+        <tr class="${!x.enPeriodo ? 'inactive' : ''}">
           <td class="dg-nombre"><button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>${x.m.conyugeId && nombreDe[x.m.conyugeId] ? `<small class="dg-pareja">💍 ${esc(nombreDe[x.m.conyugeId])}</small>` : ''}${x.m.estado === 'activo' && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
-          ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
+          ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${x.m.estado !== 'activo' && i >= x.activoHasta && i < mesesPeriodo ? 'baja' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
           <td class="num strong">${x.total ? money(x.total) : '—'}</td>
-          <td>${x.m.estado !== 'activo' ? '<span class="badge st-open">Inactivo</span>' : x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : '<span class="muted">—</span>'}</td>
+          <td>${x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : x.m.estado !== 'activo' ? '<span class="badge st-open">Inactivo</span>' : '<span class="muted">—</span>'}${x.bajaEnAnio ? `<small class="dg-baja">baja ${MESES_C[x.bajaEnAnio - 1].toLowerCase()}</small>` : ''}</td>
         </tr>`).join('')}</tbody>
       <tfoot><tr><td class="dg-nombre"><b>Total identificado</b></td>${identificado.map((v) => `<td class="num"><b>${v ? moneyShort(v) : ''}</b></td>`).join('')}<td class="num"><b>${money(totId)}</b></td><td></td></tr></tfoot>
     </table></div>` : emptyState(data.miembros.length ? 'Nadie coincide con los filtros' : 'Aún no hay miembros registrados', 'users')}

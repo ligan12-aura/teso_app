@@ -23,7 +23,7 @@ var TesoCore = (function () {
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
-    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId'],
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja'],
     Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId']
   };
   var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1 };
@@ -668,7 +668,11 @@ var TesoCore = (function () {
       if (fn && (!isDate(fn) || fn > env.today() || fn < '1900-01-01')) throw TesoError('Fecha de nacimiento inválida');
       var email = String(p.email || '').trim();
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw TesoError('El correo no parece válido');
+      // Fecha de baja: desde cuándo dejó de asistir (solo para inactivos)
+      var baja = estado === 'inactivo' ? String(p.fechaBaja || '').trim() : '';
+      if (baja && (!isDate(baja) || baja > env.today() || baja < '2000-01-01')) throw TesoError('Fecha de baja inválida');
       return {
+        fechaBaja: baja,
         nombre: nombre, estado: estado, fechaNacimiento: fn,
         celular: String(p.celular || '').trim().slice(0, 30), email: email.slice(0, 120),
         domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300)
