@@ -230,7 +230,7 @@ function shell(active) {
 }
 
 // Hoja "Más" del celular: las secciones que no caben en el menú inferior
-function abrirMas(active) {
+function abrirMas(active, conTeclado = false) {
   const nav = (NAV[state.user.rol] || NAV.lider).filter((n) => n.mas);
   const wrap = document.createElement('div');
   wrap.className = 'modal-wrap';
@@ -244,7 +244,7 @@ function abrirMas(active) {
   document.addEventListener('keydown', onKey);
   document.body.appendChild(wrap);
   requestAnimationFrame(() => wrap.classList.add('in'));
-  wrap.querySelector('a')?.focus();
+  if (conTeclado) wrap.querySelector('a')?.focus();
 }
 
 async function route() {
@@ -257,7 +257,7 @@ async function route() {
   const activeNav = path === 'ministerio' ? 'ministerios' : path;
   app.innerHTML = shell(activeNav);
   app.querySelectorAll('[data-logout]').forEach((b) => b.addEventListener('click', logout));
-  app.querySelector('[data-mas]')?.addEventListener('click', () => abrirMas(activeNav));
+  app.querySelector('[data-mas]')?.addEventListener('click', (e) => abrirMas(activeNav, e.detail === 0));
   app.querySelectorAll('[data-help]').forEach((b) => b.addEventListener('click', () => abrirAyuda(state.user.rol, location.hash.replace(/^#\//, '').split('/')[0])));
   app.querySelector('[data-export]')?.addEventListener('click', () => descargarPlanillaGeneral(state.data).catch((e) => toast(e.message, 'err')));
   const root = app.querySelector('#view');
