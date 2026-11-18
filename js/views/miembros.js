@@ -1,5 +1,5 @@
 // Registro de miembros de la iglesia (solo tesorero): estado y datos de contacto
-import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha } from '../ui.js';
+import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha, esAdmin } from '../ui.js';
 import { call } from '../api.js';
 import { cargarExcelJS } from '../planillaDescarga.js';
 import { resumenDiezmos, CATEG_DIEZMO } from './diezmos.js';
@@ -26,6 +26,7 @@ export function render(root, ctx) {
   const activos = miembros.filter((m) => m.estado === 'activo');
   const completas = miembros.filter(fichaCompleta).length;
   const anio = Number(hoy.slice(0, 4));
+  const verDiezmo = esAdmin(ctx.user);
   const cat = resumenDiezmos(data, anio, true).porMiembro;
   const mesHoy = +hoy.slice(5, 7);
   const cumple = miembros.filter((m) => m.estado === 'activo' && m.fechaNacimiento && +m.fechaNacimiento.slice(5, 7) === mesHoy)
@@ -70,7 +71,7 @@ export function render(root, ctx) {
       </div>
     </div>
     ${miembros.length ? (lista.length ? `<div class="table-wrap"><table class="table miembros-table">
-      <thead><tr><th>Nombre</th><th>Estado</th><th>Nacimiento</th><th>Celular</th><th class="hide-sm">Correo</th><th class="hide-sm">Domicilio</th><th>Diezmo ${anio}</th><th></th></tr></thead>
+      <thead><tr><th>Nombre</th><th>Estado</th><th>Nacimiento</th><th>Celular</th><th class="hide-sm">Correo</th><th class="hide-sm">Domicilio</th>${verDiezmo ? `<th>Diezmo ${anio}</th>` : ''}<th></th></tr></thead>
       <tbody>${lista.map((m) => {
         const e = edad(m.fechaNacimiento, hoy);
         const c = cat[m.id];
@@ -81,7 +82,7 @@ export function render(root, ctx) {
           <td class="nowrap">${m.celular ? `<a class="link" href="tel:${esc(m.celular.replace(/[^\d+]/g, ''))}">${esc(m.celular)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm">${m.email ? `<a class="link" href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm desc">${m.domicilio ? esc(m.domicilio) : '<span class="falta">—</span>'}</td>
-          <td>${m.estado === 'activo' && c && c.cat ? `<span class="badge ${CATEG_DIEZMO[c.cat].cls}">${CATEG_DIEZMO[c.cat].label}</span>` : '<span class="muted">—</span>'}</td>
+          ${verDiezmo ? `<td>${m.estado === 'activo' && c && c.cat ? `<span class="badge ${CATEG_DIEZMO[c.cat].cls}">${CATEG_DIEZMO[c.cat].label}</span>` : '<span class="muted">—</span>'}</td>` : ''}
           <td class="row-actions"><button class="icon-btn sm" data-edit="${m.id}" title="Editar ficha">${icon('edit', 16)}</button></td>
         </tr>`;
       }).join('')}</tbody></table></div>` : emptyState('Ningún miembro coincide con la búsqueda', 'search'))

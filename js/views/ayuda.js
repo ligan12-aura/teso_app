@@ -210,6 +210,21 @@ const TEMAS = {
   ]
 };
 
+TEMAS.pastor = TEMAS.tesorero;
+TEMAS.secretaria = [
+  {
+    id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `
+    <p>Con tu usuario de <b>Secretaría</b> llevas el registro de los miembros de la iglesia: su estado y sus datos de contacto.</p>
+    <ul class="hp-list">
+      <li>Solo ves el apartado <b>Miembros</b> y <b>Mi cuenta</b>.</li>
+      <li>La información financiera (tesorería, ministerios y diezmos) es visible solo para tesorería y el pastor.</li>
+    </ul>
+    ${tip('Puedes abrir esta guía cuando quieras con el botón <b>Ayuda</b>.')}`
+  },
+  TEMAS.tesorero.find((t) => t.id === 'miembros'),
+  TEMAS.lider.find((t) => t.id === 'perfil')
+];
+
 const RUTA_A_TEMA = { inicio: 'inicio', general: 'general', ministerios: 'ministerios', ministerio: 'ministerios', rendiciones: 'rendiciones', diezmos: 'diezmos', miembros: 'miembros', admin: 'admin', 'mi-ministerio': 'mi-ministerio', perfil: 'perfil' };
 
 export function abrirAyuda(rol, ruta = '') {

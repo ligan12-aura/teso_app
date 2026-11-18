@@ -115,6 +115,11 @@ var TesoCore = (function () {
     for (var i = 0; i < 200; i++) h = sha256Hex(h + salt);
     return h;
   }
+  // Roles: tesorero y pastor = acceso completo; secretaria = solo miembros; lider = su ministerio
+  var ROLES = ['tesorero', 'pastor', 'secretaria', 'lider'];
+  var ADMIN = ['tesorero', 'pastor'];
+  var MIEMBROS = ['tesorero', 'pastor', 'secretaria'];
+  function esAdmin(u) { return !!u && ADMIN.indexOf(u.rol) >= 0; }
   function publicUser(u) {
     return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
   }
@@ -209,7 +214,16 @@ var TesoCore = (function () {
         hoy: env.today(),
         extra: env.extra || {}
       };
-      if (user.rol === 'tesorero') {
+      if (user.rol === 'secretaria') {
+        base.ministerios = []; base.usuarios = [publicUser(user)];
+        base.movMinisterios = []; base.movGenerales = []; base.rendiciones = []; base.transferencias = [];
+        base.miembros = all('Miembros');
+        base.diezmos = [];
+        base.extra = {};
+        base.config = { nombreIglesia: base.config.nombreIglesia };
+        return base;
+      }
+      if (esAdmin(user)) {
         base.ministerios = all('Ministerios');
         base.usuarios = all('Usuarios').map(publicUser);
         base.movMinisterios = all('MovimientosMinisterios');
@@ -243,7 +257,7 @@ var TesoCore = (function () {
       return m;
     }
     function ministerioDe(user, p) {
-      if (user.rol === 'tesorero') return getMinisterio(p.ministerioId);
+      if (esAdmin(user)) return getMinisterio(p.ministerioId);
       if (!user.ministerioId) throw TesoError('Tu usuario no tiene un ministerio asignado. Habla con el tesorero.');
       return getMinisterio(user.ministerioId);
     }
@@ -252,7 +266,7 @@ var TesoCore = (function () {
     }
     function estadoRendicion(mid, mes) { var r = rendicion(mid, mes); return r ? r.estado : 'abierta'; }
     function puedeEditarMes(user, mid, mes) {
-      if (user.rol === 'tesorero') return true;
+      if (esAdmin(user)) return true;
       var e = estadoRendicion(mid, mes);
       return e === 'abierta' || e === 'observada';
     }
@@ -341,9 +355,9 @@ var TesoCore = (function () {
     function movMinisterioPropio(user, id) {
       var mov = find('MovimientosMinisterios', id);
       if (!mov) throw TesoError('Movimiento no encontrado');
-      if (user.rol !== 'tesorero' && mov.ministerioId !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
+      if (!esAdmin(user) && mov.ministerioId !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
       if (mov.origen === 'transferencia') throw TesoError('El ítem mensual se registra al transferirlo; si hubo un error, anúlalo desde el panel de rendición del ministerio (botón Anular).');
-      if (user.rol !== 'tesorero' && (mov.categoria === SALDO_INICIAL || transferenciaDeMov(mov.id))) {
+      if (!esAdmin(user) && (mov.categoria === SALDO_INICIAL || transferenciaDeMov(mov.id))) {
         throw TesoError('El saldo inicial y los ítems recibidos solo los puede corregir el tesorero.', 'FORBIDDEN');
       }
       return mov;
@@ -359,7 +373,7 @@ var TesoCore = (function () {
     function updateMovMinisterio(user, p) {
       var mov = movMinisterioPropio(user, p.id);
       // El tesorero puede corregir el saldo inicial o un ítem importado sin cambiarles la categoría
-      var reservadaPropia = user.rol === 'tesorero' && String(p.categoria || '').trim() === mov.categoria;
+      var reservadaPropia = esAdmin(user) && String(p.categoria || '').trim() === mov.categoria;
       var d = validarMov(p, 'ministerio', reservadaPropia);
       var mes = d.fecha.slice(0, 7);
       exigirEditable(user, mov.ministerioId, mov.mes);
@@ -651,7 +665,7 @@ var TesoCore = (function () {
       var mb = find('Miembros', p.id);
       if (!mb) throw TesoError('Miembro no encontrado');
       if (all('Diezmos').some(function (x) { return x.miembroId === mb.id; })) {
-        throw TesoError('Este miembro tiene diezmos registrados. Márcalo como inactivo en vez de eliminarlo.');
+        throw TesoError(esAdmin(user) ? 'Este miembro tiene diezmos registrados. Márcalo como inactivo en vez de eliminarlo.' : 'Este miembro no se puede eliminar. Márcalo como inactivo.');
       }
       remove('Miembros', mb.id);
       return { id: mb.id };
@@ -720,7 +734,7 @@ var TesoCore = (function () {
     function getArchivo(user, p) {
       var id = String(p.id || '');
       if (!id) throw TesoError('Archivo inválido');
-      if (user.rol !== 'tesorero') {
+      if (!esAdmin(user)) {
         var ok = all('MovimientosMinisterios').some(function (m) { return m.archivoId === id && m.ministerioId === user.ministerioId; });
         if (!ok) throw TesoError('No tienes permiso para ver este archivo', 'FORBIDDEN');
       }
@@ -752,13 +766,13 @@ var TesoCore = (function () {
       if (!/^[a-z0-9._-]{3,30}$/.test(usuario)) throw TesoError('El usuario debe tener 3-30 caracteres (letras, números, punto o guion)');
       var nombre = String(p.nombre || '').trim();
       if (!nombre) throw TesoError('Ingresa el nombre');
-      var rol = p.rol === 'tesorero' ? 'tesorero' : 'lider';
+      var rol = ROLES.indexOf(p.rol) >= 0 ? p.rol : 'lider';
       var ministerioId = rol === 'lider' ? String(p.ministerioId || '') : '';
       if (rol === 'lider' && !ministerioId) throw TesoError('Asigna un ministerio al líder');
       var dup = all('Usuarios').some(function (u) { return u.usuario === usuario && u.id !== p.id; });
       if (dup) throw TesoError('Ese nombre de usuario ya existe');
       var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, email: String(p.email || '').trim(), activo: p.activo === undefined ? true : toBool(p.activo) };
-      if (p.id === user.id && (!d.activo || d.rol !== 'tesorero')) throw TesoError('No puedes quitarte a ti mismo el rol de tesorero ni desactivarte');
+      if (p.id === user.id && (!d.activo || ADMIN.indexOf(d.rol) < 0)) throw TesoError('No puedes quitarte a ti mismo el acceso completo ni desactivarte');
       var pass = String(p.password || '');
       if (pass) {
         if (pass.length < 6) throw TesoError('La contraseña debe tener al menos 6 caracteres');
@@ -792,7 +806,7 @@ var TesoCore = (function () {
     }
 
     // ---------------- Router ----------------
-    var T = 'tesorero';
+    var T = ADMIN;
     var ACTIONS = {
       login: { fn: login, pub: true },
       me: { fn: me, pending: true },
@@ -813,9 +827,9 @@ var TesoCore = (function () {
       deleteMovGeneral: { fn: deleteMovGeneral, role: T, write: true },
       importarMovimientos: { fn: importarMovimientos, role: T, write: true },
       importarMovimientosMinisterio: { fn: importarMovimientosMinisterio, role: T, write: true },
-      saveMiembro: { fn: saveMiembro, role: T, write: true },
-      deleteMiembro: { fn: deleteMiembro, role: T, write: true },
-      importarMiembros: { fn: importarMiembros, role: T, write: true },
+      saveMiembro: { fn: saveMiembro, role: MIEMBROS, write: true },
+      deleteMiembro: { fn: deleteMiembro, role: MIEMBROS, write: true },
+      importarMiembros: { fn: importarMiembros, role: MIEMBROS, write: true },
       saveDiezmo: { fn: saveDiezmo, role: T, write: true },
       saveDiezmosLote: { fn: saveDiezmosLote, role: T, write: true },
       deleteDiezmo: { fn: deleteDiezmo, role: T, write: true },
@@ -830,7 +844,7 @@ var TesoCore = (function () {
         if (!a) throw TesoError('Acción desconocida: ' + action);
         var user = a.pub ? null : verifyToken(token);
         if (user && user.debeCambiarPass && !a.pending) throw TesoError('Debes cambiar tu contraseña antes de continuar', 'CHANGE_PASS');
-        if (a.role && user.rol !== a.role) throw TesoError('No tienes permiso para esta acción', 'FORBIDDEN');
+        if (a.role && a.role.indexOf(user.rol) < 0) throw TesoError('No tienes permiso para esta acción', 'FORBIDDEN');
         return { ok: true, data: a.fn(user, payload || {}) };
       } catch (e) {
         return { ok: false, error: e && e.message ? e.message : String(e), code: (e && e.code) || 'ERR' };
@@ -849,7 +863,7 @@ var TesoCore = (function () {
           return { porMes: porMes, saldoInicial: c.saldoInicial, fechaSaldoInicial: c.fechaSaldoInicial, tesoreros: all('Usuarios').filter(function (u) { return u.rol === 'tesorero'; }).length };
         },
         importarComoTesorero: function (p) {
-          var u = all('Usuarios').filter(function (x) { return x.rol === 'tesorero' && x.activo; })[0];
+          var u = all('Usuarios').filter(function (x) { return ADMIN.indexOf(x.rol) >= 0 && x.activo; })[0];
           if (!u) throw TesoError('No hay tesorero activo');
           return importarMovimientos(u, p);
         }
@@ -870,6 +884,8 @@ var TesoCore = (function () {
     prevMonth: prevMonth,
     nextMonth: nextMonth,
     labelMes: labelMes,
+    ROLES: ROLES,
+    ADMIN: ADMIN,
     pesos: pesos,
     create: create
   };

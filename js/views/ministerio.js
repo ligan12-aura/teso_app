@@ -6,7 +6,7 @@ import { descargarPlanillaMinisterio } from '../planillaDescarga.js';
 
 export function render(root, ctx) {
   const { data, mes, user } = ctx;
-  const esTes = user.rol === 'tesorero';
+  const esTes = user.rol === 'tesorero' || user.rol === 'pastor';
   const mid = esTes ? ctx.params[0] : user.ministerioId;
   const m = data.ministerios.find((x) => x.id === mid);
   if (!m) {

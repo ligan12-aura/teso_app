@@ -171,6 +171,8 @@ function seed() {
     db.Usuarios.push({ id: id(), nombre, usuario, rol, ministerioId, email: '', activo: true, debeCambiarPass: false, salt, hash: TesoCore.hashPassword('demo', salt, sha256Hex), creadoEn: now });
   };
   const tesoreroId = (user('Daniel Muñoz', 'tesorero', 'tesorero'), db.Usuarios[0].id);
+  user('Pastor Samuel Ríos', 'pastor', 'pastor');
+  user('Marta Lagos', 'secretaria', 'secretaria');
 
   const mins = [
     ['Alabanza', '#7c5cbf', '🎵', 120000, 'Camila Rojas', 'alabanza'],

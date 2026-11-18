@@ -48,7 +48,7 @@ export function render(root, ctx) {
   if (tab === 'usuarios') {
     body.innerHTML = `
     <article class="card">
-      <header class="card-head wrap"><div><h3>Usuarios</h3><p class="muted">Los líderes solo ven su propio ministerio. El tesorero ve todo.</p></div>
+      <header class="card-head wrap"><div><h3>Usuarios</h3><p class="muted">Tesorero y pastor ven todo. Los líderes solo su ministerio. Secretaría solo el registro de miembros.</p></div>
         <button class="btn btn-primary btn-sm" data-new>${icon('plus', 16)} Nuevo usuario</button></header>
       <div class="table-wrap"><table class="table">
         <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Ministerio</th><th>Estado</th><th></th></tr></thead>
@@ -56,7 +56,7 @@ export function render(root, ctx) {
           <tr class="${u.activo ? '' : 'inactive'}">
             <td><b>${esc(u.nombre)}</b>${u.email ? `<br><small class="muted">${esc(u.email)}</small>` : ''}</td>
             <td><code>${esc(u.usuario)}</code></td>
-            <td>${u.rol === 'tesorero' ? '<span class="badge st-sent">Tesorero</span>' : '<span class="badge st-open">Líder</span>'}</td>
+            <td>${{ tesorero: '<span class="badge st-sent">Tesorero</span>', pastor: '<span class="badge st-sent">Pastor</span>', secretaria: '<span class="badge st-obs">Secretaría</span>' }[u.rol] || '<span class="badge st-open">Líder</span>'}</td>
             <td>${minName[u.ministerioId] ? `${esc(minName[u.ministerioId].icono)} ${esc(minName[u.ministerioId].nombre)}` : '<span class="muted">—</span>'}</td>
             <td>${u.activo ? (u.debeCambiarPass ? '<span class="badge st-obs">Clave temporal</span>' : '<span class="badge st-ok">Activo</span>') : '<span class="badge st-open">Inactivo</span>'}</td>
             <td class="row-actions"><button class="icon-btn sm" data-edit="${u.id}">${icon('edit', 16)}</button></td>
@@ -200,15 +200,20 @@ function editUsuario(ctx, u = null) {
       <label class="field"><span>Nombre completo</span><input name="nombre" value="${esc(u?.nombre || '')}" required></label>
       <div class="form-row">
         <label class="field"><span>Usuario (para ingresar)</span><input name="usuario" value="${esc(u?.usuario || '')}" autocapitalize="none" required placeholder="ej: alabanza"></label>
-        <label class="field"><span>Rol</span><select name="rol"><option value="lider" ${u?.rol !== 'tesorero' ? 'selected' : ''}>Líder de ministerio</option><option value="tesorero" ${u?.rol === 'tesorero' ? 'selected' : ''}>Tesorero</option></select></label>
+        <label class="field"><span>Rol</span><select name="rol">${[['lider', 'Líder de ministerio'], ['tesorero', 'Tesorero'], ['pastor', 'Pastor'], ['secretaria', 'Secretaría (solo miembros)']].map(([v, l]) => `<option value="${v}" ${(u?.rol || 'lider') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
+      <p class="muted small" data-rol-ayuda style="margin-top:-6px"></p>
       <label class="field" data-min><span>Ministerio</span><select name="ministerioId"><option value="">— Selecciona —</option>${mins.map((m) => `<option value="${m.id}" ${u?.ministerioId === m.id ? 'selected' : ''}>${esc(m.icono)} ${esc(m.nombre)}</option>`).join('')}</select></label>
       <label class="field"><span>Correo (opcional)</span><input type="email" name="email" value="${esc(u?.email || '')}"></label>
       <label class="field"><span>${u ? 'Nueva contraseña temporal (dejar vacío para no cambiar)' : 'Contraseña temporal'}</span><input name="password" type="text" autocomplete="off" ${u ? '' : 'required'} minlength="6" placeholder="mín. 6 caracteres"></label>
       <p class="muted small">Al primer ingreso se le pedirá crear su propia contraseña.</p>
       ${u ? `<label class="check"><input type="checkbox" name="activo" ${u.activo ? 'checked' : ''}> Usuario activo</label>` : ''}`,
     onOpen(f) {
-      const sync = () => { f.querySelector('[data-min]').hidden = f.rol.value === 'tesorero'; };
+      const sync = () => {
+        f.querySelector('[data-min]').hidden = f.rol.value !== 'lider';
+        const ayuda = f.querySelector('[data-rol-ayuda]');
+        if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', secretaria: 'Solo accede a Miembros: puede agregar y editar sus datos. No ve dinero ni diezmos.' }[f.rol.value];
+      };
       f.rol.addEventListener('change', sync); sync();
     },
     async onSubmit(f) {

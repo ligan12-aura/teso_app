@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { call, auth, isDemo, setAuthErrorHandler } from './api.js';
 import { resetDemo } from './demo.js';
-import { icon, esc, toast, destroyCharts, setupChartDefaults, modal, formData } from './ui.js';
+import { icon, esc, toast, destroyCharts, setupChartDefaults, modal, formData, esAdmin, ROL_LABEL } from './ui.js';
 import { botonTema, alternarTema, aplicarTema, temaActual, seguirSistema } from './theme.js';
 import * as Dashboard from './views/dashboard.js';
 import * as General from './views/general.js';
@@ -28,26 +28,33 @@ const NAV = {
     { path: 'miembros', label: 'Miembros', icon: 'users' },
     { path: 'admin', label: 'Configuración', short: 'Ajustes', icon: 'settings' }
   ],
+  secretaria: [
+    { path: 'miembros', label: 'Miembros', icon: 'users' },
+    { path: 'perfil', label: 'Mi cuenta', icon: 'user' }
+  ],
   lider: [
     { path: 'mi-ministerio', label: 'Mi ministerio', icon: 'wallet' },
     { path: 'perfil', label: 'Mi cuenta', icon: 'user' }
   ]
 };
 
+NAV.pastor = NAV.tesorero;
+const ADM = ['tesorero', 'pastor'];
 const ROUTES = {
-  inicio: { view: Dashboard, role: 'tesorero' },
-  general: { view: General, role: 'tesorero' },
-  ministerios: { view: Ministerios, role: 'tesorero' },
-  ministerio: { view: Ministerio, role: 'tesorero' },
-  rendiciones: { view: Rendiciones, role: 'tesorero' },
-  diezmos: { view: Diezmos, role: 'tesorero' },
-  miembros: { view: Miembros, role: 'tesorero' },
-  admin: { view: Admin, role: 'tesorero' },
-  'mi-ministerio': { view: Ministerio, role: 'lider' },
+  inicio: { view: Dashboard, roles: ADM },
+  general: { view: General, roles: ADM },
+  ministerios: { view: Ministerios, roles: ADM },
+  ministerio: { view: Ministerio, roles: ADM },
+  rendiciones: { view: Rendiciones, roles: ADM },
+  diezmos: { view: Diezmos, roles: ADM },
+  miembros: { view: Miembros, roles: [...ADM, 'secretaria'] },
+  admin: { view: Admin, roles: ADM },
+  'mi-ministerio': { view: Ministerio, roles: ['lider'] },
   perfil: { view: Perfil }
 };
 
-const home = () => (state.user?.rol === 'tesorero' ? 'inicio' : 'mi-ministerio');
+const home = () => (esAdmin(state.user) ? 'inicio' : state.user?.rol === 'secretaria' ? 'miembros' : 'mi-ministerio');
+const permitido = (r) => !r.roles || r.roles.includes(state.user.rol);
 export const go = (path) => { location.hash = '#/' + path; };
 
 setAuthErrorHandler((msg) => {
@@ -101,6 +108,8 @@ function renderLogin(msg = '') {
           <p>Datos de ejemplo guardados solo en este navegador. Contraseña para todos: <code>demo</code></p>
           <div class="demo-users">
             <button type="button" data-u="tesorero">Tesorero</button>
+            <button type="button" data-u="pastor">Pastor</button>
+            <button type="button" data-u="secretaria">Secretaría</button>
             <button type="button" data-u="alabanza">Líder Alabanza</button>
             <button type="button" data-u="jovenes">Líder Jóvenes</button>
             <button type="button" data-u="mujeres">Líder Mujeres</button>
@@ -135,7 +144,7 @@ async function afterLogin() {
   if (state.user.debeCambiarPass) return forzarCambioPass();
   await loadData();
   const want = location.hash.replace(/^#\//, '').split('/')[0];
-  if (!want || !ROUTES[want] || (ROUTES[want].role && ROUTES[want].role !== state.user.rol)) go(home());
+  if (!want || !ROUTES[want] || !permitido(ROUTES[want])) go(home());
   else route();
   const key = `teso_guia_vista_${isDemo ? "demo_" : ""}${state.user.usuario}`;
   let vista = true;
@@ -192,12 +201,12 @@ function shell(active) {
     <div class="side-foot">
       <button class="side-action help-action" data-help>${icon('help')} Ayuda · Guía de uso</button>
       ${botonTema('side-action', true)}
-      ${u.rol === 'tesorero' ? `
+      ${esAdmin(u) ? `
         ${state.data.extra?.sheetUrl ? `<a class="side-action" href="${esc(state.data.extra.sheetUrl)}" target="_blank" rel="noopener">${icon('sheet')} Abrir planilla</a>` : ''}
         <button class="side-action" data-export>${icon('download')} Descargar planilla</button>` : ''}
       <div class="me">
         <div class="avatar">${esc(initials)}</div>
-        <div class="me-txt"><strong>${esc(u.nombre)}</strong><span>${u.rol === 'tesorero' ? 'Tesorero' : `Líder · ${esc(min?.nombre || '')}`}</span></div>
+        <div class="me-txt"><strong>${esc(u.nombre)}</strong><span>${u.rol === 'lider' ? `Líder · ${esc(min?.nombre || '')}` : ROL_LABEL[u.rol] || ''}</span></div>
         <button class="icon-btn light" data-logout title="Cerrar sesión" aria-label="Cerrar sesión">${icon('logout')}</button>
       </div>
     </div>
@@ -219,7 +228,7 @@ async function route() {
   if (!state.user || !state.data) return;
   const [path, ...params] = location.hash.replace(/^#\//, '').split('/');
   const r = ROUTES[path];
-  if (!r || (r.role && r.role !== state.user.rol)) return go(home());
+  if (!r || !permitido(r)) return go(home());
   destroyCharts();
   document.body.className = '';
   const activeNav = path === 'ministerio' ? 'ministerios' : path;
