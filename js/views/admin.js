@@ -64,11 +64,12 @@ export function render(root, ctx) {
             <td>${{ admin: '<span class="badge st-sent">Administrador</span>', tesorero: '<span class="badge st-sent">Tesorero</span>', pastor: '<span class="badge st-sent">Pastor</span>', secretaria: '<span class="badge st-obs">Secretaría</span>' }[u.rol] || '<span class="badge st-open">Líder</span>'}</td>
             <td>${minName[u.ministerioId] ? `${esc(minName[u.ministerioId].icono)} ${esc(minName[u.ministerioId].nombre)}` : '<span class="muted">—</span>'}</td>
             <td>${u.activo ? (u.debeCambiarPass ? '<span class="badge st-obs">Clave temporal</span>' : '<span class="badge st-ok">Activo</span>') : '<span class="badge st-open">Inactivo</span>'}</td>
-            <td class="row-actions">${puede ? `<button class="icon-btn sm" data-edit="${u.id}">${icon('edit', 16)}</button>` : ''}</td>
+            <td class="row-actions">${puede ? `<button class="icon-btn sm" data-edit="${u.id}" title="Editar">${icon('edit', 16)}</button>${u.id !== ctx.user?.id ? `<button class="icon-btn sm danger" data-del="${u.id}" title="Eliminar usuario">${icon('trash', 16)}</button>` : ''}` : ''}</td>
           </tr>`).join('')}</tbody></table></div>
     </article>`;
     body.querySelector('[data-new]')?.addEventListener('click', () => editUsuario(ctx));
     body.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editUsuario(ctx, data.usuarios.find((u) => u.id === b.dataset.edit))));
+    body.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => borrarUsuario(ctx, data.usuarios.find((u) => u.id === b.dataset.del))));
   }
 
   if (tab === 'importar') renderImportar(body, ctx);
@@ -223,6 +224,12 @@ function editMinisterio(ctx, m = null) {
   });
 }
 
+async function borrarUsuario(ctx, u) {
+  if (!u) return;
+  if (!(await confirmar(`¿Eliminar el usuario <b>${esc(u.nombre)}</b> (${esc(u.usuario)})?<br><span class="muted">Ya no podrá ingresar. Si registró movimientos u otros datos con su usuario no se puede eliminar: en ese caso edítalo y desmarca “Usuario activo”.</span>`, { boton: 'Eliminar', danger: true }))) return;
+  try { await call('deleteUsuario', { id: u.id }); toast('Usuario eliminado'); await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
+}
+
 function editUsuario(ctx, u = null) {
   const mins = ctx.data.ministerios;
   return modal({
@@ -238,8 +245,10 @@ function editUsuario(ctx, u = null) {
       <label class="field"><span>Correo (opcional)</span><input type="email" name="email" value="${esc(u?.email || '')}"></label>
       <label class="field"><span>${u ? 'Nueva contraseña temporal (dejar vacío para no cambiar)' : 'Contraseña temporal'}</span><input name="password" type="text" autocomplete="off" ${u ? '' : 'required'} minlength="6" placeholder="mín. 6 caracteres"></label>
       <p class="muted small">Al primer ingreso se le pedirá crear su propia contraseña.</p>
-      ${u ? `<label class="check"><input type="checkbox" name="activo" ${u.activo ? 'checked' : ''}> Usuario activo</label>` : ''}`,
-    onOpen(f) {
+      ${u ? `<label class="check"><input type="checkbox" name="activo" ${u.activo ? 'checked' : ''}> Usuario activo</label>` : ''}
+      ${u && u.id !== ctx.user?.id ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar usuario</button>` : ''}`,
+    onOpen(f, { close }) {
+      f.querySelector('[data-borrar]')?.addEventListener('click', () => { close(null); borrarUsuario(ctx, u); });
       const sync = () => {
         f.querySelector('[data-min]').hidden = f.rol.value !== 'lider';
         const ayuda = f.querySelector('[data-rol-ayuda]');

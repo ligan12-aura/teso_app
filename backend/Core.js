@@ -1436,6 +1436,23 @@ var TesoCore = (function () {
       }
       return publicUser(r);
     }
+    // Eliminar un usuario: solo si no registró nada (si no, se pierde quién hizo cada registro: se desactiva)
+    function deleteUsuario(user, p) {
+      if (!puedeGestionarUsuarios(user)) throw TesoError('Solo el administrador puede eliminar usuarios', 'FORBIDDEN');
+      var u = find('Usuarios', p.id);
+      if (!u) throw TesoError('Ese usuario ya no existe');
+      if (u.id === user.id) throw TesoError('No puedes eliminarte a ti mismo');
+      if (u.rol === 'admin' && toBool(u.activo) && !all('Usuarios').some(function (x) { return x.id !== u.id && x.rol === 'admin' && toBool(x.activo); })) throw TesoError('Es el único administrador activo: crea otro antes de eliminarlo');
+      var usado = Object.keys(TABLES).some(function (t) {
+        if (t === 'Usuarios') return false;
+        var cols = TABLES[t];
+        if (cols.indexOf('creadoPor') < 0 && cols.indexOf('revisadoPor') < 0) return false;
+        return all(t).some(function (r) { return r.creadoPor === u.id || r.revisadoPor === u.id; });
+      });
+      if (usado) throw TesoError('Tiene registros hechos con su usuario: desmarca “Usuario activo” para quitarle el acceso y así se conserva quién registró cada cosa.');
+      remove('Usuarios', u.id);
+      return { id: u.id };
+    }
     function saveConfig(user, p) {
       var guardar = function (k, v) {
         if (find('Config', k)) update('Config', k, { valor: v });
@@ -1514,6 +1531,7 @@ var TesoCore = (function () {
       anularPagoCuota: { fn: anularPagoCuota, role: CON_MINISTERIO, write: true },
       saveMinisterio: { fn: saveMinisterio, role: T, write: true },
       saveUsuario: { fn: saveUsuario, role: T, write: true },
+      deleteUsuario: { fn: deleteUsuario, role: T, write: true },
       saveConfig: { fn: saveConfig, role: T, write: true }
     };
 
