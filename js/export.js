@@ -86,6 +86,10 @@ export async function exportarExcel(data) {
   // Listados de integrantes y actividades de los ministerios
   const integ = Object.fromEntries((data.integrantes || []).map((i) => [i.id, i]));
   if (data.integrantes?.length) add('Integrantes', data.integrantes.map((i) => ({ Ministerio: min[i.ministerioId] || '', Nombre: i.nombre, 'Miembro de la iglesia': i.esMiembro ? 'Sí' : 'No', 'Fecha de nacimiento': i.fechaNacimiento, Celular: i.celular, Correo: i.email, Activo: i.activo ? 'Sí' : 'No', Notas: i.notas })), [14, 30, 12, 16, 18, 28, 8, 30]);
+  if (data.asistenciasMin?.length) add('Asistencia ministerios', [...data.asistenciasMin].sort(byFecha).map((a) => {
+    const nombres = String(a.presentes || '').split(',').filter(Boolean).map((id) => integ[id]?.nombre || '(eliminado)');
+    return { Ministerio: min[a.ministerioId] || '', Fecha: a.fecha, Actividad: a.actividad, Presentes: nombres.length, Nombres: nombres.join(', '), Notas: a.notas };
+  }), [14, 11, 22, 10, 90, 30]);
   if (data.actividades?.length) {
     add('Actividades', data.actividades.map((a) => {
       const movs = data.movMinisterios.filter((x) => x.actividadId === a.id);

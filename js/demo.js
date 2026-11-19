@@ -4,8 +4,8 @@
  * Sirve para probar la app sin configurar Google.
  */
 
-const DB_KEY = 'teso_demo_db_v4';
-try { localStorage.removeItem('teso_demo_db_v1'); localStorage.removeItem('teso_demo_db_v2'); localStorage.removeItem('teso_demo_db_v3'); } catch (e) { /* sin almacenamiento */ }
+const DB_KEY = 'teso_demo_db_v5';
+try { ['v1', 'v2', 'v3', 'v4'].forEach((v) => localStorage.removeItem('teso_demo_db_' + v)); } catch (e) { /* sin almacenamiento */ }
 const FILES_KEY = 'teso_demo_files_v1';
 const SECRET_KEY = 'teso_demo_secret';
 
@@ -162,7 +162,7 @@ function seed() {
   let n = 0;
   const id = () => 'd' + (++n).toString(36) + Math.random().toString(36).slice(2, 8);
   const now = new Date().toISOString();
-  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [], Integrantes: [], Actividades: [], Inscripciones: [], Asistencias: [], Visitas: [] };
+  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [], Integrantes: [], Actividades: [], Inscripciones: [], Asistencias: [], Visitas: [], AsistenciasMinisterios: [] };
   let rnd = 7;
   const rand = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
   const between = (a, b) => Math.round((a + rand() * (b - a)) / 500) * 500;
@@ -354,6 +354,14 @@ function seed() {
       if (j === 0 && k === 9) pres.push('v:' + visitas[1].id);
       db.Asistencias.push({ id: id(), fecha: f, actividad: act, notas: '', presentes: pres.join(','), creadoPor: '', creadoEn: now, actualizadoEn: now });
     });
+  });
+  // Jóvenes: 8 sábados de reunión; dos dejaron de venir las últimas semanas
+  const jovActivos = integ.filter((x) => x.activo);
+  const faltan = new Set(jovActivos.slice(3, 5).map((x) => x.id));
+  domingos.slice(-8).forEach((dom, k) => {
+    const d = new Date(dom + 'T12:00:00'); d.setDate(d.getDate() - 1);
+    const pres = jovActivos.filter((x, n) => !(faltan.has(x.id) && k >= 5) && rand() < (n % 4 === 0 ? 0.5 : 0.85)).map((x) => x.id);
+    db.AsistenciasMinisterios.push({ id: id(), ministerioId: jov.id, fecha: d.toISOString().slice(0, 10), actividad: 'Reunión de jóvenes', notas: '', presentes: pres.join(','), creadoPor: liderJov.id, creadoEn: now, actualizadoEn: now });
   });
   const diaHoy = +today.slice(8, 10);
   const act = { id: id(), ministerioId: jov.id, nombre: 'Campamento de verano', fecha: `${TesoCore.nextMonth(curMonth)}-15`, cuota: 25000, descripcion: 'Tres días en Pucón', estado: 'abierta', creadoPor: liderJov.id, creadoEn: now, actualizadoEn: now };

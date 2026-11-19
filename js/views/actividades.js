@@ -5,6 +5,7 @@ import { rendicionDe } from '../calc.js';
 import { call } from '../api.js';
 import { abrirFormMovimiento } from './movform.js';
 import { edad } from './miembros.js';
+import { renderMinisterio as renderAsistencia } from './asistencia.js';
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const filtros = { q: '', tipo: 'activos' };
@@ -31,9 +32,9 @@ export function resumenActividad(data, a) {
   };
 }
 
-// Pestañas del ministerio (Finanzas · Jóvenes · Actividades)
+// Pestañas del ministerio (Finanzas · Jóvenes · Asistencia · Actividades)
 export function tabsMinisterio(m, base, activo) {
-  const t = [['', 'Finanzas', 'wallet'], ['integrantes', etiquetaIntegrantes(m), 'users'], ['actividades', 'Actividades', 'calendar']];
+  const t = [['', 'Finanzas', 'wallet'], ['integrantes', etiquetaIntegrantes(m), 'users'], ['asistencia', 'Asistencia', 'checkCircle'], ['actividades', 'Actividades', 'calendar']];
   return `<nav class="min-tabs" aria-label="Secciones del ministerio">${t.map(([k, l, ic]) => `<a href="#/${base}${k ? '/' + k : ''}" class="${activo === k ? 'active' : ''}">${icon(ic, 16)} ${l}</a>`).join('')}</nav>`;
 }
 
@@ -50,6 +51,7 @@ function cabecera(m, base, esTes, activo, titulo, acciones = '') {
 // Punto de entrada desde la vista del ministerio
 export function renderSeccion(root, ctx, m, { esTes, base, sub, subId }) {
   if (sub === 'integrantes') return renderIntegrantes(root, ctx, m, base, esTes);
+  if (sub === 'asistencia') return renderAsistencia(root, ctx, m, (acciones) => cabecera(m, base, esTes, 'asistencia', 'Asistencia', acciones), etiquetaIntegrantes(m));
   if (sub === 'actividad' && subId) return renderActividad(root, ctx, m, base, esTes, subId);
   return renderActividades(root, ctx, m, base, esTes);
 }

@@ -33,6 +33,8 @@ var TesoCore = (function () {
     // Asistencia: una fila por reunión (culto, escuela dominical u otra actividad) con los presentes
     // en una sola celda: "m:<miembro>,i:<integrante>,v:<visita>"
     Asistencias: ['id', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn'],
+    // Asistencia de las reuniones de un ministerio (p. ej. Jóvenes) con los integrantes de su listado
+    AsistenciasMinisterios: ['id', 'ministerioId', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn'],
     Visitas: ['id', 'nombre', 'celular', 'notas', 'activo', 'creadoEn', 'actualizadoEn']
   };
   var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1, cuota: 1, pagoMonto: 1 };
@@ -256,6 +258,7 @@ var TesoCore = (function () {
         base.diezmos = [];
         base.integrantes = []; base.actividades = []; base.inscripciones = []; base.miembrosEnlace = [];
         base.asistencias = all('Asistencias'); base.personasAsistencia = personasAsistencia();
+        base.asistenciasMin = [];
         base.extra = {};
         base.config = { nombreIglesia: base.config.nombreIglesia };
         return base;
@@ -275,6 +278,7 @@ var TesoCore = (function () {
         base.miembrosEnlace = miembrosEnlace();
         base.asistencias = all('Asistencias');
         base.personasAsistencia = personasAsistencia();
+        base.asistenciasMin = all('AsistenciasMinisterios');
       } else {
         var mid = user.ministerioId;
         var own = function (r) { return r.ministerioId === mid; };
@@ -297,6 +301,7 @@ var TesoCore = (function () {
         // El enlace con la ficha de Miembros lo hace tesorería: el líder no recibe el registro de miembros
         base.miembrosEnlace = [];
         base.asistencias = []; base.personasAsistencia = [];
+        base.asistenciasMin = conAct ? all('AsistenciasMinisterios').filter(own) : [];
         base.extra = {};
         // El líder no recibe saldo de caja ni presupuesto de la tesorería general
         base.config = { nombreIglesia: base.config.nombreIglesia };
@@ -392,6 +397,44 @@ var TesoCore = (function () {
       if (vino) throw TesoError(v.nombre + ' tiene asistencias registradas: márcala como inactiva en vez de eliminarla');
       remove('Visitas', v.id);
       return { id: v.id };
+    }
+
+    // Asistencia de un ministerio: la toma su líder (o tesorería) con los integrantes de su listado
+    function saveAsistenciaMinisterio(user, p) {
+      var actual = p.id ? find('AsistenciasMinisterios', p.id) : null;
+      if (p.id && !actual) throw TesoError('Esa asistencia ya no existe');
+      var m = ministerioConActividades(user, actual ? actual.ministerioId : p.ministerioId);
+      if (actual && actual.ministerioId !== m.id) throw TesoError('No tienes permiso', 'FORBIDDEN');
+      var fecha = String(p.fecha || '').trim();
+      if (!isDate(fecha) || fecha > env.today() || fecha < '2000-01-01') throw TesoError('Elige una fecha válida (no futura ni anterior a 2000)');
+      var actividad = String(p.actividad || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (!actividad) throw TesoError('Elige la reunión o actividad');
+      var clave = normalNombre(actividad);
+      var otra = all('AsistenciasMinisterios').some(function (a) { return a.ministerioId === m.id && a.fecha === fecha && normalNombre(a.actividad) === clave && a.id !== (actual && actual.id); });
+      if (otra) throw TesoError('Ya hay una asistencia de ' + actividad + ' el ' + fecha.split('-').reverse().join('-') + ': ábrela en la lista para editarla');
+      var integ = {};
+      all('Integrantes').forEach(function (i) { if (i.ministerioId === m.id) integ[i.id] = true; });
+      var vistos = {};
+      var presentes = [];
+      (p.presentes || []).map(String).forEach(function (id) {
+        if (!integ[id] || vistos[id]) return;
+        vistos[id] = true; presentes.push(id);
+      });
+      // al corregir, se conservan los presentes que ya no están en el listado (integrantes eliminados)
+      if (actual) String(actual.presentes || '').split(',').forEach(function (id) {
+        if (id && !integ[id] && !vistos[id]) { vistos[id] = true; presentes.push(id); }
+      });
+      if (!presentes.length) throw TesoError('Marca al menos a una persona presente');
+      var now = env.now();
+      var d = { fecha: fecha, actividad: actividad, notas: String(p.notas || '').trim().slice(0, 300), presentes: presentes.join(','), actualizadoEn: now };
+      return actual ? update('AsistenciasMinisterios', actual.id, d) : insert('AsistenciasMinisterios', Object.assign(d, { id: uid(), ministerioId: m.id, creadoPor: user.id, creadoEn: now }));
+    }
+    function deleteAsistenciaMinisterio(user, p) {
+      var a = find('AsistenciasMinisterios', p.id);
+      if (!a) throw TesoError('Esa asistencia ya no existe');
+      ministerioConActividades(user, a.ministerioId, true);
+      remove('AsistenciasMinisterios', a.id);
+      return { id: a.id };
     }
 
     // ---------------- Helpers de dominio ----------------
@@ -703,6 +746,8 @@ var TesoCore = (function () {
       ministerioConActividades(user, it.ministerioId);
       var ins = all('Inscripciones').filter(function (x) { return x.integranteId === it.id; });
       if (ins.some(function (x) { return x.movId; })) throw TesoError('Tiene cuotas pagadas en actividades: márcalo como inactivo en vez de eliminarlo.');
+      var vino = all('AsistenciasMinisterios').some(function (a) { return a.ministerioId === it.ministerioId && String(a.presentes || '').split(',').indexOf(it.id) >= 0; });
+      if (vino) throw TesoError('Tiene asistencias registradas: márcalo como inactivo en vez de eliminarlo.');
       ins.forEach(function (x) { remove('Inscripciones', x.id); });
       remove('Integrantes', it.id);
       return { id: it.id };
@@ -1458,6 +1503,8 @@ var TesoCore = (function () {
       agregarMiembrosIntegrantes: { fn: agregarMiembrosIntegrantes, role: ADMIN, write: true },
       saveAsistencia: { fn: saveAsistencia, role: MIEMBROS, write: true },
       deleteAsistencia: { fn: deleteAsistencia, role: MIEMBROS, write: true },
+      saveAsistenciaMinisterio: { fn: saveAsistenciaMinisterio, role: CON_MINISTERIO, write: true },
+      deleteAsistenciaMinisterio: { fn: deleteAsistenciaMinisterio, role: CON_MINISTERIO, write: true },
       saveVisita: { fn: saveVisita, role: MIEMBROS, write: true },
       deleteVisita: { fn: deleteVisita, role: MIEMBROS, write: true },
       saveActividad: { fn: saveActividad, role: CON_MINISTERIO, write: true },

@@ -172,9 +172,10 @@ const TEMAS = {
     },
     {
       id: 'actividades', titulo: 'Integrantes y actividades', ico: 'users', html: `
-      <p>Un ministerio puede tener su propio <b>listado de integrantes</b> (por ejemplo, Jóvenes) y <b>actividades con cuota</b>. Se activa en Configuración → Ministerios con la casilla “Listado de integrantes y actividades”. Ese ministerio muestra las pestañas <b>Finanzas · Jóvenes · Actividades</b>.</p>
+      <p>Un ministerio puede tener su propio <b>listado de integrantes</b> (por ejemplo, Jóvenes) y <b>actividades con cuota</b>. Se activa en Configuración → Ministerios con la casilla “Listado de integrantes y actividades”. Ese ministerio muestra las pestañas <b>Finanzas · Jóvenes · Asistencia · Actividades</b>.</p>
       <ul class="hp-list">
         <li><b>Enlazar con Miembros:</b> solo tesorería puede indicar que un integrante es miembro de la iglesia (“¿Es miembro de la iglesia?”). El líder ve su nombre, pero no los datos de su ficha.</li>
+        <li><b>Asistencia del ministerio:</b> el líder (o tesorería) pasa lista en sus reuniones con los integrantes del listado, y la app avisa quién lleva varias reuniones seguidas sin venir. Es aparte de la asistencia de los cultos.</li>
         <li><b>Pagos de cuota:</b> entran como ingreso del ministerio en la fecha del pago y se anulan desde la actividad.</li>
         <li><b>Resultado:</b> entradas − salidas de cada actividad; si es negativo, la diferencia sale de la caja del ministerio.</li>
         <li>Si desactivas el listado de un ministerio que ya tenía cuotas pagadas, esas cuotas siguen en sus finanzas y se pueden quitar desde ahí con ${btn('trash', '')}.</li>
@@ -233,13 +234,21 @@ const TEMAS = {
     },
     {
       id: 'actividades', titulo: 'Jóvenes y actividades', ico: 'users', html: `
-      <p>Si tu ministerio tiene activado el <b>listado de integrantes y actividades</b> (por ejemplo, Jóvenes), verás las pestañas <b>Finanzas · Jóvenes · Actividades</b>.</p>
+      <p>Si tu ministerio tiene activado el <b>listado de integrantes y actividades</b> (por ejemplo, Jóvenes), verás las pestañas <b>Finanzas · Jóvenes · Asistencia · Actividades</b>.</p>
       <h4>Listado de jóvenes</h4>
       <ul class="hp-list">
         <li>Registra nombre, celular, correo y fecha de nacimiento de cada joven, sea o no miembro de la iglesia.</li>
         <li>Si un joven <b>se hace miembro</b> de la iglesia, no lo agregues de nuevo: cuando secretaría o tesorería lo registre en Miembros con el mismo nombre, queda enlazado solo y conserva su historial de actividades.</li>
         <li>En los jóvenes que son miembros, sus datos vienen de la ficha de Miembros. Si a la ficha le falta el celular, el correo o la fecha de nacimiento, puedes completarlo desde su ficha en el listado y queda guardado en Miembros.</li>
         <li>Si ya no participa, desmarca <b>Activo</b> en vez de eliminarlo.</li>
+      </ul>
+      <h4>Asistencia</h4>
+      <ul class="hp-list">
+        <li>En la pestaña <b>Asistencia</b> toca ${btn('check', 'Tomar asistencia')}, elige la fecha y la reunión (o escribe otra, por ejemplo “Vigilia”) y marca a los presentes del listado de jóvenes.</li>
+        <li>Si vino alguien nuevo, escribe su nombre en “¿Vino alguien nuevo?”: queda en el listado como no miembro y marcado como presente.</li>
+        <li>La app muestra sola a quienes llevan <b>3 o más reuniones seguidas sin venir</b> (puedes cambiar el número), con la última vez que vinieron y su celular, para llamarlos.</li>
+        <li><b>Regular</b> es quien vino a 3 de cada 4 de las últimas 8 reuniones o más; <b>irregular</b>, quien vino menos. Toca una reunión registrada para corregirla.</li>
+        <li>Quien tiene asistencias registradas no se puede eliminar del listado: desmarca <b>Activo</b>.</li>
       </ul>
       <h4>Actividades con cuota</h4>
       ${pasos('Crea la actividad con su <b>cuota por persona</b>.', 'Con <b>Elegir confirmados</b> marca, del listado de jóvenes, quiénes van.', 'Cuando cada uno pague, toca <b>Registrar pago</b> y pon la fecha en que entregó el dinero: entra como ingreso del ministerio en esa fecha.', 'Registra los <b>gastos</b> de la actividad (con su boleta) desde la misma actividad.')}
@@ -279,7 +288,7 @@ TEMAS.secretaria = [
   TEMAS.lider.find((t) => t.id === 'perfil')
 ];
 
-const RUTA_A_TEMA = { integrantes: 'actividades', actividades: 'actividades', actividad: 'actividades', inicio: 'inicio', general: 'general', ministerios: 'ministerios', ministerio: 'ministerios', rendiciones: 'rendiciones', diezmos: 'diezmos', miembros: 'miembros', admin: 'admin', 'mi-ministerio': 'mi-ministerio', perfil: 'perfil' };
+const RUTA_A_TEMA = { integrantes: 'actividades', asistencia: 'asistencia', actividades: 'actividades', actividad: 'actividades', inicio: 'inicio', general: 'general', ministerios: 'ministerios', ministerio: 'ministerios', rendiciones: 'rendiciones', diezmos: 'diezmos', miembros: 'miembros', admin: 'admin', 'mi-ministerio': 'mi-ministerio', perfil: 'perfil' };
 
 // ruta: la ruta completa (p. ej. "mi-ministerio/actividad/x"); conActividades: el ministerio del líder usa actividades
 export function abrirAyuda(rol, ruta = '', { conActividades = false } = {}) {
@@ -287,8 +296,9 @@ export function abrirAyuda(rol, ruta = '', { conActividades = false } = {}) {
   // el tema de actividades solo lo ve el líder cuyo ministerio las tiene activadas
   if (!TEMAS[rol] || rol === 'lider') temas = temas.filter((t) => t.id !== 'actividades' || conActividades);
   const partes = String(ruta).split('/');
-  const sub = partes.find((x) => ['integrantes', 'actividades', 'actividad'].includes(x));
-  const clave = RUTA_A_TEMA[sub] || RUTA_A_TEMA[partes[0]] || partes[0];
+  const sub = partes.find((x) => ['integrantes', 'asistencia', 'actividades', 'actividad'].includes(x));
+  // la asistencia dentro de un ministerio se explica en el tema de integrantes y actividades
+  const clave = sub === 'asistencia' && partes[0] !== 'asistencia' ? 'actividades' : RUTA_A_TEMA[sub] || RUTA_A_TEMA[partes[0]] || partes[0];
   const base = RUTA_A_TEMA[partes[0]];
   let actual = temas.find((t) => t.id === clave) ? clave : temas.find((t) => t.id === base) ? base : temas[0].id;
   return modal({
