@@ -136,6 +136,17 @@ const TEMAS = {
       </ul>`
     },
     {
+      id: 'asistencia', titulo: 'Asistencia', ico: 'calendar', html: `
+      <p>Control de asistencia de los <b>cultos dominicales</b>, la <b>escuela dominical</b> u otra actividad. Lo llevan el tesorero, el pastor y la secretaría.</p>
+      <ul class="hp-list">
+        <li><b>Tomar asistencia:</b> elige la fecha y la actividad (o escribe otra, por ejemplo “Reunión de oración”) y marca a los presentes. Usa el buscador para encontrar a alguien rápido. Si ya existe la asistencia de esa actividad ese día, ábrela en la lista para corregirla.</li>
+        <li><b>Quiénes aparecen:</b> los miembros activos, las personas de los listados de los ministerios (por ejemplo Jóvenes) que no son miembros, y las visitas.</li>
+        <li><b>Visitas:</b> si viene alguien nuevo, escribe su nombre en “¿Vino alguien nuevo?” y queda marcado y guardado para la próxima vez. También puedes agregarlo con ${btn('user', 'Agregar visita')}.</li>
+        <li><b>Faltaron varias veces seguidas:</b> la app muestra solos a quienes llevan 3 o más reuniones seguidas sin venir (puedes cambiar el número), con la fecha de la última vez que vinieron y su celular, para llamarlos o visitarlos.</li>
+        <li><b>Regular / irregular:</b> regular es quien vino a 3 de cada 4 de las últimas 8 reuniones o más; irregular, quien vino menos. Con menos de 3 reuniones registradas aparece “Pocos datos”.</li>
+      </ul>`
+    },
+    {
       id: 'admin', titulo: 'Configuración', ico: 'settings', html: `
       <h4>Ministerios</h4>
       ${pasos(`Presiona ${btn('plus', 'Nuevo ministerio')}.`, 'Escribe el nombre, el <b>ítem mensual</b> y elige un ícono y un color.', 'Si un ministerio deja de funcionar, edítalo y desmarca <b>Ministerio activo</b>. Su historial se conserva.')}
@@ -143,7 +154,7 @@ const TEMAS = {
       ${pasos(`Presiona ${btn('plus', 'Nuevo usuario')}.`, 'Escribe el nombre, un usuario corto (ej: <code>alabanza</code>), el rol <b>Líder</b> y su ministerio.', 'Inventa una <b>contraseña temporal</b> y envíasela junto con el enlace de la página.', 'Al entrar por primera vez, el líder deberá crear su propia contraseña.')}
       ${tip('Si un líder olvida su contraseña, edita su usuario y escribe una nueva contraseña temporal.')}
       <h4>Presupuesto</h4>
-      <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. En la misma pantalla se fijan, por separado, el <b>ítem mensual</b> de cada ministerio (lo que se le transfiere; la transferencia no puede superarlo) y su <b>presupuesto mensual</b> (lo máximo que puede gastar en el mes). Solo el tesorero y el pastor pueden cambiar estos montos.</p>
+      <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. Al cambiarlo eliges <b>desde qué mes rige</b>: los meses anteriores conservan el presupuesto que tenían, y en el historial se ve cada cambio (los futuros aparecen como “programado” y se pueden quitar). En la misma pantalla se fijan, por separado, el <b>ítem mensual</b> de cada ministerio (lo que se le transfiere; la transferencia no puede superarlo) y su <b>presupuesto mensual</b> (lo máximo que puede gastar en el mes). Solo el tesorero y el pastor pueden cambiar estos montos.</p>
       <h4>Importar historial</h4>
       <p>Carga el historial desde una <b>planilla tipo</b> (la misma que descarga la página, de la tesorería general o de un ministerio) o desde el libro antiguo de entradas y salidas. La app muestra un resumen antes de importar y no duplica lo que ya existe.</p>
       <h4>General</h4>
@@ -264,6 +275,7 @@ TEMAS.secretaria = [
       <li><b>Eliminar</b> a alguien del registro lo hace el tesorero o el pastor. Si solo dejó de asistir, márcalo inactivo.</li>
     </ul>`
   },
+  TEMAS.tesorero.find((t) => t.id === 'asistencia'),
   TEMAS.lider.find((t) => t.id === 'perfil')
 ];
 

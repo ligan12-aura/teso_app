@@ -647,6 +647,12 @@ input, select, textarea { font: inherit; color: inherit; }
 .pres-ref strong { font-family: var(--display); font-size: 20px; font-weight: 600; }
 .pres-ref .link-btn { align-self: flex-start; }
 @media (max-width: 600px) { .pres-general { grid-template-columns: 1fr; } }
+.pres-hist { margin-top: 14px; }
+.pres-hist h4 { font-size: 13px; color: var(--muted); margin: 0 0 6px; font-weight: 700; }
+.pres-hist ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; }
+.pres-hist li { display: grid; grid-template-columns: minmax(0, 1fr) auto 34px; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line-2); font-size: 13.5px; }
+.pres-hist li:last-child { border-bottom: 0; }
+.pres-hist li.vigente { background: var(--surface-2); }
 
 /* ---------- Importar ---------- */
 .ok-mark { color: var(--green); display: inline-flex; vertical-align: -3px; }
@@ -985,3 +991,20 @@ a.tag { text-decoration: none; }
   .act-meta { gap: 6px 16px; }
   .am-item + .am-item::before { display: none; }
 }
+
+/* Asistencia */
+.asist-tabs { margin-bottom: 18px; }
+.asist-umbral { min-width: 170px; }
+.asist-umbral select { height: 36px; }
+.asist-alertas { list-style: none; margin: 0; padding: 0; }
+.asist-alertas li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--line-2); }
+.asist-alertas li:last-child { border-bottom: 0; }
+.asist-alertas li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.asist-fila { cursor: pointer; }
+.asist-fila:hover td { background: var(--surface-2); }
+.asist-nueva { display: flex; gap: 8px; margin: 10px 0; }
+.asist-nueva input { flex: 1; min-width: 0; height: 36px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; background: var(--surface); color: var(--ink); }
+.pick-tools select { height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); padding: 0 10px; }
+.pres-campos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .8fr); gap: 12px; align-items: end; }
+.pres-campos input[type=month] { min-width: 0; }
+@media (max-width: 900px) { .pres-campos { grid-template-columns: 1fr; } }

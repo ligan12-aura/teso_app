@@ -70,9 +70,11 @@ export function presupuestoMinisterio(data, mid, mes, excluirId = '') {
   return { limite, gastado, disponible: limite - gastado };
 }
 // Tesorería general: un presupuesto mensual para todos sus gastos, incluidos los ítems (0 = sin límite)
-export const presupuestoGeneralMensual = (data) => Number(data.config.presupuestoGeneral) || 0;
+// El presupuesto puede cambiar: cada cambio rige desde un mes en adelante (los meses anteriores conservan el suyo)
+export const presupuestoGeneralMensual = (data, mes = data.hoy.slice(0, 7)) =>
+  TesoCore.presupuestoVigente(data.config.presupuestosGenerales, data.config.presupuestoGeneral, mes);
 export function presupuestoGeneral(data, mes, excluirId = '') {
-  const limite = presupuestoGeneralMensual(data);
+  const limite = presupuestoGeneralMensual(data, mes);
   const gastado = data.movGenerales.reduce((a, x) => (x.mes === mes && x.tipo === 'gasto' && x.id !== excluirId ? a + x.monto : a), 0);
   return { limite, gastado, disponible: limite - gastado };
 }

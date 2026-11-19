@@ -145,7 +145,7 @@ export function render(root, ctx) {
     <div class="chart-box"><canvas id="ch-gen"></canvas></div>
   </article>
 
-  ${franjaPresupuesto(data, s.gastos, filtros.periodo === 'mes' ? `de ${mesLargo(mes)}` : `del año ${anio}`, filtros.periodo === 'mes' ? 1 : 12)}
+  ${franjaPresupuesto(data, s.gastos, filtros.periodo === 'mes' ? `de ${mesLargo(mes)}` : `del año ${anio}`, filtros.periodo === 'mes' ? [mes] : Array.from({ length: 12 }, (_, i) => `${anio}-${String(i + 1).padStart(2, '0')}`))}
 
   ${tarjetaTipos(periodoMovs, s.gastos, filtros.periodo === 'mes' ? mesLargo(mes) : `año ${anio}`)}
 
@@ -262,8 +262,9 @@ export function render(root, ctx) {
   }
 }
 
-function franjaPresupuesto(data, gastado, etiqueta, factor) {
-  const lim = presupuestoGeneralMensual(data) * factor;
+function franjaPresupuesto(data, gastado, etiqueta, meses) {
+  // suma del presupuesto vigente en cada mes del período
+  const lim = meses.reduce((a, m) => a + presupuestoGeneralMensual(data, m), 0);
   if (!lim) {
     return `<section class="pres-strip"><div class="ps-txt"><span>${icon('wallet', 16)} Presupuesto ${etiqueta}</span><strong>Sin definir</strong><small>no hay límite de gasto</small></div>
       <div class="ps-bar"><p class="muted">Define el presupuesto mensual de la tesorería en Configuración → Presupuesto.</p><a class="btn btn-ghost btn-sm" href="#/admin" style="align-self:flex-start">${icon('settings', 15)} Definir presupuesto</a></div></section>`;

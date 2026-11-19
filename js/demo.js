@@ -4,8 +4,8 @@
  * Sirve para probar la app sin configurar Google.
  */
 
-const DB_KEY = 'teso_demo_db_v3';
-try { localStorage.removeItem('teso_demo_db_v1'); localStorage.removeItem('teso_demo_db_v2'); } catch (e) { /* sin almacenamiento */ }
+const DB_KEY = 'teso_demo_db_v4';
+try { localStorage.removeItem('teso_demo_db_v1'); localStorage.removeItem('teso_demo_db_v2'); localStorage.removeItem('teso_demo_db_v3'); } catch (e) { /* sin almacenamiento */ }
 const FILES_KEY = 'teso_demo_files_v1';
 const SECRET_KEY = 'teso_demo_secret';
 
@@ -162,7 +162,7 @@ function seed() {
   let n = 0;
   const id = () => 'd' + (++n).toString(36) + Math.random().toString(36).slice(2, 8);
   const now = new Date().toISOString();
-  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [], Integrantes: [], Actividades: [], Inscripciones: [] };
+  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [], Integrantes: [], Actividades: [], Inscripciones: [], Asistencias: [], Visitas: [] };
   let rnd = 7;
   const rand = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
   const between = (a, b) => Math.round((a + rand() * (b - a)) / 500) * 500;
@@ -331,6 +331,30 @@ function seed() {
   // dos jóvenes que ya son miembros de la iglesia (enlazados a su ficha)
   [db.Miembros[1], db.Miembros[9]].forEach((mb) => integ.push({ id: id(), ministerioId: jov.id, nombre: mb.nombre, celular: '', email: '', fechaNacimiento: '', miembroId: mb.id, notas: '', activo: true, creadoEn: now, actualizadoEn: now }));
   db.Integrantes.push(...integ);
+
+  // Asistencia de ejemplo: 10 domingos de culto y escuela dominical, con algunos hermanos que dejaron de venir
+  const visitas = ['Tomás Aguilar', 'Rebeca Pinto', 'Luis Carrasco'].map((nombre, k) => ({ id: id(), nombre, celular: '', notas: k === 0 ? 'Invitado por un hermano' : '', activo: true, creadoEn: now, actualizadoEn: now }));
+  db.Visitas.push(...visitas);
+  const activosM = db.Miembros.filter((m) => m.estado === 'activo');
+  const noMiembros = db.Integrantes.filter((i) => !i.miembroId);
+  const hoyD = new Date(now.slice(0, 10) + 'T12:00:00');
+  hoyD.setDate(hoyD.getDate() - hoyD.getDay());
+  const domingos = Array.from({ length: 10 }, (_, k) => { const d = new Date(hoyD); d.setDate(d.getDate() - 7 * (9 - k)); return d.toISOString().slice(0, 10); });
+  const ausentes = new Set(activosM.slice(2, 5).map((m) => m.id)); // dejan de venir las últimas semanas
+  domingos.forEach((f, k) => {
+    ['Culto dominical', 'Escuela dominical'].forEach((act, j) => {
+      const pres = [];
+      activosM.forEach((m, n) => {
+        if (ausentes.has(m.id) && k >= 6) return;
+        const p = j === 0 ? (n % 7 === 0 ? 0.45 : 0.85) : (n % 3 === 0 ? 0.7 : 0.35);
+        if (rand() < p) pres.push('m:' + m.id);
+      });
+      noMiembros.forEach((i) => { if (rand() < (j === 0 ? 0.6 : 0.4)) pres.push('i:' + i.id); });
+      if (j === 0 && k >= 7) pres.push('v:' + visitas[0].id);
+      if (j === 0 && k === 9) pres.push('v:' + visitas[1].id);
+      db.Asistencias.push({ id: id(), fecha: f, actividad: act, notas: '', presentes: pres.join(','), creadoPor: '', creadoEn: now, actualizadoEn: now });
+    });
+  });
   const diaHoy = +today.slice(8, 10);
   const act = { id: id(), ministerioId: jov.id, nombre: 'Campamento de verano', fecha: `${TesoCore.nextMonth(curMonth)}-15`, cuota: 25000, descripcion: 'Tres días en Pucón', estado: 'abierta', creadoPor: liderJov.id, creadoEn: now, actualizadoEn: now };
   db.Actividades.push(act);

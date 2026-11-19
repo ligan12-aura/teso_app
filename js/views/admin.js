@@ -1,4 +1,4 @@
-import { icon, esc, money, modal, formData, toast, fecha, emptyState, pesos, formatoPesos } from '../ui.js';
+import { icon, esc, money, modal, formData, toast, fecha, emptyState, pesos, formatoPesos, confirmar } from '../ui.js';
 import { call, isDemo } from '../api.js';
 import { renderImportar } from './importar.js';
 import { exportarExcel } from '../export.js';
@@ -77,20 +77,30 @@ export function render(root, ctx) {
     const hoyMes = data.hoy.slice(0, 7);
     const ult = [prevMonth(hoyMes), prevMonth(prevMonth(hoyMes)), prevMonth(prevMonth(prevMonth(hoyMes)))];
     const prom = gastoGeneralPromedio(data, ult);
-    const general = presupuestoGeneralMensual(data);
+    const general = presupuestoGeneralMensual(data, hoyMes);
+    const hist = (data.config.presupuestosGenerales || []).slice().reverse();
+    const mesTxt = (m) => (m <= '2000-01' ? 'Desde el inicio' : `Desde ${mesLargo(m)}`);
     const activos = data.ministerios.filter((m) => m.activo);
     body.innerHTML = `
     <form data-pres-form class="stack">
       <article class="card">
-        <header class="card-head"><div><h3>Presupuesto mensual de la tesorería general</h3><p class="muted">Monto máximo para <b>todos</b> los gastos de cada mes (sueldos, servicios, aportes, ítems de ministerios, etc.). Déjalo en 0 para no limitar.</p></div></header>
+        <header class="card-head"><div><h3>Presupuesto mensual de la tesorería general</h3><p class="muted">Monto máximo para <b>todos</b> los gastos de cada mes (sueldos, servicios, aportes, ítems de ministerios, etc.). Déjalo en 0 para no limitar. Al cambiarlo, elige <b>desde qué mes</b> rige: los meses anteriores conservan el presupuesto que tenían.</p></div></header>
         <div class="pres-general">
-          <label class="field"><span>Presupuesto mensual ($)</span><input name="presupuestoGeneral" inputmode="numeric" class="input-money" value="${general ? general.toLocaleString('es-CL') : ''}" placeholder="Sin límite"></label>
+          <div class="pres-campos">
+            <label class="field"><span>Presupuesto mensual ($)</span><input name="presupuestoGeneral" inputmode="numeric" class="input-money" value="${general ? general.toLocaleString('es-CL') : ''}" placeholder="Sin límite"></label>
+            <label class="field"><span>Rige desde</span><input type="month" name="presupuestoDesde" value="${hoyMes}" required></label>
+          </div>
           <div class="pres-ref">
             <span>Gasto promedio de los últimos 3 meses</span>
             <strong>${money(prom)}</strong>
             ${prom ? `<button type="button" class="link-btn" data-usar="${prom}">Usar este monto</button>` : ''}
           </div>
         </div>
+        <p class="muted small" data-pres-efecto></p>
+        ${hist.length ? `<div class="pres-hist"><h4>Historial del presupuesto</h4><ul>${hist.map((h, i) => `<li class="${h.desde <= hoyMes && (i === 0 || hist[i - 1].desde > hoyMes) ? 'vigente' : ''}">
+          <span>${esc(mesTxt(h.desde))}${h.desde > hoyMes ? ' <span class="tag">programado</span>' : h.desde <= hoyMes && (i === 0 || hist[i - 1].desde > hoyMes) ? ' <span class="tag tag-verde">vigente</span>' : ''}</span>
+          <b>${h.monto ? money(h.monto) : 'Sin límite'}</b>
+          ${h.desde > '2000-01' ? `<button type="button" class="icon-btn sm" data-quitar="${h.desde}" title="Quitar este cambio">${icon('trash', 15)}</button>` : '<span></span>'}</li>`).join('')}</ul></div>` : ''}
       </article>
       <article class="card">
         <header class="card-head"><div><h3>Ministerios: ítem y presupuesto</h3><p class="muted"><b>Ítem mensual:</b> lo que tesorería transfiere cada mes (la transferencia no puede superarlo). <b>Presupuesto mensual:</b> el máximo que el ministerio puede gastar en el mes; déjalo en 0 para no limitar.</p></div></header>
@@ -107,6 +117,20 @@ export function render(root, ctx) {
     </form>`;
     const form = body.querySelector('[data-pres-form]');
     const gen = form.presupuestoGeneral;
+    const desdeIn = form.presupuestoDesde;
+    const vigenteEn = (m) => presupuestoGeneralMensual(data, m);
+    const efecto = () => {
+      const p = form.querySelector('[data-pres-efecto]');
+      const d = desdeIn.value;
+      if (!d || pesos(gen.value) === vigenteEn(d)) { p.textContent = ''; return; }
+      const futuros = (data.config.presupuestosGenerales || []).filter((h) => h.desde > d).length;
+      p.innerHTML = `Desde <b>${esc(mesLargo(d))}</b> en adelante el presupuesto será <b>${pesos(gen.value) ? money(pesos(gen.value)) : 'sin límite'}</b>; hasta ${esc(mesLargo(prevMonth(d)))} queda como estaba.${futuros ? ` Reemplaza ${futuros === 1 ? 'el cambio programado' : `los ${futuros} cambios programados`} después de esa fecha.` : ''}`;
+    };
+    gen.addEventListener('input', efecto); desdeIn.addEventListener('change', efecto);
+    form.querySelectorAll('[data-quitar]').forEach((b) => b.addEventListener('click', async () => {
+      if (!(await confirmar(`¿Quitar el cambio de presupuesto ${esc(mesTxt(b.dataset.quitar).toLowerCase())}? Esos meses volverán a usar el presupuesto anterior.`, { boton: 'Quitar' }))) return;
+      try { await call('saveConfig', { quitarPresupuestoDesde: b.dataset.quitar }); toast('Cambio quitado'); await ctx.refresh(); } catch (er) { toast(er.message, 'err'); }
+    }));
     const items = [...form.querySelectorAll('[data-item]')];
     const presMin = [...form.querySelectorAll('[data-pres]')];
     const recalcular = () => {
@@ -122,7 +146,7 @@ export function render(root, ctx) {
       e.preventDefault();
       const btn = form.querySelector('[type=submit]'); btn.disabled = true; btn.classList.add('loading');
       try {
-        await call('saveConfig', { presupuestoGeneral: pesos(gen.value) });
+        if (pesos(gen.value) !== vigenteEn(desdeIn.value)) await call('saveConfig', { presupuestoGeneral: pesos(gen.value), presupuestoDesde: desdeIn.value });
         for (const m of activos) {
           const item = pesos(items.find((i) => i.dataset.item === m.id)?.value);
           const pres = pesos(presMin.find((i) => i.dataset.pres === m.id)?.value);

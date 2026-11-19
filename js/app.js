@@ -12,6 +12,7 @@ import * as Admin from './views/admin.js';
 import * as Perfil from './views/perfil.js';
 import * as Diezmos from './views/diezmos.js';
 import * as Miembros from './views/miembros.js';
+import * as Asistencia from './views/asistencia.js';
 import { descargarPlanillaGeneral } from './planillaDescarga.js';
 import { abrirAyuda } from './views/ayuda.js';
 
@@ -26,10 +27,12 @@ const NAV = {
     { path: 'rendiciones', label: 'Rendiciones', icon: 'checkCircle' },
     { path: 'diezmos', label: 'Diezmos', icon: 'heart' },
     { path: 'miembros', label: 'Miembros', icon: 'users', mas: true },
+    { path: 'asistencia', label: 'Asistencia', icon: 'calendar', mas: true },
     { path: 'admin', label: 'Configuración', short: 'Ajustes', icon: 'settings', mas: true }
   ],
   secretaria: [
     { path: 'miembros', label: 'Miembros', icon: 'users' },
+    { path: 'asistencia', label: 'Asistencia', icon: 'calendar' },
     { path: 'perfil', label: 'Mi cuenta', icon: 'user' }
   ],
   lider: [
@@ -49,6 +52,7 @@ const ROUTES = {
   rendiciones: { view: Rendiciones, roles: ADM },
   diezmos: { view: Diezmos, roles: ADM },
   miembros: { view: Miembros, roles: [...ADM, 'secretaria'] },
+  asistencia: { view: Asistencia, roles: [...ADM, 'secretaria'] },
   admin: { view: Admin, roles: ADM },
   'mi-ministerio': { view: Ministerio, roles: ['lider'] },
   perfil: { view: Perfil }

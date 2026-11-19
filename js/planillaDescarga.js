@@ -1,6 +1,6 @@
 // Descarga de la planilla tipo (Excel profesional) con los datos actuales de la página.
 import { toast, modal } from './ui.js';
-import { saldoGeneralHasta } from './calc.js';
+import { saldoGeneralHasta, presupuestoGeneralMensual } from './calc.js';
 import { construirPlanilla } from './planilla.js';
 
 const EXCELJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
@@ -60,7 +60,7 @@ export async function descargarPlanillaGeneral(data) {
     }));
   const wb = construirPlanilla(ExcelJS, {
     ambito: 'general', titulo: 'Tesorería general', iglesia: data.config.nombreIglesia, anio, generado: generadoAhora(),
-    saldoInicial: saldoGeneralHasta(data, `${anio - 1}-12`), presupuestoMensual: data.config.presupuestoGeneral || 0,
+    saldoInicial: saldoGeneralHasta(data, `${anio - 1}-12`), presupuestoMensual: presupuestoGeneralMensual(data, `${anio}-12` < data.hoy.slice(0, 7) ? `${anio}-12` : data.hoy.slice(0, 7)),
     grupos: data.grupos, movimientos: movs
   });
   await guardar(wb, `Planilla Tesorería general ${anio}.xlsx`);

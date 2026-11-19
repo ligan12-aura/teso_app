@@ -29,7 +29,11 @@ var TesoCore = (function () {
     Integrantes: ['id', 'ministerioId', 'nombre', 'celular', 'email', 'fechaNacimiento', 'miembroId', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
     // Actividades con cuota de un ministerio y sus inscritos (confirmados y pagos)
     Actividades: ['id', 'ministerioId', 'nombre', 'fecha', 'cuota', 'descripcion', 'estado', 'creadoPor', 'creadoEn', 'actualizadoEn'],
-    Inscripciones: ['id', 'actividadId', 'integranteId', 'pagoMonto', 'fechaPago', 'movId', 'creadoEn', 'actualizadoEn']
+    Inscripciones: ['id', 'actividadId', 'integranteId', 'pagoMonto', 'fechaPago', 'movId', 'creadoEn', 'actualizadoEn'],
+    // Asistencia: una fila por reunión (culto, escuela dominical u otra actividad) con los presentes
+    // en una sola celda: "m:<miembro>,i:<integrante>,v:<visita>"
+    Asistencias: ['id', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn'],
+    Visitas: ['id', 'nombre', 'celular', 'notas', 'activo', 'creadoEn', 'actualizadoEn']
   };
   var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1, cuota: 1, pagoMonto: 1 };
   var BOOL = { activo: 1, debeCambiarPass: 1 };
@@ -132,6 +136,13 @@ var TesoCore = (function () {
   // Roles: administrador, tesorero y pastor = acceso completo; secretaria = solo miembros; lider = su ministerio
   var ROLES = ['admin', 'tesorero', 'pastor', 'secretaria', 'lider'];
   var ADMIN = ['admin', 'tesorero', 'pastor'];
+  // Presupuesto general de un mes: el último cambio con "desde" <= mes. Sin historial, el monto único antiguo.
+  function presupuestoVigente(hist, legado, mes) {
+    var lista = hist && hist.length ? hist : (Number(legado) > 0 ? [{ desde: '2000-01', monto: Number(legado) }] : []);
+    var v = 0;
+    lista.forEach(function (h) { if (h.desde <= mes) v = Number(h.monto) || 0; });
+    return v;
+  }
   var MIEMBROS = ['admin', 'tesorero', 'pastor', 'secretaria'];
   var CON_MINISTERIO = ['admin', 'tesorero', 'pastor', 'lider'];
   function esAdmin(u) { return !!u && ADMIN.indexOf(u.rol) >= 0; }
@@ -210,11 +221,20 @@ var TesoCore = (function () {
 
     // ---------------- Lectura ----------------
     function config() {
-      var c = { nombreIglesia: 'Iglesia Bautista El Redentor', saldoInicial: 0, fechaSaldoInicial: '', presupuestoGeneral: 0 };
+      var c = { nombreIglesia: 'Iglesia Bautista El Redentor', saldoInicial: 0, fechaSaldoInicial: '', presupuestoGeneral: 0, presupuestosGenerales: [] };
       all('Config').forEach(function (r) {
         if (r.id === 'saldoInicial' || r.id === 'presupuestoGeneral') c[r.id] = Number(r.valor) || 0;
-        else if (r.id !== 'presupuesto') c[r.id] = r.valor;
+        else if (r.id === 'presupuestosGenerales') {
+          try { c.presupuestosGenerales = JSON.parse(r.valor || '[]') || []; } catch (e) { c.presupuestosGenerales = []; }
+        } else if (r.id !== 'presupuesto') c[r.id] = r.valor;
       });
+      c.presupuestosGenerales = c.presupuestosGenerales
+        .filter(function (h) { return h && /^\d{4}-\d{2}$/.test(h.desde); })
+        .map(function (h) { return { desde: h.desde, monto: Math.round(Number(h.monto) || 0) }; })
+        .sort(function (a, b) { return a.desde < b.desde ? -1 : a.desde > b.desde ? 1 : 0; });
+      // historial = el monto único antiguo, vigente desde siempre
+      if (!c.presupuestosGenerales.length && c.presupuestoGeneral > 0) c.presupuestosGenerales = [{ desde: '2000-01', monto: c.presupuestoGeneral }];
+      c.presupuestoGeneral = presupuestoVigente(c.presupuestosGenerales, 0, env.today().slice(0, 7)); // el de este mes
       return c;
     }
 
@@ -235,6 +255,7 @@ var TesoCore = (function () {
         base.miembros = all('Miembros');
         base.diezmos = [];
         base.integrantes = []; base.actividades = []; base.inscripciones = []; base.miembrosEnlace = [];
+        base.asistencias = all('Asistencias'); base.personasAsistencia = personasAsistencia();
         base.extra = {};
         base.config = { nombreIglesia: base.config.nombreIglesia };
         return base;
@@ -252,6 +273,8 @@ var TesoCore = (function () {
         base.actividades = all('Actividades');
         base.inscripciones = all('Inscripciones');
         base.miembrosEnlace = miembrosEnlace();
+        base.asistencias = all('Asistencias');
+        base.personasAsistencia = personasAsistencia();
       } else {
         var mid = user.ministerioId;
         var own = function (r) { return r.ministerioId === mid; };
@@ -273,11 +296,77 @@ var TesoCore = (function () {
         base.inscripciones = conAct ? all('Inscripciones').filter(function (x) { return actIds[x.actividadId]; }) : [];
         // El enlace con la ficha de Miembros lo hace tesorería: el líder no recibe el registro de miembros
         base.miembrosEnlace = [];
+        base.asistencias = []; base.personasAsistencia = [];
         base.extra = {};
         // El líder no recibe saldo de caja ni presupuesto de la tesorería general
         base.config = { nombreIglesia: base.config.nombreIglesia };
       }
       return base;
+    }
+
+    // ---------------- Asistencia ----------------
+    // Personas que se pueden marcar: miembros (todos, con su estado), integrantes de ministerios que no son
+    // miembros (sin repetir el mismo nombre en dos ministerios) y visitas
+    function personasAsistencia() {
+      var mins = {};
+      all('Ministerios').forEach(function (m) { mins[m.id] = m.nombre; });
+      var miembros = {};
+      var out = all('Miembros').map(function (m) {
+        miembros[m.id] = true;
+        return { id: 'm:' + m.id, tipo: 'miembro', nombre: m.nombre, activo: m.estado === 'activo', desde: m.fechaIngreso || '', celular: m.celular || '', ministerios: [] };
+      });
+      var porNombre = {};
+      all('Integrantes').forEach(function (i) {
+        if (i.miembroId && miembros[i.miembroId]) return; // ya está como miembro
+        var k = normalNombre(i.nombre);
+        var ya = porNombre[k];
+        if (ya) {
+          if (mins[i.ministerioId] && ya.ministerios.indexOf(mins[i.ministerioId]) < 0) ya.ministerios.push(mins[i.ministerioId]);
+          if (toBool(i.activo)) ya.activo = true;
+          return;
+        }
+        var r = { id: 'i:' + i.id, tipo: 'integrante', nombre: i.nombre, activo: toBool(i.activo), desde: String(i.creadoEn || '').slice(0, 10), celular: i.celular || '', ministerios: mins[i.ministerioId] ? [mins[i.ministerioId]] : [] };
+        porNombre[k] = r; out.push(r);
+      });
+      all('Visitas').forEach(function (v) {
+        out.push({ id: 'v:' + v.id, tipo: 'visita', nombre: v.nombre, activo: toBool(v.activo), desde: String(v.creadoEn || '').slice(0, 10), celular: v.celular || '', ministerios: [], notas: v.notas || '' });
+      });
+      return out;
+    }
+    function saveAsistencia(user, p) {
+      var fecha = String(p.fecha || '').trim();
+      if (!isDate(fecha) || fecha > env.today()) throw TesoError('Elige una fecha válida (no futura)');
+      var actividad = String(p.actividad || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (!actividad) throw TesoError('Elige la actividad (culto, escuela dominical u otra)');
+      var actual = p.id ? find('Asistencias', p.id) : null;
+      if (p.id && !actual) throw TesoError('Esa asistencia ya no existe');
+      var clave = normalNombre(actividad);
+      var otra = all('Asistencias').filter(function (a) { return a.fecha === fecha && normalNombre(a.actividad) === clave && a.id !== (actual && actual.id); })[0];
+      if (otra) throw TesoError('Ya hay una asistencia de ' + actividad + ' el ' + fecha.split('-').reverse().join('-') + ': ábrela en la lista para editarla');
+      var validos = {};
+      personasAsistencia().forEach(function (x) { validos[x.id] = true; });
+      var vistos = {};
+      var presentes = (p.presentes || []).map(String).filter(function (id) {
+        if (!validos[id] || vistos[id]) return false;
+        vistos[id] = true; return true;
+      });
+      var now = env.now();
+      var d = { fecha: fecha, actividad: actividad, notas: String(p.notas || '').trim().slice(0, 300), presentes: presentes.join(','), actualizadoEn: now };
+      return actual ? update('Asistencias', actual.id, d) : insert('Asistencias', Object.assign(d, { id: uid(), creadoPor: user.id, creadoEn: now }));
+    }
+    function deleteAsistencia(user, p) {
+      if (!find('Asistencias', p.id)) throw TesoError('Esa asistencia ya no existe');
+      remove('Asistencias', p.id);
+      return { id: p.id };
+    }
+    function saveVisita(user, p) {
+      var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (!nombre) throw TesoError('Escribe el nombre de la visita');
+      var actual = p.id ? find('Visitas', p.id) : null;
+      if (p.id && !actual) throw TesoError('Esa visita ya no existe');
+      var now = env.now();
+      var d = { nombre: nombre, celular: String(p.celular || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 300), activo: p.activo === undefined ? true : !!p.activo, actualizadoEn: now };
+      return actual ? update('Visitas', actual.id, d) : insert('Visitas', Object.assign(d, { id: uid(), creadoEn: p.fecha && isDate(p.fecha) ? p.fecha : now }));
     }
 
     // ---------------- Helpers de dominio ----------------
@@ -344,7 +433,7 @@ var TesoCore = (function () {
     // Tesorería general: un presupuesto fijo mensual para TODOS sus gastos
     // (incluye las transferencias de ítems a los ministerios). 0 = sin límite.
     function presupuestoGeneral(mes, excluirId) {
-      var limite = config().presupuestoGeneral || 0;
+      var limite = presupuestoVigente(config().presupuestosGenerales, 0, mes);
       var gastado = 0;
       all('MovimientosGenerales').forEach(function (x) {
         if (x.mes === mes && x.tipo === 'gasto' && x.id !== excluirId) gastado += x.monto;
@@ -1286,10 +1375,25 @@ var TesoCore = (function () {
         if (p[k] === undefined) return;
         guardar(k, k === 'saldoInicial' ? String(Math.round(Number(p[k]) || 0)) : String(p[k]));
       });
-      if (p.presupuestoGeneral !== undefined) {
-        var v = Math.round(Number(p.presupuestoGeneral) || 0);
-        if (v < 0 || v > MAX_MONTO) throw TesoError('Presupuesto general inválido');
-        guardar('presupuestoGeneral', String(v));
+      // Presupuesto general: cada cambio rige desde un mes en adelante; los meses anteriores conservan el suyo
+      if (p.presupuestoGeneral !== undefined || p.quitarPresupuestoDesde) {
+        var hist = config().presupuestosGenerales.slice();
+        if (p.quitarPresupuestoDesde) {
+          hist = hist.filter(function (h) { return h.desde !== String(p.quitarPresupuestoDesde); });
+        } else {
+          var v = Math.round(Number(p.presupuestoGeneral) || 0);
+          if (v < 0 || v > MAX_MONTO) throw TesoError('Presupuesto general inválido');
+          var desde = String(p.presupuestoDesde || env.today().slice(0, 7));
+          if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(desde)) throw TesoError('Elige desde qué mes rige el presupuesto');
+          // el nuevo monto rige desde ese mes en adelante: reemplaza los cambios de ese mes o posteriores
+          hist = hist.filter(function (h) { return h.desde < desde; });
+          if (!hist.length && desde > '2000-01') hist.push({ desde: '2000-01', monto: 0 }); // antes: sin límite
+          hist.push({ desde: desde, monto: v });
+        }
+        // sin cambios útiles (todo en 0) = sin presupuesto
+        if (!hist.some(function (h) { return h.monto > 0; })) hist = [];
+        guardar('presupuestosGenerales', JSON.stringify(hist));
+        guardar('presupuestoGeneral', String(presupuestoVigente(hist, 0, env.today().slice(0, 7))));
       }
       return config();
     }
@@ -1326,6 +1430,9 @@ var TesoCore = (function () {
       saveIntegrante: { fn: saveIntegrante, role: CON_MINISTERIO, write: true },
       deleteIntegrante: { fn: deleteIntegrante, role: CON_MINISTERIO, write: true },
       agregarMiembrosIntegrantes: { fn: agregarMiembrosIntegrantes, role: ADMIN, write: true },
+      saveAsistencia: { fn: saveAsistencia, role: MIEMBROS, write: true },
+      deleteAsistencia: { fn: deleteAsistencia, role: MIEMBROS, write: true },
+      saveVisita: { fn: saveVisita, role: MIEMBROS, write: true },
       saveActividad: { fn: saveActividad, role: CON_MINISTERIO, write: true },
       deleteActividad: { fn: deleteActividad, role: CON_MINISTERIO, write: true },
       setConfirmados: { fn: setConfirmados, role: CON_MINISTERIO, write: true },
@@ -1383,6 +1490,7 @@ var TesoCore = (function () {
     prevMonth: prevMonth,
     nextMonth: nextMonth,
     labelMes: labelMes,
+    presupuestoVigente: presupuestoVigente,
     ROLES: ROLES,
     ADMIN: ADMIN,
     pesos: pesos,

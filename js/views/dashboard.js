@@ -14,7 +14,7 @@ export function render(root, ctx) {
   const asignado = movsMes.filter((m) => m.origen === 'transferencia').reduce((a, m) => a + m.monto, 0);
   const ministerios = data.ministerios.filter((m) => m.activo);
   const itemsTotal = ministerios.reduce((a, m) => a + m.itemMensual, 0);
-  const presTotal = presupuestoGeneralMensual(data);
+  const presTotal = presupuestoGeneralMensual(data, mes);
   const mesRend = prevMonth(mes);
   const delta = (a, b) => (b ? (a - b) / b : 0);
   const pct = (v) => `${v >= 0 ? '+' : ''}${Math.round(v * 100)}%`;
