@@ -133,6 +133,11 @@ export function render(root, ctx) {
   const totalMes = totales[mi];
   // Un mes futuro no tiene variación (aún no hay diezmos que comparar)
   const variacion = totalAnt && !futuro ? Math.round(((totalMes - totalAnt) / totalAnt) * 100) : null;
+  // mismo mes del año anterior
+  const antAnio = `${anio - 1}-${pad(mi + 1)}`;
+  const totalAntAnio = data.diezmos.filter((d) => d.fecha.slice(0, 7) === antAnio).reduce((a, d) => a + d.monto, 0);
+  const variacionAnio = totalAntAnio && !futuro ? Math.round(((totalMes - totalAntAnio) / totalAntAnio) * 100) : null;
+  const lineaVar = (v, etiqueta, monto) => `<b class="${v >= 0 ? 'ingreso' : 'gasto'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v)}%</b> vs. ${etiqueta} (${money(monto)})`;
   const regsMes = data.diezmos.filter((d) => d.fecha.slice(0, 7) === mes)
     .map((d) => ({ d, nombre: d.conyugeId && nombreDe[d.conyugeId] ? `${nombreDe[d.miembroId] || '—'} y ${nombreDe[d.conyugeId]}` : (nombreDe[d.miembroId] || '—') }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es') || a.d.fecha.localeCompare(b.d.fecha));
@@ -177,7 +182,7 @@ export function render(root, ctx) {
   ${futuro ? `<div class="note">${icon('sparkle', 16)}<span>${nomMes} aún no llega: las cifras del mes aparecerán cuando se registren diezmos.</span></div>` : ''}
 
   <section class="kpis kpis-4">
-    <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (futuro ? 'mes aún no transcurrido' : totalAnt ? '' : 'sin diezmos el mes anterior') : `<b class="${variacion >= 0 ? 'ingreso' : 'gasto'}">${variacion >= 0 ? '▲' : '▼'} ${Math.abs(variacion)}%</b> vs. ${mesLargo(ant)} (${money(totalAnt)})`}</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (futuro ? 'mes aún no transcurrido' : totalAnt ? '' : 'sin diezmos el mes anterior') : lineaVar(variacion, mesLargo(ant), totalAnt)}${variacionAnio !== null ? `<br>${lineaVar(variacionAnio, mesLargo(antAnio), totalAntAnio)}` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Diezmaron</span><strong class="kpi-value">${diezmaron.length} <small class="kpi-pct">${pctMes}%</small></strong><span class="kpi-sub">de ${elMes.length} hermanos habilitados para diezmar${noHabConDiezmo ? ` · además ${noHabConDiezmo} no habilitado${noHabConDiezmo > 1 ? 's' : ''}` : ''}${fueraConDiezmo ? ` · además ${fueraConDiezmo} fuera de su período de miembro` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.sin.color}"></i> No diezmaron</span><strong class="kpi-value">${futuro ? '—' : noDiezmaron.length}</strong><span class="kpi-sub">${futuro ? 'mes por venir' : 'habilitados sin diezmo registrado'}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('receipt', 15)} Promedio por diezmo</span><strong class="kpi-value">${money(promedio)}</strong><span class="kpi-sub">${regsMes.length} diezmo${regsMes.length === 1 ? '' : 's'} registrado${regsMes.length === 1 ? '' : 's'} (matrimonio = 1)</span></article>
