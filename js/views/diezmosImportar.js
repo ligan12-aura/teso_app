@@ -76,6 +76,8 @@ async function leer(file) {
       const crudoMonto = vals[cols.monto], crudoFecha = vals[cols.fecha];
       const vacio = (v) => v == null || (!(v instanceof Date) && String(v).trim() === '');
       if (vacio(crudoMonto) && vacio(crudoFecha)) return; // fila en blanco
+      // fila de total al pie (sin fecha y con "Total…" escrito): no es un diezmo
+      if (vacio(crudoFecha) && vals.some((v) => typeof v === 'string' && /^\s*total\b/i.test(v))) return;
       const pm = aMonto(crudoMonto);
       const f = aFecha(crudoFecha);
       // Las filas con problemas no se descartan en silencio: se muestran y no se importan
