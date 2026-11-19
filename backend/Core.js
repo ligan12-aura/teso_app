@@ -1084,6 +1084,22 @@ var TesoCore = (function () {
       }
       items.forEach(agregar);
       if (nuevos.length) insertMany('MovimientosMinisterios', nuevos);
+      // Si lo importado trae el historial del año anterior a un saldo de arrastre importado, ese saldo sobra
+      // (se calcula de los movimientos): se quita para no contarlo dos veces.
+      var saldosReemplazados = [];
+      if (nuevos.length) {
+        var todos = propios.concat(nuevos);
+        var esSaldo = function (x) { return String(x.refId || '').indexOf('saldo:' + m.id + ':') === 0; };
+        var aniosConMovs = {};
+        nuevos.forEach(function (x) { if (!esSaldo(x)) aniosConMovs[x.mes.slice(0, 4)] = 1; });
+        todos.filter(esSaldo).forEach(function (x) {
+          var y = Number(String(x.refId).split(':')[2]);
+          if (!y || !aniosConMovs[String(y - 1)]) return;
+          var calculado = todos.reduce(function (a, z) { return z.id !== x.id && z.mes < y + '-01' ? a + (z.tipo === 'ingreso' ? z.monto : -z.monto) : a; }, 0);
+          remove('MovimientosMinisterios', x.id);
+          saldosReemplazados.push({ anio: y, monto: x.monto, calculado: calculado });
+        });
+      }
       // ítems como transferidos
       var transf = all('Transferencias').filter(function (t) { return t.ministerioId === m.id; });
       var conItem = {};
@@ -1112,7 +1128,7 @@ var TesoCore = (function () {
         if (Number(p.presupuestoMensual) > 0) patch.presupuestoMensual = Math.round(Number(p.presupuestoMensual));
         if (Object.keys(patch).length) update('Ministerios', m.id, patch);
       }
-      return { importados: nuevos.length, omitidos: omitidos, transferencias: nuevasT.length, rendiciones: nuevasR.length };
+      return { importados: nuevos.length, omitidos: omitidos, transferencias: nuevasT.length, rendiciones: nuevasR.length, saldosReemplazados: saldosReemplazados };
     }
 
     // ---------------- Miembros (solo tesorero) ----------------
