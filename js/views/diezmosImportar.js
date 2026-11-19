@@ -162,6 +162,10 @@ export function importarHistorialDiezmos(ctx) {
             filas.forEach((y) => {
               if (y === x || y.existe || y.error || y.manual || y.clave !== x.clave) return;
               if (!y.miembroId || y.porFamilia) { y.miembroId = x.miembroId; y.conyugeId = x.conyugeId; y.ambiguo = false; y.porFamilia = !!x.miembroId; }
+              // ya tenía a uno de los dos (sugerido por el nombre): se completa el matrimonio igual que aquí
+              else if (x.miembroId && x.conyugeId && !y.conyugeId && [x.miembroId, x.conyugeId].includes(y.miembroId)) {
+                y.miembroId = x.miembroId; y.conyugeId = x.conyugeId; y.ambiguo = false; y.porFamilia = true;
+              }
             });
           }
           pintar();
