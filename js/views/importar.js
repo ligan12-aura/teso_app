@@ -24,9 +24,12 @@ function loadXLSX() {
 // ---------------- Clasificación automática ----------------
 const REGLAS_GASTO = [
   [/SUELDO/, 'Sueldo pastoral'],
-  [/IMPOSICION/, 'Imposiciones y previsión'],
+  [/IMPOS|REFORMA DE PENSIONES/, 'Imposiciones y previsión'],
+  [/GRATIFICACION/, 'Aguinaldos y bonos'],
+  [/INTERGAS/, 'Gas'],
+  [/TELSUR|TESLSUR|ZOOM/, 'Internet y teléfono'],
   [/ASIGNACION FAMILIAR/, 'Asignación familiar'],
-  [/INDEMNIZACION/, 'Fondo de indemnización'],
+  [/INDEM/, 'Fondo de indemnización'],
   [/AGUINALDO|BONO/, 'Aguinaldos y bonos'],
   [/GUARDATEMPLO|GURDATEMPLO/, 'Guardatemplo'],
   [/\bLUZ\b|ELECTRIC/, 'Luz'],
@@ -37,8 +40,9 @@ const REGLAS_GASTO = [
   [/SEGURO|PERMISO DE CIRCULACION|REVISION TECNICA/, 'Seguro y permisos vehículo'],
   [/COMBUSTIBLE|BENCINA|PETROLEO/, 'Combustible'],
   [/FURGON|VEHICULO|REPUESTO/, 'Mantención vehículo'],
-  [/REUNION|DIRECTORIO|COCINA/, 'Reuniones y directorio'],
-  [/UNIBA|U NIBA|UBACH|CONVENCION|URPAB/, 'Aportes a la denominación'],
+  [/\bITE?R?M\b/, 'Asignación ministerios'],
+  [/REUNION|DIRECTORIO|COCINA|SESION|DESAYUNO A PASTORES/, 'Reuniones y directorio'],
+  [/UNIBA|U NIBA|UBACH|CONVENCION|URPAB|PLAN COOPERATIVO|MARCHA POR JESUS/, 'Aportes a la denominación'],
   [/HOGAR BAUTISTA|FUNDACION|DIVINO REFUGIO/, 'Aportes a instituciones'],
   [/DAMNIFICADO|INCENDIO/, 'Ofrendas solidarias'],
   [/AYUDA SOCIAL|CANASTA/, 'Ayuda social'],
@@ -48,13 +52,17 @@ const REGLAS_GASTO = [
   [/MISION/, 'Misiones'],
   [/ANIVERSARIO|LLAVERO|BAUTISMO|NUEVOS MIEMBROS|CELEBRACION|PASEO/, 'Eventos y celebraciones'],
   [/ARRIENDO/, 'Arriendo'],
-  [/MANTENCION|REPARACION|ARREGLO/, 'Mantención templo'],
+  [/MANTENCION|REPARACION|ARREGLO|CONSTRUCCION|PINTURA|GASFITERIA|CALEFONT|VIDRIO|PORTON|PASTO|LLAVES|CIERRE PUERTA|TAZA|ACCESO TEMPLO|GOMAS|VIGA|NEUMATICO/, 'Mantención templo'],
+  [/MULTIMEDIA|AUDIO|CALEFACTOR|OFRENDERO|MUEBLE/, 'Equipamiento y mobiliario'],
+  [/CENA DEL SENOR|FIESTAS PATRIAS|EMPANADAS|RETIRO|GRADUACION|REGALO|ESCUELA BIBLICA/, 'Eventos y celebraciones'],
   [/BANCO|COMISION/, 'Gastos bancarios'],
   [/VARIOS/, 'Gastos varios']
 ];
 const REGLAS_INGRESO = [
-  [/DAMNIFICADO|INCENDIO|SOLIDARI/, 'Ofrendas solidarias'],
+  [/DAMNIFICADO|INCENDIO|SOLIDARI|AYUDA SOCIAL|HOGAR BAUTISTA/, 'Ofrendas solidarias'],
   [/MISION/, 'Ofrenda misionera'],
+  [/OFRENDA (DE|ESPECIAL|FAMILIA)|APP?ORTE (UNIBA|DINAMIS)/, 'Donaciones'],
+  [/OFRENDA/, 'Ofrendas'],
   [/REINTEGRO|DEVOLUCION/, 'Reintegros'],
   [/DONACION/, 'Donaciones'],
   [/CUOTA|PASEO|ALMUERZO|VENTA|ACTIVIDAD|BINGO/, 'Actividades']
@@ -115,7 +123,7 @@ function leerLibro(XLSX, wb, existentes) {
     const resumen = { mes, nombre: name, totalEntradas: num(5, totalE), totalSalidas: 0, saldoAnterior: null, saldoFinal: null, filas: [] };
     for (let r = totalE + 1; r <= Math.min(totalE + 6, rango.e.r); r++) {
       const a = sinTildes(txt(0, r));
-      if (a.startsWith('TOTAL SALIDAS')) resumen.totalSalidas = num(5, r);
+      if (a.startsWith('TOTAL SALIDAS') || a.startsWith('SALIDAS MES')) resumen.totalSalidas = num(5, r);
       else if (a.startsWith('SALDO EN CAJA')) resumen.saldoFinal = num(5, r);
       else if (a.startsWith('SALDO DE')) { resumen.saldoAnterior = num(5, r); resumen.etiquetaSaldo = txt(0, r); }
     }
@@ -137,36 +145,58 @@ function leerLibro(XLSX, wb, existentes) {
       items.push(it); resumen.filas.push(it);
     };
 
-    // Entradas (columnas A = detalle, E = monto)
-    let seccion = '';
+    // Entradas (columnas A = detalle, E = monto; las líneas sueltas pueden traer el monto solo en F)
+    let seccion = '', ultimaFecha = '', subtitulo = '';
+    const masSemana = (f) => { const d = f ? Math.min(+f.slice(8) + 7, ultimo) : ultimo; return `${mes}-${pad(d)}`; };
     for (let r = header + 1; r < totalE; r++) {
       const a = txt(0, r);
       const A = sinTildes(a);
-      if (A.startsWith('DIEZMO')) { seccion = 'Diezmos'; continue; }
-      if (A.startsWith('OFRENDA CULTO')) { seccion = 'Ofrendas'; continue; }
-      const monto = num(4, r);
-      if (!a || monto <= 0) continue;
+      if (A.startsWith('DIEZMO')) { seccion = 'Diezmos'; ultimaFecha = ''; continue; }
+      if (A.startsWith('OFRENDA CULTO')) { seccion = 'Ofrendas'; ultimaFecha = ''; continue; }
+      const montoE = num(4, r), montoF = num(5, r);
+      if (!a) {
+        // Línea de diezmos u ofrendas sin fecha escrita: se le asigna la semana siguiente a la anterior
+        if (seccion && montoE > 0) {
+          const f = masSemana(ultimaFecha);
+          ultimaFecha = f;
+          agregar({ tipo: 'ingreso', fecha: f, monto: montoE, categoria: seccion, descripcion: seccion === 'Diezmos' ? 'Diezmos (sin fecha en el libro)' : `Ofrenda culto ${f.slice(8)}.${f.slice(5, 7)}.${f.slice(0, 4)} (fecha aproximada)` }, r + 1);
+        }
+        continue;
+      }
       const f = fechaDe(a);
-      if (seccion && f) {
-        agregar({ tipo: 'ingreso', fecha: f, monto, categoria: seccion, descripcion: seccion === 'Diezmos' ? `Diezmos ${a.toLowerCase().replace(/,/g, '.')}` : `Ofrenda culto ${a.replace(/,/g, '.')}` }, r + 1);
-      } else {
+      if (seccion && f && montoE > 0) {
+        ultimaFecha = f;
+        const desc = seccion === 'Diezmos' ? `Diezmos ${a.toLowerCase().replace(/,/g, '.')}`
+          : seccion === 'Ofrendas' ? `Ofrenda culto ${a.replace(/,/g, '.')}` : `${bonito(subtitulo)} ${a.replace(/,/g, '.')}`;
+        agregar({ tipo: 'ingreso', fecha: f, monto: montoE, categoria: seccion === 'sub' ? clasificar('ingreso', subtitulo) : seccion, descripcion: desc }, r + 1);
+      } else if (!seccion || !f) {
         seccion = '';
-        agregar({ tipo: 'ingreso', fecha: f || `${mes}-${pad(ultimo)}`, monto, categoria: clasificar('ingreso', a), descripcion: bonito(a) }, r + 1);
+        // en las líneas sueltas el libro suma la columna F (si está), si no la E
+        const monto = montoF > 0 ? montoF : montoE;
+        if (monto <= 0) {
+          // título sin monto (p. ej. "Ofrenda clase adultos escuela dominical"): las líneas con fecha que siguen son suyas
+          if (!f) { seccion = 'sub'; subtitulo = a; ultimaFecha = ''; }
+          continue;
+        }
+        // día escrito al inicio ("07 Retiro…", "05.09.Ofrenda…")
+        const dm = f ? null : /^(\d{1,2})(?:[.\/-](\d{1,2}))?[.\s]+(?=\D)/.exec(a);
+        const fl = f || (dm && (!dm[2] || +dm[2] === mi + 1) && +dm[1] >= 1 ? `${mes}-${pad(Math.min(+dm[1], ultimo))}` : `${mes}-${pad(ultimo)}`);
+        agregar({ tipo: 'ingreso', fecha: fl, monto, categoria: clasificar('ingreso', a), descripcion: bonito(dm ? a.slice(dm[0].length) : a) }, r + 1);
       }
     }
-    // Salidas (columnas H..M = detalle que empieza con el día, N = monto)
-    for (let r = header + 1; r < totalE; r++) {
+    // Salidas (columnas H..M = detalle que empieza con el día, N = monto). Pueden seguir bajo la fila de totales.
+    for (let r = header + 1; r <= rango.e.r; r++) {
       let d = '';
       for (let c = 7; c <= 12 && !d; c++) { const t = txt(c, r); if (t && /[a-z]/i.test(t)) d = t; }
       const monto = num(13, r);
       if (!d || monto <= 0 || sinTildes(d).startsWith('TOTAL')) continue;
-      const dm = /^(\d{1,2})\s+(.*)$/.exec(d);
+      const dm = /^(\d{1,2})(?!\d)(?:[.\/-]\d{1,2}(?:[.\/-]\d{2,4})?)?\s*(\D.*)$/.exec(d);
       const dia = dm ? Math.min(Math.max(+dm[1], 1), ultimo) : ultimo;
       const texto = dm ? dm[2] : d;
       agregar({ tipo: 'gasto', fecha: `${mes}-${pad(dia)}`, monto, categoria: clasificar('gasto', texto), descripcion: bonito(texto) }, r + 1);
     }
     if (!resumen.filas.length) return;
-    const sum = (t) => resumen.filas.filter((x) => x.tipo === t).reduce((s, x) => s + x.monto, 0);
+    const sum = (t) => resumen.filas.filter((x) => x.tipo === t && !x.ajuste).reduce((s, x) => s + x.monto, 0);
     resumen.entradas = sum('ingreso');
     resumen.salidas = sum('gasto');
     resumen.okE = resumen.entradas === resumen.totalEntradas;
@@ -175,6 +205,21 @@ function leerLibro(XLSX, wb, existentes) {
     meses.push(resumen);
   });
   meses.sort((a, b) => a.mes.localeCompare(b.mes));
+  // Si el "saldo de <mes anterior>" anotado no coincide con el cierre del mes anterior, se agrega un ajuste
+  // para que los saldos de la app sigan exactamente los del libro
+  meses.forEach((m, i) => {
+    const ant = meses[i - 1];
+    if (!ant || m.saldoAnterior === null || ant.saldoFinal === null || m.saldoAnterior === ant.saldoFinal) return;
+    const dif = m.saldoAnterior - ant.saldoFinal;
+    const ref = `libro:${m.mes}:ajuste`;
+    const it = {
+      tipo: dif > 0 ? 'ingreso' : 'gasto', fecha: `${m.mes}-01`, monto: Math.abs(dif), categoria: dif > 0 ? 'Otros ingresos' : 'Otros gastos',
+      descripcion: `Ajuste de saldo del libro: anotó ${money(m.saldoAnterior)} como saldo anterior, pero ${mesLargo(ant.mes)} cerró con ${money(ant.saldoFinal)}`,
+      refId: ref, medio: 'Efectivo', ajuste: true, yaImportado: existentes.has(ref)
+    };
+    m.ajuste = dif;
+    m.filas.unshift(it); items.push(it);
+  });
   return { meses, items };
 }
 
@@ -248,12 +293,18 @@ function pintar(prev, ctx) {
   const nuevos = items.filter((i) => !i.yaImportado);
   const primero = meses[0];
   const ok = (b) => b ? `<span class="ok-mark">${icon('checkCircle', 15)}</span>` : `<span class="bad-mark">${icon('alert', 15)}</span>`;
-  const sugerirSaldo = primero.saldoAnterior !== null && !items.some((i) => i.yaImportado);
   const cfg = data.config || {};
   const saldoActual = Number(cfg.saldoInicial) || 0;
+  // ¿El libro termina justo antes del saldo inicial actual y su cierre es ese mismo saldo? (p. ej. 2025 antes de 2026)
+  const ultimoMes = meses[meses.length - 1];
+  const [ya, mo] = ultimoMes.mes.split('-').map(Number);
+  const mesSiguiente = mo === 12 ? `${ya + 1}-01` : `${ya}-${pad(mo + 1)}`;
+  const empalma = !!cfg.fechaSaldoInicial && cfg.fechaSaldoInicial.slice(0, 7) === mesSiguiente && ultimoMes.saldoFinal === saldoActual;
+  const sugerirSaldo = primero.saldoAnterior !== null && (empalma || !items.some((i) => i.yaImportado));
   const saldoDistinto = sugerirSaldo && (saldoActual !== primero.saldoAnterior || (cfg.fechaSaldoInicial || '') !== `${primero.mes}-01`);
-  // Solo se marca sola si aún no hay saldo inicial configurado
-  const marcarSaldo = saldoDistinto && !saldoActual;
+  // Se marca sola si aún no hay saldo inicial, o si el libro empalma con él (la caja de hoy no cambia)
+  const marcarSaldo = saldoDistinto && (!saldoActual || empalma);
+  const anteriorAlSaldo = !empalma && saldoActual && cfg.fechaSaldoInicial && `${ultimoMes.mes}-01` < cfg.fechaSaldoInicial;
   // Movimientos que ya existen en esos meses y no vienen del libro (posibles duplicados)
   const mesesLibro = new Set(meses.map((m) => m.mes));
   const enMeses = data.movGenerales.filter((m) => mesesLibro.has(m.mes) && m.origen !== 'importado' && m.origen !== 'transferencia');
@@ -267,11 +318,12 @@ function pintar(prev, ctx) {
         <tr><td><b>${cap(mesLargo(m.mes))}</b></td>
           <td class="num">${money(m.entradas)} ${ok(m.okE)}${m.okE ? '' : `<br><small class="muted">libro: ${money(m.totalEntradas)}</small>`}</td>
           <td class="num">${money(m.salidas)} ${ok(m.okS)}${m.okS ? '' : `<br><small class="muted">libro: ${money(m.totalSalidas)}</small>`}</td>
-          <td class="num">${m.saldoFinal !== null ? `${money(m.saldoFinal)} ${ok(m.okSaldo)}` : '—'}</td>
+          <td class="num">${m.saldoFinal !== null ? `${money(m.saldoFinal)} ${ok(m.okSaldo)}` : '—'}${m.ajuste ? `<br><small class="muted">ajuste ${m.ajuste > 0 ? '+' : '−'}${money(Math.abs(m.ajuste))}</small>` : ''}</td>
           <td class="num">${m.filas.length}${m.filas.some((f) => f.yaImportado) ? `<br><small class="muted">${m.filas.filter((f) => f.yaImportado).length} ya importadas</small>` : ''}</td></tr>`).join('')}
       </tbody></table></div>
     ${enMeses.length ? `<div class="note warn" style="margin-top:14px">${icon('alert', 16)}<span>Ya hay <b>${enMeses.length} movimiento${enMeses.length > 1 ? 's' : ''}</b> en la app en ${esc(mesesConDatos)} que no vienen de este libro. Revisa que no sean los mismos antes de importar, para no duplicarlos.</span></div>` : ''}
-    ${saldoDistinto ? `<label class="check saldo-check"><input type="checkbox" data-saldo ${marcarSaldo ? 'checked' : ''}> <span>Usar <b>${money(primero.saldoAnterior)}</b> (${esc(primero.etiquetaSaldo || 'saldo anterior')}) como saldo inicial de caja al ${fecha(primero.mes + '-01')}${saldoActual ? `<br><small class="muted">Hoy está configurado ${money(saldoActual)}${cfg.fechaSaldoInicial ? ` desde el ${fecha(cfg.fechaSaldoInicial)}` : ''}. Al marcarlo se reemplaza.</small>` : ''}</span></label>` : ''}
+    ${saldoDistinto ? `<label class="check saldo-check"><input type="checkbox" data-saldo ${marcarSaldo ? 'checked' : ''}> <span>Usar <b>${money(primero.saldoAnterior)}</b> (${esc(primero.etiquetaSaldo || 'saldo anterior')}) como saldo inicial de caja al ${fecha(primero.mes + '-01')}${saldoActual ? `<br><small class="muted">Hoy está configurado ${money(saldoActual)}${cfg.fechaSaldoInicial ? ` desde el ${fecha(cfg.fechaSaldoInicial)}` : ''}. ${empalma ? `El cierre de ${esc(mesLargo(ultimoMes.mes))} del libro es igual a ese saldo, así que <b>la caja de hoy no cambia</b> y los meses del libro quedan con sus saldos.` : 'Al marcarlo se reemplaza.'}</small>` : ''}</span></label>` : ''}
+    ${anteriorAlSaldo ? `<div class="note warn" style="margin-top:10px">${icon('alert', 16)}<span>Este libro termina en ${esc(mesLargo(ultimoMes.mes))}, pero el saldo inicial de caja empieza el ${fecha(cfg.fechaSaldoInicial)}. Sus movimientos quedarán en el historial sin cambiar la caja. Para que también se vean los saldos de esos meses, importa los años del más reciente al más antiguo.</span></div>` : ''}
   </article>
   ${meses.map((m) => `
   <details class="card imp-mes">
@@ -289,7 +341,7 @@ function pintar(prev, ctx) {
   </details>`).join('')}
   <div class="imp-actions">
     <button class="btn btn-ghost" data-cancel>Cancelar</button>
-    <button class="btn btn-primary" data-importar ${nuevos.length ? '' : 'disabled'}>${icon('download', 16)} Importar ${nuevos.length} movimiento${nuevos.length === 1 ? '' : 's'}</button>
+    <button class="btn btn-primary" data-importar ${nuevos.length || saldoDistinto ? '' : 'disabled'}>${icon('download', 16)} ${nuevos.length ? `Importar ${nuevos.length} movimiento${nuevos.length === 1 ? '' : 's'}` : saldoDistinto ? 'Guardar saldo inicial' : 'Nada nuevo por importar'}</button>
   </div>`;
 
   prev.querySelectorAll('.cat-sel').forEach((s) => s.addEventListener('change', () => {
@@ -307,6 +359,10 @@ function pintar(prev, ctx) {
     const payloadItems = nuevos.map(({ fecha: f, tipo, monto, categoria, descripcion, medio, refId }) => ({ fecha: f, tipo, monto, categoria, descripcion, medio, refId }));
     let importados = 0, omitidos = 0;
     try {
+      if (!payloadItems.length) {
+        if (!usarSaldo) throw new Error('No hay movimientos nuevos: marca el saldo inicial para guardarlo');
+        await call('saveConfig', { saldoInicial: primero.saldoAnterior, fechaSaldoInicial: `${primero.mes}-01` });
+      }
       for (let i = 0; i < payloadItems.length; i += 300) {
         const extra = i === 0 && usarSaldo ? { saldoInicial: primero.saldoAnterior, fechaSaldoInicial: `${primero.mes}-01` } : {};
         const r = await call('importarMovimientos', { items: payloadItems.slice(i, i + 300), ...extra });
