@@ -103,10 +103,10 @@ export function render(root, ctx) {
     <article class="card">
       <header class="card-head"><div><h3>Reuniones registradas</h3><p class="muted">${esc(vista.actividad)} · toca una para corregirla</p></div></header>
       ${sesiones.length ? `<div class="table-wrap"><table class="table">
-        <thead><tr><th>Fecha</th><th class="num">Presentes</th><th class="num">Miembros</th><th class="num">Ministerios</th><th class="num">Visitas</th><th></th></tr></thead>
-        <tbody>${sesiones.map((s, i) => [s, i]).reverse().slice(0, 15).map(([s, i]) => { const c = cuenta(i); return `<tr class="asist-fila" data-sesion="${s.id}">
+        <thead><tr><th>Fecha</th><th class="num">Presentes</th><th class="num hide-sm">Miembros</th><th class="num hide-sm">Ministerios</th><th class="num">Visitas</th><th></th></tr></thead>
+        <tbody>${sesiones.map((s, i) => [s, i]).reverse().slice(0, 15).map(([s, i]) => { const c = cuenta(i); return `<tr class="asist-fila" data-sesion="${s.id}" tabindex="0" title="Corregir esta reunión">
           <td class="nowrap"><b>${fecha(s.fecha)}</b>${s.notas ? `<br><small class="muted">${esc(s.notas)}</small>` : ''}</td>
-          <td class="num strong">${pres[i].size}</td><td class="num">${c.m}</td><td class="num">${c.i}</td><td class="num">${c.v}</td>
+          <td class="num strong">${pres[i].size}</td><td class="num hide-sm">${c.m}</td><td class="num hide-sm">${c.i}</td><td class="num">${c.v}</td>
           <td class="row-actions"><button class="icon-btn sm" data-borrar="${s.id}" title="Eliminar">${icon('trash', 15)}</button></td></tr>`; }).join('')}</tbody>
       </table></div>${sesiones.length > 15 ? `<p class="muted small">Se muestran las últimas 15 de ${sesiones.length}.</p>` : ''}`
         : emptyState(`Aún no hay reuniones de ${vista.actividad}. Presiona “Tomar asistencia”.`, 'calendar')}
@@ -121,7 +121,7 @@ export function render(root, ctx) {
     </div>
     ${lista.length ? `<div class="table-wrap"><table class="table asist-tabla">
       <thead><tr><th>Nombre</th><th>Grupo</th><th class="num">Vino</th><th class="num">Faltas seguidas</th><th>Última vez</th><th>Estado</th></tr></thead>
-      <tbody>${lista.map((p) => `<tr data-nombre="${esc(norm(p.nombre))}" data-grupo="${p.tipo === 'visita' ? 'visita' : p.estado}"${p.tipo === 'visita' ? ` class="asist-fila" data-visita-id="${esc(p.id.slice(2))}" title="Editar visita"` : ''}>
+      <tbody>${lista.map((p) => `<tr data-nombre="${esc(norm(p.nombre))}" data-grupo="${p.tipo === 'visita' ? 'visita' : p.estado}"${p.tipo === 'visita' ? ` class="asist-fila" data-visita-id="${esc(p.id.slice(2))}" tabindex="0" title="Editar visita"` : ''}>
         <td><b>${esc(p.nombre)}</b>${p.tipo === 'visita' ? ` ${icon('edit', 13)}${p.activo ? '' : ' <small class="muted">(inactiva)</small>'}` : ''}</td>
         <td><small class="muted">${esc(etiquetaTipo(p))}</small></td>
         <td class="num">${p.recientes ? `${p.vinoRec}/${p.recientes}` : '—'}</td>
@@ -135,6 +135,10 @@ export function render(root, ctx) {
   root.querySelector('[data-umbral]')?.addEventListener('change', (e) => { vista.umbral = +e.target.value; guardar('asist_umbral', String(vista.umbral)); render(root, ctx); });
   root.querySelector('[data-tomar]').addEventListener('click', () => tomarAsistencia(ctx));
   root.querySelector('[data-visita]').addEventListener('click', () => editarVisita(ctx));
+  // Las filas que se abren responden a Enter y Espacio como un botón
+  root.querySelectorAll('.asist-fila').forEach((tr) => tr.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target === tr) { e.preventDefault(); tr.click(); }
+  }));
   root.querySelectorAll('[data-sesion]').forEach((tr) => tr.addEventListener('click', (e) => {
     if (e.target.closest('[data-borrar]')) return;
     tomarAsistencia(ctx, data.asistencias.find((s) => s.id === tr.dataset.sesion));

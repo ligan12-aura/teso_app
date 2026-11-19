@@ -995,16 +995,22 @@ a.tag { text-decoration: none; }
 /* Asistencia */
 .asist-tabs { margin-bottom: 18px; }
 .asist-umbral { min-width: 170px; }
-.asist-umbral select { height: 36px; }
+.asist-umbral select { height: 40px; padding-top: 0; padding-bottom: 0; font-size: 14px; }
 .asist-alertas { list-style: none; margin: 0; padding: 0; }
 .asist-alertas li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--line-2); }
 .asist-alertas li:last-child { border-bottom: 0; }
 .asist-alertas li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.asist-alertas .chip-warn, .table .chip-warn { white-space: nowrap; flex-shrink: 0; }
+/* La tarjeta de alertas no se estira al alto de la tabla vecina (quedaba un gran espacio vacío) */
+.card:has(.asist-alertas), .card:has(> .asist-umbral), .grid-1-1 > .card:has(.asist-umbral) { align-self: start; }
 .asist-fila { cursor: pointer; }
-.asist-fila:hover td { background: var(--surface-2); }
+.asist-fila td { transition: background-color .12s ease; }
+.asist-fila:focus-visible { outline: 2px solid var(--navy-3); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) { .asist-fila:hover td { background: var(--surface-2); } }
 .asist-nueva { display: flex; gap: 8px; margin: 10px 0; }
 .asist-nueva input { flex: 1; min-width: 0; height: 36px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; background: var(--surface); color: var(--ink); }
 .pick-tools select { height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); padding: 0 10px; }
-.pres-campos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .8fr); gap: 12px; align-items: end; }
+.pres-campos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .8fr); gap: 12px; align-items: start; }
+.pres-campos input[type=month] { height: 54px; }
 .pres-campos input[type=month] { min-width: 0; }
 @media (max-width: 900px) { .pres-campos { grid-template-columns: 1fr; } }
