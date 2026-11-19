@@ -69,8 +69,19 @@ export async function exportarExcel(data) {
   add('Transferencias ítem', data.transferencias.map((t) => ({ Ministerio: min[t.ministerioId] || '', 'Ítem del mes': t.mes, Monto: t.monto, 'Fecha transferencia': t.fecha })), [14, 12, 12, 18]);
 
   const nombreDe = Object.fromEntries((data.miembros || []).map((m) => [m.id, m.nombre]));
-  if (data.miembros?.length) add('Miembros', data.miembros.map((m) => ({ Nombre: m.nombre, Estado: m.estado, 'Fecha de nacimiento': m.fechaNacimiento, Celular: m.celular, Correo: m.email, Domicilio: m.domicilio, Notas: m.notas })), [30, 10, 16, 18, 28, 36, 30]);
-  if (data.diezmos?.length) add('Diezmos', [...data.diezmos].sort(byFecha).map((d) => ({ Fecha: d.fecha, Mes: d.mes, Hermano: nombreDe[d.miembroId] || '', Monto: d.monto, Medio: d.medio, Notas: d.notas })), [11, 8, 30, 12, 14, 30]);
+  if (data.miembros?.length) add('Miembros', data.miembros.map((m) => ({ Nombre: m.nombre, Estado: m.estado, 'Miembro desde': m.fechaIngreso || '', 'Fecha de baja': m.fechaBaja || '', Cónyuge: nombreDe[m.conyugeId] || '', 'Habilitado para diezmar': m.habilitadoDiezmo === false ? 'No' : 'Sí', 'Fecha de nacimiento': m.fechaNacimiento, Celular: m.celular, Correo: m.email, Domicilio: m.domicilio, Notas: m.notas })), [30, 10, 13, 13, 26, 12, 16, 18, 28, 36, 30]);
+  if (data.diezmos?.length) add('Diezmos', [...data.diezmos].sort(byFecha).map((d) => ({ Fecha: d.fecha, Mes: d.mes, Hermano: nombreDe[d.miembroId] || '', 'Cónyuge (matrimonio)': nombreDe[d.conyugeId] || '', Monto: d.monto, Medio: d.medio, 'En la caja': d.movGeneralId ? 'Sí' : 'No', Notas: d.notas })), [11, 8, 30, 26, 12, 14, 10, 30]);
+
+  // Asistencia y visitas
+  const persona = {};
+  (data.personasAsistencia || []).forEach((p) => { persona[p.id] = p; (p.alias || []).forEach((a) => { persona[a] = p; }); });
+  if (data.asistencias?.length) add('Asistencia', [...data.asistencias].sort(byFecha).map((a) => {
+    const ids = String(a.presentes || '').split(',').filter(Boolean);
+    const nombres = [...new Set(ids.map((id) => persona[id]?.nombre || '(eliminado)'))];
+    return { Fecha: a.fecha, Actividad: a.actividad, Presentes: nombres.length, Nombres: nombres.join(', '), Notas: a.notas };
+  }), [11, 22, 10, 90, 30]);
+  const visitas = (data.personasAsistencia || []).filter((p) => p.tipo === 'visita');
+  if (visitas.length) add('Visitas', visitas.map((v) => ({ Nombre: v.nombre, Celular: v.celular, 'Desde': v.desde, Activa: v.activo ? 'Sí' : 'No', Notas: v.notas || '' })), [30, 18, 12, 8, 30]);
 
   // Listados de integrantes y actividades de los ministerios
   const integ = Object.fromEntries((data.integrantes || []).map((i) => [i.id, i]));

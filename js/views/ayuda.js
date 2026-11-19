@@ -32,7 +32,7 @@ const TEMAS = {
       <h4>Qué ve cada persona</h4>
       <ul class="hp-list">
         <li><b>Administrador, tesorero y pastor:</b> todo. Tesorería general, todos los ministerios y sus actividades, rendiciones, diezmos, miembros y configuración.</li>
-        <li><b>Secretaría:</b> solo el registro de Miembros. No ve dinero ni diezmos.</li>
+        <li><b>Secretaría:</b> el registro de Miembros y la Asistencia. No ve dinero ni diezmos.</li>
         <li><b>Líder de ministerio:</b> solo su ministerio. No ve la tesorería general ni los otros ministerios.</li>
       </ul>
       ${tip('Puedes abrir esta guía cuando quieras con el botón <b>Ayuda</b>. Siempre se abre en el tema de la pantalla donde estás.')}`
@@ -125,7 +125,7 @@ const TEMAS = {
     },
     {
       id: 'miembros', titulo: 'Miembros', ico: 'users', html: `
-      <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Lo ven el tesorero, el pastor y la secretaría.</p>
+      <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Lo ven el administrador, el tesorero, el pastor y la secretaría.</p>
       <ul class="hp-list">
         <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b>. En el resumen de diezmos cuenta como activo hasta el mes anterior a la baja, y desde ahí deja de contar; su historial se conserva. Un miembro con diezmos no se puede eliminar: se marca inactivo.</li>
         <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
@@ -137,7 +137,7 @@ const TEMAS = {
     },
     {
       id: 'asistencia', titulo: 'Asistencia', ico: 'calendar', html: `
-      <p>Control de asistencia de los <b>cultos dominicales</b>, la <b>escuela dominical</b> u otra actividad. Lo llevan el tesorero, el pastor y la secretaría.</p>
+      <p>Control de asistencia de los <b>cultos dominicales</b>, la <b>escuela dominical</b> u otra actividad. Lo llevan el administrador, el tesorero, el pastor y la secretaría.</p>
       <ul class="hp-list">
         <li><b>Tomar asistencia:</b> elige la fecha y la actividad (o escribe otra, por ejemplo “Reunión de oración”) y marca a los presentes. Usa el buscador para encontrar a alguien rápido. Si ya existe la asistencia de esa actividad ese día, ábrela en la lista para corregirla.</li>
         <li><b>Quiénes aparecen:</b> los miembros activos, las personas de los listados de los ministerios (por ejemplo Jóvenes) que no son miembros, y las visitas.</li>
@@ -254,9 +254,9 @@ TEMAS.admin = TEMAS.tesorero;
 TEMAS.secretaria = [
   {
     id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `
-    <p>Con tu usuario de <b>Secretaría</b> llevas el registro de los miembros de la iglesia: su estado y sus datos de contacto.</p>
+    <p>Con tu usuario de <b>Secretaría</b> llevas el registro de los miembros de la iglesia (su estado y sus datos de contacto) y la asistencia a los cultos y actividades.</p>
     <ul class="hp-list">
-      <li>Solo ves el apartado <b>Miembros</b> y <b>Mi cuenta</b>.</li>
+      <li>Ves los apartados <b>Miembros</b>, <b>Asistencia</b> y <b>Mi cuenta</b>.</li>
       <li>La información financiera (tesorería, ministerios y diezmos) es visible solo para tesorería y el pastor.</li>
     </ul>
     ${tip('Puedes abrir esta guía cuando quieras con el botón <b>Ayuda</b>.')}`
@@ -264,7 +264,7 @@ TEMAS.secretaria = [
   {
     // Versión para la secretaría: sin referencias a diezmos (información que no ve)
     id: 'miembros', titulo: 'Miembros', ico: 'users', html: `
-    <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Lo ven el tesorero, el pastor y la secretaría.</p>
+    <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Lo ven el administrador, el tesorero, el pastor y la secretaría.</p>
     <ul class="hp-list">
       <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b> (desde cuándo no asiste) y su ficha se conserva. Si vuelve, márcalo activo otra vez.</li>
       <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>

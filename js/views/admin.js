@@ -51,7 +51,7 @@ export function render(root, ctx) {
     const puede = ctx.user.rol === 'admin' || !hayAdmin;
     body.innerHTML = `
     <article class="card">
-      <header class="card-head wrap"><div><h3>Usuarios</h3><p class="muted">Administrador, tesorero y pastor ven todo. Los líderes solo su ministerio. Secretaría solo el registro de miembros.</p></div>
+      <header class="card-head wrap"><div><h3>Usuarios</h3><p class="muted">Administrador, tesorero y pastor ven todo. Los líderes solo su ministerio. Secretaría, el registro de miembros y la asistencia.</p></div>
         ${puede ? `<button class="btn btn-primary btn-sm" data-new>${icon('plus', 16)} Nuevo usuario</button>` : ''}</header>
       ${!puede ? `<div class="note">${icon('lock', 16)}<span>Solo el <b>administrador</b> puede agregar, modificar o desactivar usuarios.</span></div>`
         : !hayAdmin ? `<div class="note">${icon('alert', 16)}<span>Aún no hay un <b>administrador</b>. Crea uno (o cambia tu usuario a Administrador): desde entonces, solo el administrador podrá agregar, modificar o desactivar usuarios.</span></div>` : ''}
@@ -100,7 +100,7 @@ export function render(root, ctx) {
         ${hist.length ? `<div class="pres-hist"><h4>Historial del presupuesto</h4><ul>${hist.map((h, i) => `<li class="${h.desde <= hoyMes && (i === 0 || hist[i - 1].desde > hoyMes) ? 'vigente' : ''}">
           <span>${esc(mesTxt(h.desde))}${h.desde > hoyMes ? ' <span class="tag">programado</span>' : h.desde <= hoyMes && (i === 0 || hist[i - 1].desde > hoyMes) ? ' <span class="tag tag-verde">vigente</span>' : ''}</span>
           <b>${h.monto ? money(h.monto) : 'Sin límite'}</b>
-          ${h.desde > '2000-01' ? `<button type="button" class="icon-btn sm" data-quitar="${h.desde}" title="Quitar este cambio">${icon('trash', 15)}</button>` : '<span></span>'}</li>`).join('')}</ul></div>` : ''}
+          ${h.desde > hoyMes ? `<button type="button" class="icon-btn sm" data-quitar="${h.desde}" title="Quitar este cambio">${icon('trash', 15)}</button>` : '<span></span>'}</li>`).join('')}</ul></div>` : ''}
       </article>
       <article class="card">
         <header class="card-head"><div><h3>Ministerios: ítem y presupuesto</h3><p class="muted"><b>Ítem mensual:</b> lo que tesorería transfiere cada mes (la transferencia no puede superarlo). <b>Presupuesto mensual:</b> el máximo que el ministerio puede gastar en el mes; déjalo en 0 para no limitar.</p></div></header>
@@ -113,7 +113,7 @@ export function render(root, ctx) {
         </table></div>
         <div class="note warn" data-aviso hidden>${icon('alert', 16)}<span>Los ítems suman más que el presupuesto general: no alcanzaría para transferirlos todos.</span></div>` : emptyState('Aún no hay ministerios activos.', 'grid')}
       </article>
-      <div class="imp-actions"><p class="muted small">Solo el tesorero puede modificar estos montos.</p><button class="btn btn-primary" type="submit">Guardar presupuesto</button></div>
+      <div class="imp-actions"><p class="muted small">Solo el administrador, el tesorero y el pastor pueden modificar estos montos.</p><button class="btn btn-primary" type="submit">Guardar presupuesto</button></div>
     </form>`;
     const form = body.querySelector('[data-pres-form]');
     const gen = form.presupuestoGeneral;
@@ -231,7 +231,7 @@ function editUsuario(ctx, u = null) {
       <label class="field"><span>Nombre completo</span><input name="nombre" value="${esc(u?.nombre || '')}" required></label>
       <div class="form-row">
         <label class="field"><span>Usuario (para ingresar)</span><input name="usuario" value="${esc(u?.usuario || '')}" autocapitalize="none" required placeholder="ej: alabanza"></label>
-        <label class="field"><span>Rol</span><select name="rol">${[['lider', 'Líder de ministerio'], ['tesorero', 'Tesorero'], ['pastor', 'Pastor'], ['admin', 'Administrador (todo)'], ['secretaria', 'Secretaría (solo miembros)']].map(([v, l]) => `<option value="${v}" ${(u?.rol || 'lider') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field"><span>Rol</span><select name="rol">${[['lider', 'Líder de ministerio'], ['tesorero', 'Tesorero'], ['pastor', 'Pastor'], ['admin', 'Administrador (todo)'], ['secretaria', 'Secretaría (miembros y asistencia)']].map(([v, l]) => `<option value="${v}" ${(u?.rol || 'lider') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
       <p class="muted small" data-rol-ayuda style="margin-top:-6px"></p>
       <label class="field" data-min><span>Ministerio</span><select name="ministerioId"><option value="">— Selecciona —</option>${mins.map((m) => `<option value="${m.id}" ${u?.ministerioId === m.id ? 'selected' : ''}>${esc(m.icono)} ${esc(m.nombre)}</option>`).join('')}</select></label>
@@ -243,7 +243,7 @@ function editUsuario(ctx, u = null) {
       const sync = () => {
         f.querySelector('[data-min]').hidden = f.rol.value !== 'lider';
         const ayuda = f.querySelector('[data-rol-ayuda]');
-        if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', admin: 'Permiso para todo, y es el único que puede agregar, modificar o desactivar usuarios.', secretaria: 'Solo accede a Miembros: puede agregar y editar sus datos. No ve dinero ni diezmos.' }[f.rol.value];
+        if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', admin: 'Permiso para todo, y es el único que puede agregar, modificar o desactivar usuarios.', secretaria: 'Accede a Miembros (agregar y editar sus datos) y a Asistencia. No ve dinero ni diezmos.' }[f.rol.value];
       };
       f.rol.addEventListener('change', sync); sync();
     },

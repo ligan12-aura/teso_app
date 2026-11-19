@@ -148,7 +148,9 @@ export function construirPlanilla(ExcelJS, d) {
   tarjeta(res, 'A8:B8', 'A9:B9', general ? 'Presupuesto mensual (tesorería)' : 'Presupuesto mensual', Number(d.presupuestoMensual) || 0, { editable: true });
   if (general) tarjeta(res, 'C8:D8', 'C9:D9', 'Egreso promedio mensual', { formula: 'IFERROR(E6/MAX(1,COUNTIF(D13:D24,">0")),0)' });
   else tarjeta(res, 'C8:D8', 'C9:D9', 'Ítem mensual', Number(d.itemMensual) || 0, { editable: true });
-  tarjeta(res, 'E8:F8', 'E9:F9', 'Presupuesto anual', { formula: 'A9*12' });
+  // tesorería general: el presupuesto puede cambiar durante el año (cada mes lleva el suyo)
+  const presMes = general && Array.isArray(d.presupuestosMes) && d.presupuestosMes.length === 12 ? d.presupuestosMes.map((v) => Number(v) || 0) : null;
+  tarjeta(res, 'E8:F8', 'E9:F9', 'Presupuesto anual', { formula: presMes ? 'SUM(G13:G24)' : 'A9*12' });
   tarjeta(res, 'G8:I8', 'G9:I9', 'Egresos / presupuesto anual', { formula: 'IF(E9>0,E6/E9,"")' }, { numFmt: PCT });
   res.getRow(8).height = 20; res.getRow(9).height = 32; res.getRow(10).height = 12;
 
@@ -164,7 +166,7 @@ export function construirPlanilla(ExcelJS, d) {
     fila.getCell(4).value = { formula: `SUMIFS(${R('egreso')},${entre(m)})` };
     fila.getCell(5).value = { formula: `C${r}-D${r}` };
     fila.getCell(6).value = { formula: `B${r}+E${r}` };
-    fila.getCell(7).value = { formula: 'A$9' };
+    fila.getCell(7).value = presMes ? presMes[m - 1] : { formula: 'A$9' };
     fila.getCell(8).value = { formula: `IF(G${r}>0,D${r}/G${r},"")` };
     if (general) fila.getCell(9).value = { formula: `IF(G${r}>0,G${r}-D${r},"")` };
     else {

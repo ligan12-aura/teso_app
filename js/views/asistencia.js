@@ -21,10 +21,19 @@ const etiquetaTipo = (p) => (p.tipo === 'integrante' && p.ministerios.length ? p
 // último domingo (hoy si es domingo)
 const ultimoDomingo = (hoy) => { const d = new Date(hoy + 'T12:00:00'); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); };
 
+// id → id de la persona (el "i:" de un integrante que luego se hizo miembro cuenta como el miembro)
+const canonDe = (data) => {
+  const c = {};
+  data.personasAsistencia.forEach((p) => { c[p.id] = p.id; (p.alias || []).forEach((a) => { c[a] = p.id; }); });
+  return c;
+};
+const presentesDe = (s, canon) => new Set(String(s.presentes || '').split(',').filter(Boolean).map((id) => canon[id] || id));
+
 // Regularidad de cada persona en una actividad
 export function analizar(data, actividad) {
+  const canon = canonDe(data);
   const sesiones = data.asistencias.filter((s) => norm(s.actividad) === norm(actividad)).sort((a, b) => a.fecha.localeCompare(b.fecha));
-  const pres = sesiones.map((s) => new Set(String(s.presentes || '').split(',').filter(Boolean)));
+  const pres = sesiones.map((s) => presentesDe(s, canon));
   const personas = data.personasAsistencia.map((p) => {
     const idx = sesiones.map((_, i) => i);
     // cuenta desde que es miembro / está en el ministerio; una visita, desde la primera vez que vino
@@ -53,7 +62,7 @@ export function render(root, ctx) {
   if (!actividades.some((a) => norm(a) === norm(vista.actividad))) vista.actividad = actividades[0];
   const { sesiones, pres, personas } = analizar(data, vista.actividad);
   // en la lista: activos (miembros e integrantes) y visitas que ya vinieron a esta actividad
-  const lista = personas.filter((p) => (p.tipo === 'visita' ? p.total > 0 : p.activo)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const lista = personas.filter((p) => (p.tipo === 'visita' ? p.activo || p.total > 0 : p.activo)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const alertas = lista.filter((p) => p.tipo !== 'visita' && sesiones.length && p.racha >= vista.umbral)
     .sort((a, b) => b.racha - a.racha || a.nombre.localeCompare(b.nombre, 'es'));
   const ult = sesiones[sesiones.length - 1];
@@ -112,13 +121,13 @@ export function render(root, ctx) {
     </div>
     ${lista.length ? `<div class="table-wrap"><table class="table asist-tabla">
       <thead><tr><th>Nombre</th><th>Grupo</th><th class="num">Vino</th><th class="num">Faltas seguidas</th><th>Última vez</th><th>Estado</th></tr></thead>
-      <tbody>${lista.map((p) => `<tr data-nombre="${esc(norm(p.nombre))}" data-grupo="${p.tipo === 'visita' ? 'visita' : p.estado}">
-        <td><b>${esc(p.nombre)}</b></td>
+      <tbody>${lista.map((p) => `<tr data-nombre="${esc(norm(p.nombre))}" data-grupo="${p.tipo === 'visita' ? 'visita' : p.estado}"${p.tipo === 'visita' ? ` class="asist-fila" data-visita-id="${esc(p.id.slice(2))}" title="Editar visita"` : ''}>
+        <td><b>${esc(p.nombre)}</b>${p.tipo === 'visita' ? ` ${icon('edit', 13)}${p.activo ? '' : ' <small class="muted">(inactiva)</small>'}` : ''}</td>
         <td><small class="muted">${esc(etiquetaTipo(p))}</small></td>
         <td class="num">${p.recientes ? `${p.vinoRec}/${p.recientes}` : '—'}</td>
         <td class="num">${p.recientes ? (p.racha >= vista.umbral && p.tipo !== 'visita' ? `<span class="chip-warn">${p.racha}</span>` : p.racha) : '—'}</td>
         <td class="nowrap">${p.ultima ? fecha(p.ultima) : '<span class="muted">—</span>'}</td>
-        <td>${p.tipo === 'visita' ? `<span class="badge st-open">Visita · ${p.total} vez${p.total === 1 ? '' : 'es'}</span>` : p.estado === 'nuevo' ? '<span class="badge st-open">Pocos datos</span>' : p.estado === 'regular' ? '<span class="badge st-ok">Regular</span>' : '<span class="badge st-obs">Irregular</span>'}</td></tr>`).join('')}</tbody>
+        <td>${p.tipo === 'visita' ? `<span class="badge st-open">Visita · ${p.total ? `${p.total} ${p.total === 1 ? 'vez' : 'veces'}` : 'aún no viene'}</span>` : p.estado === 'nuevo' ? '<span class="badge st-open">Pocos datos</span>' : p.estado === 'regular' ? '<span class="badge st-ok">Regular</span>' : '<span class="badge st-obs">Irregular</span>'}</td></tr>`).join('')}</tbody>
     </table></div>` : emptyState('Carga a los hermanos en Miembros para llevar la asistencia.', 'users')}
   </article>`;
 
@@ -129,6 +138,10 @@ export function render(root, ctx) {
   root.querySelectorAll('[data-sesion]').forEach((tr) => tr.addEventListener('click', (e) => {
     if (e.target.closest('[data-borrar]')) return;
     tomarAsistencia(ctx, data.asistencias.find((s) => s.id === tr.dataset.sesion));
+  }));
+  root.querySelectorAll('[data-visita-id]').forEach((tr) => tr.addEventListener('click', () => {
+    const p = data.personasAsistencia.find((x) => x.id === 'v:' + tr.dataset.visitaId);
+    if (p) editarVisita(ctx, { id: tr.dataset.visitaId, nombre: p.nombre, celular: p.celular, notas: p.notas, activo: p.activo, total: personas.find((x) => x.id === p.id)?.total || 0 });
   }));
   root.querySelectorAll('[data-borrar]').forEach((b) => b.addEventListener('click', async () => {
     const s = data.asistencias.find((x) => x.id === b.dataset.borrar);
@@ -153,20 +166,25 @@ export function render(root, ctx) {
 function tomarAsistencia(ctx, sesion = null) {
   const { data } = ctx;
   const actividades = actividadesDe(data);
-  const marcados = new Set(sesion ? String(sesion.presentes || '').split(',').filter(Boolean) : []);
+  const canon = canonDe(data);
+  const buscar = (f, act) => data.asistencias.find((s) => s.fecha === f && norm(s.actividad) === norm(act));
+  // al abrir: si ya existe la reunión de la fecha propuesta, se corrige esa
+  if (!sesion) sesion = buscar(ultimoDomingo(data.hoy), vista.actividad) || null;
+  const marcados = sesion ? presentesDe(sesion, canon) : new Set();
   // personas disponibles: activos + visitas activas + quien ya estaba marcado en esta reunión
   let personas = data.personasAsistencia.filter((p) => p.activo || marcados.has(p.id))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const actInicial = sesion?.actividad || vista.actividad;
   const fila = (p) => `<li data-nombre="${esc(norm(p.nombre))}" data-tipo="${p.tipo}"><label class="check"><input type="checkbox" name="p" value="${p.id}" ${marcados.has(p.id) ? 'checked' : ''}> ${esc(p.nombre)} <small class="muted">· ${esc(etiquetaTipo(p))}</small></label></li>`;
   return modal({
-    title: sesion ? 'Corregir asistencia' : 'Tomar asistencia',
+    title: 'Asistencia',
     wide: true,
     body: `
       <div class="form-row">
         <label class="field"><span>Fecha</span><input type="date" name="fecha" value="${esc(sesion?.fecha || ultimoDomingo(data.hoy))}" max="${data.hoy}" required></label>
         <label class="field"><span>Actividad</span><select name="actividad">${actividades.map((a) => `<option ${norm(a) === norm(actInicial) ? 'selected' : ''}>${esc(a)}</option>`).join('')}<option value="__otra">Otra actividad…</option></select></label>
       </div>
+      <div class="note" data-existente ${sesion ? '' : 'hidden'}>${icon('edit', 16)}<span>Esta reunión ya estaba registrada: estás corrigiéndola.</span></div>
       <label class="field" data-otra hidden><span>Nombre de la actividad</span><input name="otra" maxlength="60" placeholder="Ej.: Reunión de oración, Vigilia, Campamento"></label>
       <div class="pick-tools">
         <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar nombre…" data-buscar></div>
@@ -199,7 +217,22 @@ function tomarAsistencia(ctx, sesion = null) {
       f.querySelector('[data-tipo]').addEventListener('change', filtrar);
       f.querySelector('[data-solo-marcados]').addEventListener('click', (e) => { soloMarcados = !soloMarcados; e.currentTarget.textContent = soloMarcados ? 'Ver todos' : 'Ver marcados'; filtrar(); });
       const otra = f.querySelector('[data-otra]');
-      f.actividad.addEventListener('change', () => { otra.hidden = f.actividad.value !== '__otra'; if (!otra.hidden) f.otra.focus(); });
+      const actividadElegida = () => (f.actividad.value === '__otra' ? f.otra.value.trim() : f.actividad.value);
+      // si cambian la fecha o la actividad a una reunión ya registrada, se carga para corregirla
+      const revisarExistente = () => {
+        const ex = actividadElegida() ? buscar(f.fecha.value, actividadElegida()) : null;
+        if (ex && ex !== sesion) {
+          sesion = ex;
+          const m = presentesDe(ex, canon);
+          f.querySelectorAll('[name=p]').forEach((c) => { c.checked = m.has(c.value); });
+          f.notas.value = ex.notas || '';
+          contar();
+        } else if (!ex && sesion) sesion = null;
+        f.querySelector('[data-existente]').hidden = !sesion;
+      };
+      f.actividad.addEventListener('change', () => { otra.hidden = f.actividad.value !== '__otra'; if (!otra.hidden) f.otra.focus(); revisarExistente(); });
+      f.fecha.addEventListener('change', revisarExistente);
+      f.otra.addEventListener('change', revisarExistente);
       // alta rápida de una visita: queda guardada y marcada como presente
       const agregar = async () => {
         const nombre = f.nuevaVisita.value.trim();
@@ -245,9 +278,17 @@ function editarVisita(ctx, v = null) {
       <p class="muted small">Personas que asisten pero no son miembros ni están en un ministerio. Quedan en la lista para tomar asistencia.</p>
       <label class="field"><span>Nombre</span><input name="nombre" required maxlength="80" value="${esc(v?.nombre || '')}"></label>
       <label class="field"><span>Celular <small class="muted">(opcional)</small></span><input name="celular" inputmode="tel" maxlength="30" value="${esc(v?.celular || '')}" placeholder="+56 9 1234 5678"></label>
-      <label class="field"><span>Notas <small class="muted">(opcional)</small></span><input name="notas" maxlength="300" value="${esc(v?.notas || '')}" placeholder="Ej.: invitado por la familia…"></label>`,
+      <label class="field"><span>Notas <small class="muted">(opcional)</small></span><input name="notas" maxlength="300" value="${esc(v?.notas || '')}" placeholder="Ej.: invitado por la familia…"></label>
+      ${v ? `<label class="check"><input type="checkbox" name="activo" ${v.activo ? 'checked' : ''}> Activa (aparece en la lista para tomar asistencia)</label>
+      ${v.total ? '' : `<p style="margin-top:12px"><button type="button" class="btn btn-ghost btn-sm" data-eliminar>${icon('trash', 15)} Eliminar visita</button> <small class="muted">Aún no tiene asistencias.</small></p>`}` : ''}`,
+    onOpen(f, { close } = {}) {
+      f.querySelector('[data-eliminar]')?.addEventListener('click', async () => {
+        if (!(await confirmar(`¿Eliminar a ${esc(v.nombre)} de las visitas?`, { boton: 'Eliminar', danger: true }))) return;
+        try { await call('deleteVisita', { id: v.id }); toast('Visita eliminada'); close?.(); await ctx.refresh(); } catch (er) { toast(er.message, 'err'); }
+      });
+    },
     async onSubmit(f) {
-      await call('saveVisita', { id: v?.id, nombre: f.nombre.value, celular: f.celular.value, notas: f.notas.value });
+      await call('saveVisita', { id: v?.id, nombre: f.nombre.value, celular: f.celular.value, notas: f.notas.value, activo: v ? f.activo.checked : true });
       toast(v ? 'Visita actualizada' : 'Visita agregada');
       await ctx.refresh();
     }

@@ -61,6 +61,7 @@ export async function descargarPlanillaGeneral(data) {
   const wb = construirPlanilla(ExcelJS, {
     ambito: 'general', titulo: 'Tesorería general', iglesia: data.config.nombreIglesia, anio, generado: generadoAhora(),
     saldoInicial: saldoGeneralHasta(data, `${anio - 1}-12`), presupuestoMensual: presupuestoGeneralMensual(data, `${anio}-12` < data.hoy.slice(0, 7) ? `${anio}-12` : data.hoy.slice(0, 7)),
+    presupuestosMes: Array.from({ length: 12 }, (_, i) => presupuestoGeneralMensual(data, `${anio}-${String(i + 1).padStart(2, '0')}`)),
     grupos: data.grupos, movimientos: movs
   });
   await guardar(wb, `Planilla Tesorería general ${anio}.xlsx`);

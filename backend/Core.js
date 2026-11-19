@@ -311,12 +311,19 @@ var TesoCore = (function () {
       var mins = {};
       all('Ministerios').forEach(function (m) { mins[m.id] = m.nombre; });
       var miembros = {};
+      var integ = all('Integrantes');
+      // un integrante enlazado a su ficha es la misma persona: sus asistencias como "i:" cuentan para el miembro
+      var alias = {};
+      var existe = {};
+      all('Miembros').forEach(function (m) { existe[m.id] = true; });
+      integ.forEach(function (i) { if (i.miembroId && existe[i.miembroId]) (alias[i.miembroId] = alias[i.miembroId] || []).push('i:' + i.id); });
       var out = all('Miembros').map(function (m) {
         miembros[m.id] = true;
-        return { id: 'm:' + m.id, tipo: 'miembro', nombre: m.nombre, activo: m.estado === 'activo', desde: m.fechaIngreso || '', celular: m.celular || '', ministerios: [] };
+        // sin "Miembro desde", cuenta desde que se registró (si vino antes, la página cuenta desde su primera asistencia)
+        return { id: 'm:' + m.id, tipo: 'miembro', nombre: m.nombre, activo: m.estado === 'activo', desde: m.fechaIngreso || String(m.creadoEn || '').slice(0, 10), celular: m.celular || '', ministerios: [], alias: alias[m.id] || [] };
       });
       var porNombre = {};
-      all('Integrantes').forEach(function (i) {
+      integ.forEach(function (i) {
         if (i.miembroId && miembros[i.miembroId]) return; // ya está como miembro
         var k = normalNombre(i.nombre);
         var ya = porNombre[k];
@@ -335,7 +342,7 @@ var TesoCore = (function () {
     }
     function saveAsistencia(user, p) {
       var fecha = String(p.fecha || '').trim();
-      if (!isDate(fecha) || fecha > env.today()) throw TesoError('Elige una fecha válida (no futura)');
+      if (!isDate(fecha) || fecha > env.today() || fecha < '2000-01-01') throw TesoError('Elige una fecha válida (no futura ni anterior a 2000)');
       var actividad = String(p.actividad || '').replace(/\s+/g, ' ').trim().slice(0, 60);
       if (!actividad) throw TesoError('Elige la actividad (culto, escuela dominical u otra)');
       var actual = p.id ? find('Asistencias', p.id) : null;
@@ -343,12 +350,19 @@ var TesoCore = (function () {
       var clave = normalNombre(actividad);
       var otra = all('Asistencias').filter(function (a) { return a.fecha === fecha && normalNombre(a.actividad) === clave && a.id !== (actual && actual.id); })[0];
       if (otra) throw TesoError('Ya hay una asistencia de ' + actividad + ' el ' + fecha.split('-').reverse().join('-') + ': ábrela en la lista para editarla');
-      var validos = {};
-      personasAsistencia().forEach(function (x) { validos[x.id] = true; });
+      // id válido → id de la persona (el de un integrante enlazado se guarda como el del miembro)
+      var canon = {};
+      personasAsistencia().forEach(function (x) { canon[x.id] = x.id; (x.alias || []).forEach(function (a) { canon[a] = x.id; }); });
       var vistos = {};
-      var presentes = (p.presentes || []).map(String).filter(function (id) {
-        if (!validos[id] || vistos[id]) return false;
-        vistos[id] = true; return true;
+      var presentes = [];
+      (p.presentes || []).map(String).forEach(function (id) {
+        var c = canon[id];
+        if (!c || vistos[c]) return;
+        vistos[c] = true; presentes.push(c);
+      });
+      // al corregir una reunión, se conservan los presentes que ya no están en la lista (personas eliminadas)
+      if (actual) String(actual.presentes || '').split(',').forEach(function (id) {
+        if (id && !canon[id] && !vistos[id]) { vistos[id] = true; presentes.push(id); }
       });
       var now = env.now();
       var d = { fecha: fecha, actividad: actividad, notas: String(p.notas || '').trim().slice(0, 300), presentes: presentes.join(','), actualizadoEn: now };
@@ -366,7 +380,18 @@ var TesoCore = (function () {
       if (p.id && !actual) throw TesoError('Esa visita ya no existe');
       var now = env.now();
       var d = { nombre: nombre, celular: String(p.celular || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 300), activo: p.activo === undefined ? true : !!p.activo, actualizadoEn: now };
-      return actual ? update('Visitas', actual.id, d) : insert('Visitas', Object.assign(d, { id: uid(), creadoEn: p.fecha && isDate(p.fecha) ? p.fecha : now }));
+      var creado = p.fecha && isDate(p.fecha) && p.fecha >= '2000-01-01' && p.fecha <= env.today() ? p.fecha : now;
+      return actual ? update('Visitas', actual.id, d) : insert('Visitas', Object.assign(d, { id: uid(), creadoEn: creado }));
+    }
+    // Solo se elimina una visita que nunca vino (si vino, se marca inactiva y se conserva su historial)
+    function deleteVisita(user, p) {
+      var v = find('Visitas', p.id);
+      if (!v) throw TesoError('Esa visita ya no existe');
+      var id = 'v:' + v.id;
+      var vino = all('Asistencias').some(function (a) { return String(a.presentes || '').split(',').indexOf(id) >= 0; });
+      if (vino) throw TesoError(v.nombre + ' tiene asistencias registradas: márcala como inactiva en vez de eliminarla');
+      remove('Visitas', v.id);
+      return { id: v.id };
     }
 
     // ---------------- Helpers de dominio ----------------
@@ -1379,6 +1404,7 @@ var TesoCore = (function () {
       if (p.presupuestoGeneral !== undefined || p.quitarPresupuestoDesde) {
         var hist = config().presupuestosGenerales.slice();
         if (p.quitarPresupuestoDesde) {
+          if (String(p.quitarPresupuestoDesde) <= env.today().slice(0, 7)) throw TesoError('Solo se puede quitar un cambio programado (de un mes futuro). Para corregir el presupuesto vigente, guarda un monto nuevo desde el mes que corresponda.');
           hist = hist.filter(function (h) { return h.desde !== String(p.quitarPresupuestoDesde); });
         } else {
           var v = Math.round(Number(p.presupuestoGeneral) || 0);
@@ -1433,6 +1459,7 @@ var TesoCore = (function () {
       saveAsistencia: { fn: saveAsistencia, role: MIEMBROS, write: true },
       deleteAsistencia: { fn: deleteAsistencia, role: MIEMBROS, write: true },
       saveVisita: { fn: saveVisita, role: MIEMBROS, write: true },
+      deleteVisita: { fn: deleteVisita, role: MIEMBROS, write: true },
       saveActividad: { fn: saveActividad, role: CON_MINISTERIO, write: true },
       deleteActividad: { fn: deleteActividad, role: CON_MINISTERIO, write: true },
       setConfirmados: { fn: setConfirmados, role: CON_MINISTERIO, write: true },
