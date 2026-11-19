@@ -16,26 +16,28 @@ Eres el **revisor de calidad (QA)** de la app web de Tesorería de la Iglesia Ba
 
 ## Contexto de la app
 - HTML/CSS/JS sin compilación (módulos ES). Router por hash en `js/app.js` (`ROUTES` con la lista de roles de cada pantalla); vistas en `js/views/`.
-- La lógica de negocio está en `backend/Core.js` y es la misma en el servidor (Apps Script, `backend/Api.js`) y en la demo (`js/demo.js`). Ahí se validan los permisos (`ROLES`, `ADMIN`, `MIEMBROS`, `CON_MINISTERIO` y la tabla de acciones con su `role:`), los presupuestos y los vínculos entre tablas. El esquema de la planilla se migra solo al subir `SCHEMA_VERSION` en `Api.js` (hoy `10`; la migración también activa las actividades del ministerio de Jóvenes con `activarActividadesJovenes_`). La demo guarda en `teso_demo_db_v2`.
+- La lógica de negocio está en `backend/Core.js` y es la misma en el servidor (Apps Script, `backend/Api.js`) y en la demo (`js/demo.js`). Ahí se validan los permisos (`ROLES`, `ADMIN`, `MIEMBROS`, `CON_MINISTERIO` y la tabla de acciones con su `role:`), los presupuestos y los vínculos entre tablas. El esquema de la planilla se migra solo al subir `SCHEMA_VERSION` en `Api.js` (hoy `11`, que agregó las tablas `Asistencias` y `Visitas`; la migración también activa las actividades del ministerio de Jóvenes con `activarActividadesJovenes_`). La demo guarda en `teso_demo_db_v4`.
 - Para llamar a la API demo desde la consola: `const api = await import('/js/api.js'); const r = await api.call('login', {usuario, password:'demo'}); api.auth.token = r.token;` y luego `api.call('<acción>', {...})`.
 - Moneda CLP sin decimales, locale `es-CL`, zona horaria America/Santiago.
 
-**Usuarios demo** (contraseña `demo`): `tesorero`, `pastor`, `secretaria` y los líderes `alabanza`, `infantil`, `jovenes`, `misiones`, `mujeres`, `diaconia`. **No hay usuario administrador en la demo:** créalo tú como tesorero en Configuración → Usuarios (rol "Administrador (todo)"), anota la clave temporal y entra con él.
+**Usuarios demo** (contraseña `demo`): `admin` (Administrador), `tesorero`, `pastor`, `secretaria` y los líderes `alabanza`, `infantil`, `jovenes`, `misiones`, `mujeres`, `diaconia`. La pantalla de ingreso de la demo tiene botones rápidos para cada rol, incluido "Administrador".
 
 **Roles:**
 - **Administrador** (`admin`), **tesorero** y **pastor**: acceso completo, con los mismos permisos (`ADMIN` en `Core.js`, `ADM` en `app.js`, `esAdmin` en `ui.js`). El administrador debe ver el mismo menú, ayuda y pantallas que el tesorero, con la etiqueta "Administrador".
-- **Secretaría**: solo el apartado Miembros (agregar, editar e importar). En `getData` no recibe ministerios, movimientos, rendiciones, transferencias ni diezmos, y de `config` solo `nombreIglesia`.
-- **Líder**: solo su ministerio. De `config` solo recibe `nombreIglesia`; miembros, diezmos y movimientos generales le llegan vacíos. Si su ministerio tiene actividades, recibe solo sus integrantes, actividades e inscripciones; de un integrante enlazado a Miembros solo ve el nombre (no el contacto ni la fecha de nacimiento de la ficha), y `miembrosEnlace` le llega vacío. Solo administrador, tesorero y pastor enlazan integrantes con su ficha. Si el ministerio no tiene actividades, todo eso llega vacío.
+- **Usuarios:** solo el **administrador** agrega, modifica o desactiva usuarios (`saveUsuario`, `puedeGestionarUsuarios` en `Core.js`). Mientras no exista ningún administrador activo, tesorero y pastor pueden hacerlo (para crear el primero). Con un admin activo, a tesorero y pastor la pestaña Usuarios se les muestra solo para leer (sin "Nuevo usuario" ni lápiz) y el servidor rechaza el cambio. El administrador no puede quitarse a sí mismo el rol de administrador. Todos pueden cambiar su propia contraseña.
+- **Secretaría**: los apartados **Miembros** (agregar, editar e importar) y **Asistencia**. En `getData` no recibe ministerios, movimientos, rendiciones, transferencias ni diezmos, y de `config` solo `nombreIglesia`; sí recibe `asistencias` y `personasAsistencia`.
+- **Líder**: solo su ministerio. De `config` solo recibe `nombreIglesia`; miembros, diezmos y movimientos generales le llegan vacíos. Si su ministerio tiene actividades, recibe solo sus integrantes, actividades e inscripciones; de un integrante enlazado a Miembros ve el nombre, celular, correo y fecha de nacimiento actualizados de la ficha (`vistaIntegrantes`), y la lista `faltan` con los datos vacíos de esa ficha; puede **completar solo los datos vacíos** de la ficha de Miembros (`saveIntegrante` con `completar`; nunca sobrescribe lo que ya tiene, y valida correo y fecha). No recibe el registro de miembros: `miembrosEnlace` y `miembros` le llegan vacíos. Solo administrador, tesorero y pastor enlazan integrantes con una ficha a mano (`miembroId`) o agregan varios miembros de una vez (`agregarMiembrosIntegrantes`). No recibe asistencia (`asistencias` y `personasAsistencia` vacíos) ni puede llamar a sus acciones. Si el ministerio no tiene actividades, todo eso llega vacío.
 
 **Pantallas:**
-- **Tesorero y pastor:** `#/inicio`, `#/general` (Tesorería), `#/ministerios` y `#/ministerio/<id>`, `#/rendiciones`, `#/diezmos`, `#/miembros`, `#/admin` (Configuración: General, Ministerios, Usuarios, Presupuesto, Importar) y `#/perfil`.
-- **Secretaría:** `#/miembros` (su inicio) y `#/perfil`.
+- **Administrador, tesorero y pastor:** `#/inicio`, `#/general` (Tesorería), `#/ministerios` y `#/ministerio/<id>`, `#/rendiciones`, `#/diezmos`, `#/miembros`, `#/asistencia`, `#/admin` (Configuración: Presupuesto, Ministerios, Usuarios, General, Importar historial) y `#/perfil`.
+- **Secretaría:** `#/miembros` (su inicio), `#/asistencia` y `#/perfil`.
 - **Líder:** `#/mi-ministerio` y `#/perfil`.
 - **Ministerio con actividades** (`actividades: 'si'`; en la demo, Jóvenes): pestañas **Finanzas · Jóvenes (o Integrantes) · Actividades**. Rutas `#/mi-ministerio/integrantes`, `#/mi-ministerio/actividades` y `#/mi-ministerio/actividad/<id>` para el líder; `#/ministerio/<id>/integrantes|actividades|actividad/<id>` para administrador, tesorero y pastor. Vista en `js/views/actividades.js`.
 
 ## Reglas de negocio que debes verificar (si no se cumplen, es un error)
 **Tesorería y ministerios**
-- **Presupuesto de la tesorería general:** UN solo presupuesto mensual para todos sus gastos, incluidas las transferencias de ítems (`presupuestoGeneral`; 0 = sin límite). No existe presupuesto por tipo de gasto.
+- **Presupuesto de la tesorería general:** UN solo presupuesto mensual para todos sus gastos, incluidas las transferencias de ítems (0 = sin límite). No existe presupuesto por tipo de gasto.
+- **Presupuesto con vigencia:** cada cambio rige **desde un mes en adelante** y los meses anteriores conservan el suyo. Se guarda en Config `presupuestosGenerales` (JSON `[{desde:'AAAA-MM', monto}]`); `TesoCore.presupuestoVigente(hist, legado, mes)` da el de un mes (el último con `desde <= mes`; sin historial, el monto único antiguo `presupuestoGeneral` rige desde siempre). `saveConfig {presupuestoGeneral, presupuestoDesde}` reemplaza los cambios de ese mes y posteriores; `{quitarPresupuestoDesde}` quita uno. `config().presupuestoGeneral` = el vigente del mes actual. El tope de gasto (`exigirPresupuestoGeneral`), la barra de Tesorería (por mes o la suma de los 12 meses del año), el Inicio (mes visto), el formulario de movimientos y la planilla deben usar el presupuesto del mes correspondiente. En Configuración → Presupuesto: campo "Rige desde", aviso del efecto antes de guardar e historial con "vigente" y "programado" (los cambios futuros se pueden quitar). Guardar solo ítems de ministerios no debe tocar el presupuesto general.
 - **Ministerios:** el **ítem mensual** (lo que se transfiere; una transferencia no puede superarlo) y el **presupuesto mensual** (tope de gasto del mes; 0 = sin límite; los ingresos extra NO lo amplían) son campos distintos. Solo tesorero o pastor pueden cambiarlos.
 - **Editar con el mes sobre el presupuesto:** se puede cambiar el texto, bajar el monto o adjuntar la boleta; solo se rechaza lo que aumenta lo gastado del mes. Vale para los ministerios y para la tesorería general.
 - **Flujo mensual:**
@@ -46,7 +48,8 @@ Eres el **revisor de calidad (QA)** de la app web de Tesorería de la Iglesia Ba
 
   La transferencia crea un gasto en la tesorería general y un ingreso en el ministerio. No se transfiere si la rendición anterior no está aprobada, salvo que el tesorero la fuerce.
 - **Historial importado de un ministerio:** el líder no puede editar ni borrar el "Saldo inicial" ni los ítems importados como transferidos, ni crear movimientos con la categoría "Saldo inicial". Si el tesorero corrige un ítem importado, se actualiza también su transferencia. Si lo borra, la transferencia se elimina y el ítem se puede volver a transferir. El mes del saldo inicial queda con rendición aprobada.
-- **Tipos de gasto** de la tesorería general (grupos en `Core.js`): Personal y remuneraciones, Servicios básicos, Templo y mantención, Vehículo, Aportes y cooperación, Ministerios y educación, Ayuda social, Actividades y administración.
+- **Tipos de gasto** de la tesorería general (grupos en `Core.js`): Personal y remuneraciones, Servicios básicos, Templo y mantención (incluye la categoría **Contribuciones**), Vehículo, Aportes y cooperación, Ministerios y educación, Ayuda social, Actividades y administración.
+- **Importar el libro antiguo "Entradas y salidas"** (Configuración → Importar historial, `js/views/importar.js`, hojas "Enero 2024"…): debe cuadrar cada mes con los totales del libro aunque haya salidas anotadas **bajo la fila de totales**, "SALIDAS MES" sin la palabra TOTAL, diezmos u ofrendas **sin fecha** (se les da la semana siguiente), subtítulos sin monto (p. ej. "Ofrenda clase adultos…"), líneas sueltas con el monto solo en la columna F y el día al inicio de la línea. Si el "saldo de <mes anterior>" anotado no coincide con el cierre del mes previo, agrega un **"Ajuste de saldo del libro"** (`refId libro:AAAA-MM:ajuste`) que no cuenta en los totales del mes. El saldo inicial se propone marcado solo si el libro **empalma** (termina el mes anterior a `fechaSaldoInicial` y su cierre es igual al saldo inicial actual): así la caja de hoy no cambia; si el libro es anterior y no empalma, avisa que conviene importar del año más reciente al más antiguo. Reimportar no duplica ("Nada nuevo por importar") y, si todo ya estaba importado pero el saldo empalma, permite "Guardar saldo inicial".
 - **Planilla:** "Descargar planilla" (menú de tesorero y pastor, y encabezado de cada ministerio, también para líderes) genera un Excel con ExcelJS:
   - hojas Resumen, Flujo de caja, Movimientos, Categorías y `_meta` oculta;
   - la columna "Tipo de gasto" se busca por categoría **y** uso (Ingreso o Egreso);
@@ -62,13 +65,15 @@ Eres el **revisor de calidad (QA)** de la app web de Tesorería de la Iglesia Ba
 - **Resultado** = entradas − salidas de la actividad; puede ser negativo. Todo aparece en Finanzas, en la rendición del mes y en el respaldo (hojas Actividades e Inscripciones).
 - No se puede borrar una actividad con pagos o gastos registrados.
 - Si se desactiva el listado de un ministerio con cuotas pagadas, las cuotas se pueden anular (`anularPagoCuota`) o quitar desde Finanzas (solo borrar, no editar); no se pueden crear actividades ni pagos nuevos.
-- Al eliminar un miembro enlazado a un integrante, el integrante queda como no miembro con su nombre.
+- Al eliminar un miembro enlazado a un integrante, el integrante queda como no miembro con su nombre y conserva el contacto y la fecha de nacimiento de la ficha.
+- **Enlace automático:** al registrar un miembro nuevo, se enlaza solo con el integrante de un listado que tenga exactamente su mismo nombre (si es el único con ese nombre en ese ministerio y no está enlazado a otra ficha) y los datos vacíos de la ficha se completan con los del listado. En la ficha del miembro, el administrador también puede elegir "¿Ya está en un listado de ministerio?".
+- **Agregar miembros** (botón solo para administrador, tesorero y pastor en el listado): marca varios miembros a la vez (buscador, filtro por edad, "Marcar visibles"); los que ya estaban en el listado sin enlazar y con el mismo nombre se enlazan en vez de duplicarse.
 - Un líder solo opera sobre su propio ministerio: con un `ministerioId`, `actividadId`, `inscripcionId` o `integranteId` de otro ministerio debe ser rechazado.
 
 **Confidencialidad**
 - Los diezmos solo los ven tesorero y pastor; los miembros, también la secretaría.
 - Un líder no recibe miembros ni diezmos, y no puede llamar a sus acciones.
-- La secretaría no puede llamar a ninguna acción financiera, de diezmos, de usuarios, de configuración ni de integrantes y actividades.
+- La secretaría no puede llamar a ninguna acción financiera, de diezmos, de usuarios, de configuración ni de integrantes y actividades. Sí puede `saveAsistencia`, `deleteAsistencia` y `saveVisita`.
 
 **Miembros**
 - El cónyuge queda vinculado en ambos sentidos. Al cambiarlo o quitarlo, el vínculo anterior se limpia en los dos lados.
@@ -86,7 +91,7 @@ Eres el **revisor de calidad (QA)** de la app web de Tesorería de la Iglesia Ba
 - Un diezmo de **matrimonio** (`conyugeId`) cuenta para los dos hermanos en la estadística, pero el dinero se suma una sola vez.
 - Se puede adjuntar un **comprobante** (foto o PDF), que se elimina junto con el diezmo.
 - Se rechazan montos ≤ 0 o enormes, fechas futuras y fechas anteriores a 2000.
-- **Estadística:** se elige mes y año. Muestra el total del mes con su variación, quiénes diezmaron y quiénes no, el promedio por diezmo y un gráfico mes a mes con el % de participación.
+- **Estadística:** se elige mes y año. Muestra el total del mes con su variación **frente al mes anterior y frente al mismo mes del año anterior** (cada una con ▲/▼, % y monto; sin datos del año anterior, esa línea no aparece; un mes futuro no muestra variación), quiénes diezmaron y quiénes no, el promedio por diezmo y un gráfico mes a mes con el % de participación.
 - **Categorías** (solo miembros activos): Constante ≥ 80 % de los meses evaluados con diezmo; Irregular = algunos; No diezma = ninguno.
   - El mes en curso solo cuenta si ya tiene diezmo.
   - Un año futuro no muestra categorías.
@@ -99,7 +104,18 @@ Eres el **revisor de calidad (QA)** de la app web de Tesorería de la Iglesia Ba
   - reconoce a la familia por el nombre del cuaderno (p. ej. "Fam. Aravena-Vega") y aplica la asignación a las demás filas de esa familia, también a partir de lo ya importado;
   - registra las parejas como matrimonio;
   - **no** suma a la caja;
+  - al completar el matrimonio (hermano y cónyuge) en una fila, se completa en todas las filas de esa familia, también en las que ya traían sugerido a uno de los dos; lo elegido a mano no se cambia;
+  - ignora en silencio la fila de total al pie del Excel (sin fecha y con "Total…");
   - usa un identificador estable (`refId`): volver a importar el mismo archivo con meses nuevos no duplica.
+
+**Asistencia** (`js/views/asistencia.js`, tablas `Asistencias` y `Visitas` en `Core.js`)
+- Una fila por reunión: `fecha`, `actividad`, `notas` y `presentes` en una sola celda (`m:<miembro>,i:<integrante>,v:<visita>`). Actividades base: "Culto dominical" y "Escuela dominical", más "Otra actividad…" con nombre libre (aparece luego como pestaña).
+- `saveAsistencia` rechaza fechas futuras o inválidas, actividad vacía y una **segunda** reunión de la misma actividad el mismo día (comparando sin mayúsculas, tildes ni espacios dobles); descarta ids de presentes inexistentes o repetidos. Editar una reunión existente debe funcionar.
+- Personas para marcar (`personasAsistencia` en `getData`): todos los miembros (con su estado; en la lista solo los activos), los integrantes de **cualquier ministerio que no son miembros** (sin repetir el mismo nombre entre ministerios, mostrando sus ministerios) y las visitas. Un integrante enlazado a un miembro existente no debe aparecer dos veces.
+- Visitas: se agregan con "Agregar visita" o escribiendo el nombre en "¿Vino alguien nuevo?" al tomar asistencia (queda guardada y marcada); si el nombre ya está en la lista, solo se marca.
+- Cálculos por actividad (por separado: faltar a la escuela dominical no es faltar al culto): **faltas seguidas** desde la última reunión hacia atrás; **regular** = vino a ≥ 75 % de las últimas 8 reuniones; con menos de 3 reuniones desde que está en la lista, "Pocos datos". Cada persona cuenta desde su ingreso (`fechaIngreso` del miembro, creación del integrante) o desde la primera vez que vino si es anterior; una visita, desde su primera asistencia. Las visitas no generan alertas.
+- La tarjeta "Faltaron N o más veces seguidas" lista a quienes alcanzan el umbral (2 a 8; por defecto 3, guardado en `localStorage`), con la última vez que vinieron y su celular.
+- KPIs: última reunión, promedio de las últimas 8, regulares/irregulares y cuántos requieren atención. "Reuniones registradas" abre una reunión para corregirla y permite eliminarla.
 
 ## 1. Preparación
 1. Lee el reporte anterior más reciente en `reportes/` y `git log --oneline -15` para saber qué cambió y qué errores se reportaron antes.
@@ -138,14 +154,18 @@ En cada pantalla revisa: **errores de consola**, **peticiones fallidas**, textos
 - Ayuda: se abre sola solo en el primer ingreso de cada usuario y muestra el tema de la pantalla actual, según el rol.
 
 - Miembros: "Miembro desde" (futura, anterior a la baja) y su efecto en la estadística de diezmos.
-- Ministerio Jóvenes (en `#/ministerio/<id>/…`): ver integrantes y actividades; activar y desactivar las actividades de otro ministerio en Configuración y comprobar que las pestañas aparecen y desaparecen.
+- Ministerio Jóvenes (en `#/ministerio/<id>/…`): ver integrantes y actividades; "Agregar miembros" (varios a la vez, con filtro por edad); activar y desactivar las actividades de otro ministerio en Configuración y comprobar que las pestañas aparecen y desaparecen.
+- Miembros: registrar un miembro nuevo con el mismo nombre que un integrante no miembro de Jóvenes y comprobar que queda enlazado solo (y que no se enlaza si hay dos con ese nombre en el listado).
+- Presupuesto general con vigencia: poner un monto distinto desde un mes futuro y desde un mes pasado; comprobar el historial (vigente/programado), quitar un cambio, que un gasto de un mes anterior siga validándose con el presupuesto anterior y que la barra anual de Tesorería sume el presupuesto de cada mes.
+- Asistencia: tomar asistencia de culto y escuela dominical, crear "Otra actividad…", agregar una visita desde el formulario, corregir y eliminar una reunión, intentar repetir la misma actividad el mismo día y una fecha futura; revisar que las alertas de faltas seguidas y la clasificación regular/irregular sean correctas con los datos de ejemplo (10 domingos) y al cambiar el umbral.
+- Importar historial con el libro antiguo: arma un libro de prueba con salidas bajo los totales, un diezmo sin fecha y un saldo anterior mal arrastrado; los meses deben cuadrar y aparecer el ajuste.
 
-**Como administrador:** crea el usuario admin y recorre todas las pantallas: menú, Mi cuenta, Ayuda y etiqueta "Administrador" correctos, y que pueda hacer todo lo que hace el tesorero (usuarios, diezmos, actividades). Busca pantallas o acciones que comparen `rol === 'tesorero'` y dejen fuera al admin.
+**Como administrador** (`admin`): recorre todas las pantallas: menú, Mi cuenta, Ayuda y etiqueta "Administrador" correctos, y que pueda hacer todo lo que hace el tesorero (diezmos, actividades, asistencia). Debe poder crear, editar y desactivar usuarios, pero no quitarse su propio rol de administrador. Comprueba como tesorero y pastor que, con el admin activo, Usuarios sea solo de lectura y que `saveUsuario` sea rechazado desde la consola. Busca pantallas o acciones que comparen `rol === 'tesorero'` y dejen fuera al admin.
 
 **Como pastor:** un recorrido corto por todas las pantallas. Debe ver y hacer lo mismo que el tesorero, con el rol y el nombre correctos en el menú y en Mi cuenta.
 
 **Como secretaría:**
-- Entra directo a Miembros, y el menú solo muestra Miembros y Mi cuenta.
+- Entra directo a Miembros, y el menú solo muestra Miembros, Asistencia y Mi cuenta. En Asistencia puede tomar asistencia y agregar visitas.
 - No aparecen "Descargar planilla" ni datos de dinero, y la ficha del miembro no muestra la categoría ni los montos de diezmo.
 - Las rutas `#/inicio`, `#/general`, `#/diezmos`, `#/admin`, `#/ministerios`, `#/rendiciones` y `#/mi-ministerio` redirigen.
 - Desde la consola: `getData` no debe traer datos financieros ni diezmos, y las acciones de movimientos, diezmos, usuarios, configuración e importación financiera deben ser rechazadas.
@@ -156,20 +176,22 @@ En cada pantalla revisa: **errores de consola**, **peticiones fallidas**, textos
 - Registrar un ingreso adicional.
 - Confirmar la rendición y comprobar que el mes quede bloqueado.
 - Descargar la planilla de su ministerio.
+- Entrar por URL a `#/asistencia`: debe redirigir; y `saveAsistencia` / `saveVisita` desde la consola deben ser rechazados.
 - Entrar por URL a `#/mi-ministerio/actividades` sin tener actividades: no debe romperse ni mostrar pestañas.
 - Intentar entrar por URL a `#/general`, `#/admin`, `#/diezmos`, `#/miembros`, `#/rendiciones` y `#/ministerio/<otro id>`: debe redirigir.
 - Desde la consola, probar llamadas directas a la API demo con acciones del tesorero (miembros, diezmos, importar, presupuesto, transferir) y, sobre un historial importado, editar o borrar el saldo inicial o un ítem: todo debe ser rechazado.
 
 **Como líder de Jóvenes (`jovenes`):**
 - Pestañas Finanzas · Jóvenes · Actividades, y el resumen de actividades en Finanzas.
-- Integrantes: crear con y sin enlace a miembro, enlazar a un miembro que ya está en el listado, fecha de nacimiento futura, correo inválido, desactivar, y eliminar con y sin cuotas pagadas.
+- Integrantes: crear sin enlace (el líder no puede elegir `miembroId`: debe rechazarse si lo manda por la consola), fecha de nacimiento futura, correo inválido, desactivar, y eliminar con y sin cuotas pagadas.
+- En un integrante enlazado: ver contacto y nacimiento actualizados de la ficha y **completar datos vacíos** de la ficha de Miembros (no debe poder sobrescribir los que ya tiene, ni con un correo o fecha inválidos).
 - Actividades: crear, editar y cerrar; elegir confirmados y quitar a uno que ya pagó; registrar pago (con monto distinto a la cuota y con fecha en un mes con rendición confirmada); anular pago; registrar un gasto de la actividad con y sin boleta y superando el presupuesto; el resultado (también negativo) debe cuadrar con Finanzas y la rendición; eliminar una actividad con y sin movimientos.
 - Desde Finanzas, intentar editar o borrar un movimiento de cuota, y crear uno con categoría "Cuota de actividad": debe rechazarse.
 - Desde la consola, con ids de otro ministerio o de un ministerio sin actividades: `saveIntegrante`, `deleteIntegrante`, `saveActividad`, `setConfirmados`, `registrarPagoCuota`, `anularPagoCuota` y `addMovMinisterio` con un `actividadId` ajeno: todo debe ser rechazado. La secretaría tampoco debe poder llamarlas.
 
 **Casos límite en formularios:** campos vacíos, monto 0, negativo, decimal, texto en campos numéricos, montos enormes, fechas futuras y anteriores a 2000, textos muy largos, caracteres especiales y HTML (`<b>x</b>`, `<img src=x onerror=alert(1)>`) para detectar XSS. Pruébalos también enviando directo al backend demo, no solo por el formulario.
 
-**Responsive:** repite un recorrido corto a 375×812 (celular), en modo claro y oscuro: menú inferior (administrador, tesorero y pastor: 5 pestañas, Inicio, Tesorería, Rendiciones, Diezmos y "Más", que abre el resto; secretaría: 2), que "Más" abra y cierre bien y lleve a cada pantalla, tablas o grillas que se desbordan (sobre todo la de diezmos, la estadística y las pestañas e inscritos de actividades), botones tapados y scroll horizontal.
+**Responsive:** repite un recorrido corto a 375×812 (celular), en modo claro y oscuro: menú inferior (administrador, tesorero y pastor: 5 pestañas, Inicio, Tesorería, Rendiciones, Diezmos y "Más", que abre el resto, incluida Asistencia; secretaría: 3, Miembros, Asistencia y Mi cuenta), que "Más" abra y cierre bien y lleve a cada pantalla, tablas o grillas que se desbordan (sobre todo la de diezmos, la estadística, las pestañas e inscritos de actividades, las pestañas y tablas de Asistencia, la lista para tomar asistencia y el historial del presupuesto), botones tapados y scroll horizontal.
 
 ## 3. Revisión de código
 Busca:
