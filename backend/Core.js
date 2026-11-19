@@ -39,7 +39,7 @@ var TesoCore = (function () {
     gasto: [
       ['Personal y remuneraciones', ['Sueldo pastoral', 'Imposiciones y previsión', 'Asignación familiar', 'Fondo de indemnización', 'Guardatemplo', 'Aguinaldos y bonos']],
       ['Servicios básicos', ['Luz', 'Agua', 'Gas', 'Internet y teléfono']],
-      ['Templo y mantención', ['Arriendo', 'Aseo y limpieza', 'Mantención templo', 'Equipamiento y mobiliario']],
+      ['Templo y mantención', ['Arriendo', 'Aseo y limpieza', 'Mantención templo', 'Equipamiento y mobiliario', 'Contribuciones']],
       ['Vehículo', ['Mantención vehículo', 'Combustible', 'Seguro y permisos vehículo']],
       ['Aportes y cooperación', ['Aportes a la denominación', 'Aportes a instituciones']],
       ['Ministerios y educación', ['Asignación ministerios', 'Escuela dominical', 'Misiones']],
