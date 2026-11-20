@@ -11,6 +11,7 @@ export function cargarExcelJS() {
   return new Promise((res, rej) => {
     const s = document.createElement('script');
     s.src = EXCELJS_URL;
+    s.integrity = 'sha384-Pqp51FUN2/qzfxZxBCtF0stpc9ONI6MYZpVqmo8m20SoaQCzf+arZvACkLkirlPz'; s.crossOrigin = 'anonymous';
     s.onload = () => res(window.ExcelJS);
     s.onerror = () => rej(new Error('No se pudo cargar el generador de planillas. Revisa tu conexión.'));
     document.head.appendChild(s);

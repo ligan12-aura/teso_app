@@ -18,10 +18,15 @@ export function render(root, ctx) {
       <header class="card-head"><div><h3>Cambiar contraseña</h3></div></header>
       <form class="form-stack" data-pass>
         <label class="field"><span>Contraseña actual</span><input type="password" name="actual" required autocomplete="current-password"></label>
-        <label class="field"><span>Nueva contraseña</span><input type="password" name="nueva" minlength="6" required autocomplete="new-password"></label>
+        <label class="field"><span>Nueva contraseña</span><input type="password" name="nueva" minlength="8" required autocomplete="new-password"></label>
         <label class="field"><span>Repetir nueva contraseña</span><input type="password" name="repite" required autocomplete="new-password"></label>
         <button class="btn btn-primary" type="submit">Actualizar contraseña</button>
       </form>
+    </article>
+    <article class="card">
+      <header class="card-head"><div><h3>Sesiones abiertas</h3></div></header>
+      <p class="muted">Si ingresaste en un teléfono o computador que no es tuyo, o perdiste un dispositivo, cierra la sesión en todos. Tendrás que volver a ingresar aquí también.</p>
+      <button class="btn btn-light" type="button" data-cerrar-todo>${icon('lock', 16)} Cerrar sesión en todos los dispositivos</button>
     </article>
   </div>`;
   root.querySelector('[data-pass]').addEventListener('submit', async (e) => {
@@ -33,6 +38,14 @@ export function render(root, ctx) {
       auth.token = r.token;
       e.target.reset();
       toast('Contraseña actualizada');
+    } catch (er) { toast(er.message, 'err'); }
+  });
+  root.querySelector('[data-cerrar-todo]').addEventListener('click', async () => {
+    if (!confirm('¿Cerrar la sesión en todos los dispositivos, incluido este?')) return;
+    try {
+      await call('cerrarSesiones');
+      auth.token = null;
+      location.reload();
     } catch (er) { toast(er.message, 'err'); }
   });
 }

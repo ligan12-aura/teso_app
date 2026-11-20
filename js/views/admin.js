@@ -243,7 +243,7 @@ function editUsuario(ctx, u = null) {
       <p class="muted small" data-rol-ayuda style="margin-top:-6px"></p>
       <label class="field" data-min><span>Ministerio</span><select name="ministerioId"><option value="">— Selecciona —</option>${mins.map((m) => `<option value="${m.id}" ${u?.ministerioId === m.id ? 'selected' : ''}>${esc(m.icono)} ${esc(m.nombre)}</option>`).join('')}</select></label>
       <label class="field"><span>Correo (opcional)</span><input type="email" name="email" value="${esc(u?.email || '')}"></label>
-      <label class="field"><span>${u ? 'Nueva contraseña temporal (dejar vacío para no cambiar)' : 'Contraseña temporal'}</span><input name="password" type="text" autocomplete="off" ${u ? '' : 'required'} minlength="6" placeholder="mín. 6 caracteres"></label>
+      <label class="field"><span>${u ? 'Nueva contraseña temporal (dejar vacío para no cambiar)' : 'Contraseña temporal'}</span><input name="password" type="text" autocomplete="off" ${u ? '' : 'required'} minlength="8" placeholder="mín. 8 caracteres"></label>
       <p class="muted small">Al primer ingreso se le pedirá crear su propia contraseña.</p>
       ${u ? `<label class="check"><input type="checkbox" name="activo" ${u.activo ? 'checked' : ''}> Usuario activo</label>` : ''}
       ${u && u.id !== ctx.user?.id ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar usuario</button>` : ''}`,

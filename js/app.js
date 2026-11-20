@@ -167,7 +167,7 @@ async function forzarCambioPass() {
     title: 'Crea tu contraseña personal',
     body: `<p class="muted">Por seguridad, cambia la contraseña inicial que te entregaron.</p>
       <label class="field"><span>Contraseña actual</span><input type="password" name="actual" required></label>
-      <label class="field"><span>Nueva contraseña (mín. 6 caracteres)</span><input type="password" name="nueva" minlength="6" required></label>
+      <label class="field"><span>Nueva contraseña (mín. 8 caracteres)</span><input type="password" name="nueva" minlength="8" required></label>
       <label class="field"><span>Repite la nueva contraseña</span><input type="password" name="repite" required></label>`,
     submitLabel: 'Guardar y continuar',
     onSubmit: async (f) => {

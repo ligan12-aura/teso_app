@@ -9,6 +9,7 @@ function loadXLSX() {
   return new Promise((res, rej) => {
     const s = document.createElement('script');
     s.src = XLSX_URL;
+    s.integrity = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw'; s.crossOrigin = 'anonymous';
     s.onload = () => res(window.XLSX);
     s.onerror = () => rej(new Error('No se pudo cargar el generador de Excel'));
     document.head.appendChild(s);
