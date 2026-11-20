@@ -83,6 +83,17 @@ export async function exportarExcel(data) {
   const visitas = (data.personasAsistencia || []).filter((p) => p.tipo === 'visita');
   if (visitas.length) add('Visitas', visitas.map((v) => ({ Nombre: v.nombre, Celular: v.celular, 'Desde': v.desde, Activa: v.activo ? 'Sí' : 'No', Notas: v.notas || '' })), [30, 18, 12, 8, 30]);
 
+  // Discipulados en hogares
+  if (data.gruposHogar?.length) {
+    const grupo = Object.fromEntries(data.gruposHogar.map((g) => [g.id, g]));
+    const ph = Object.fromEntries((data.personasHogar || []).map((x) => [x.id, x]));
+    add('Discipulados', (data.personasHogar || []).map((x) => ({ Grupo: grupo[x.grupoId]?.nombre || '', Sector: grupo[x.grupoId]?.sector || '', Nombre: x.nombre, Tipo: x.tipo === 'visita' ? 'Visita' : x.esMiembro ? 'Miembro' : 'No miembro', Celular: x.celular, Activo: x.activo ? 'Sí' : 'No', Notas: x.notas })), [24, 16, 30, 12, 18, 8, 30]);
+    add('Asistencia discipulados', [...(data.asistenciasHogar || [])].sort(byFecha).map((a) => {
+      const nombres = String(a.presentes || '').split(',').filter(Boolean).map((id) => ph[id]?.nombre || '(eliminado)');
+      return { Grupo: grupo[a.grupoId]?.nombre || '', Fecha: a.fecha, Actividad: a.actividad, Presentes: nombres.length, Nombres: nombres.join(', '), Notas: a.notas };
+    }), [24, 11, 18, 10, 90, 30]);
+  }
+
   // Listados de integrantes y actividades de los ministerios
   const integ = Object.fromEntries((data.integrantes || []).map((i) => [i.id, i]));
   if (data.integrantes?.length) add('Integrantes', data.integrantes.map((i) => ({ Ministerio: min[i.ministerioId] || '', Nombre: i.nombre, 'Miembro de la iglesia': i.esMiembro ? 'Sí' : 'No', 'Fecha de nacimiento': i.fechaNacimiento, Celular: i.celular, Correo: i.email, Activo: i.activo ? 'Sí' : 'No', Notas: i.notas })), [14, 30, 12, 16, 18, 28, 8, 30]);

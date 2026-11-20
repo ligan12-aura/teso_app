@@ -137,13 +137,24 @@ const TEMAS = {
     },
     {
       id: 'asistencia', titulo: 'Asistencia', ico: 'calendar', html: `
-      <p>Control de asistencia de los <b>cultos dominicales</b>, la <b>escuela dominical</b> u otra actividad. Lo llevan el administrador, el tesorero, el pastor y la secretaría.</p>
+      <p>Control de asistencia de los <b>cultos</b>, los <b>discipulados en hogares</b> y las reuniones de los <b>ministerios</b>. Lo ven solo el pastor, la secretaría y el administrador. Arriba eliges el apartado: <b>Cultos · Discipulados · Jóvenes…</b></p>
       <ul class="hp-list">
         <li><b>Tomar asistencia:</b> elige la fecha y la actividad (o escribe otra, por ejemplo “Reunión de oración”) y marca a los presentes. Usa el buscador para encontrar a alguien rápido. Si ya existe la asistencia de esa actividad ese día, ábrela en la lista para corregirla.</li>
         <li><b>Quiénes aparecen:</b> los miembros activos, las personas de los listados de los ministerios (por ejemplo Jóvenes) que no son miembros, y las visitas.</li>
         <li><b>Visitas:</b> si viene alguien nuevo, escribe su nombre en “¿Vino alguien nuevo?” y queda marcado y guardado para la próxima vez. También puedes agregarlo con ${btn('user', 'Agregar visita')}.</li>
         <li><b>Faltaron varias veces seguidas:</b> la app muestra solos a quienes llevan 3 o más reuniones seguidas sin venir (puedes cambiar el número), con la fecha de la última vez que vinieron y su celular, para llamarlos o visitarlos.</li>
         <li><b>Regular / irregular:</b> regular es quien vino a 3 de cada 4 de las últimas 8 reuniones o más; irregular, quien vino menos. Con menos de 3 reuniones registradas aparece “Pocos datos”.</li>
+      </ul>
+      <h4>Discipulados en hogares</h4>
+      <ul class="hp-list">
+        <li>Crea cada grupo con ${btn('plus', 'Nuevo grupo')}: nombre, sector, día y encargado. El <b>Resumen</b> muestra todos los grupos con su última reunión, promedio y cuántos requieren atención.</li>
+        <li>En el grupo, en <b>Personas del grupo</b>: ${btn('users', 'Agregar miembros')} los elige de la lista de Miembros (puedes marcar varios y filtrar “solo sin grupo”); ${btn('plus', 'No miembro')} agrega a quien participa sin ser miembro; ${btn('user', 'Visita')} agrega una visita con su celular y notas.</li>
+        <li>${btn('check', 'Tomar asistencia')} funciona igual que en los cultos. Si llega alguien nuevo, escribe su nombre en “¿Vino alguien nuevo?” y queda como visita del grupo; después tócala para anotar su contacto o pasarla a integrante.</li>
+        <li>Quien ya tiene asistencias no se quita del grupo: desmárcalo como activo. Un grupo con asistencias tampoco se elimina: se marca inactivo.</li>
+      </ul>
+      <h4>Reuniones de los ministerios</h4>
+      <ul class="hp-list">
+        <li>Los ministerios con listado (por ejemplo Jóvenes) tienen su apartado aquí para revisar su asistencia. La toma el líder dentro de su ministerio; la secretaría solo la ve (toca una reunión para ver quiénes vinieron).</li>
       </ul>`
     },
     {
@@ -175,7 +186,7 @@ const TEMAS = {
       <p>Un ministerio puede tener su propio <b>listado de integrantes</b> (por ejemplo, Jóvenes) y <b>actividades con cuota</b>. Se activa en Configuración → Ministerios con la casilla “Listado de integrantes y actividades”. Ese ministerio muestra las pestañas <b>Finanzas · Jóvenes · Asistencia · Actividades</b>.</p>
       <ul class="hp-list">
         <li><b>Enlazar con Miembros:</b> solo tesorería puede indicar que un integrante es miembro de la iglesia (“¿Es miembro de la iglesia?”). El líder ve su nombre, pero no los datos de su ficha.</li>
-        <li><b>Asistencia del ministerio:</b> el líder (o tesorería) pasa lista en sus reuniones con los integrantes del listado, y la app avisa quién lleva varias reuniones seguidas sin venir. Es aparte de la asistencia de los cultos.</li>
+        <li><b>Asistencia del ministerio:</b> el líder (o el pastor o el administrador) pasa lista en sus reuniones con los integrantes del listado, y la app avisa quién lleva varias reuniones seguidas sin venir. Es aparte de la asistencia de los cultos.</li>
         <li><b>Pagos de cuota:</b> entran como ingreso del ministerio en la fecha del pago y se anulan desde la actividad.</li>
         <li><b>Resultado:</b> entradas − salidas de cada actividad; si es negativo, la diferencia sale de la caja del ministerio.</li>
         <li>Si desactivas el listado de un ministerio que ya tenía cuotas pagadas, esas cuotas siguen en sus finanzas y se pueden quitar desde ahí con ${btn('trash', '')}.</li>
@@ -263,7 +274,7 @@ TEMAS.admin = TEMAS.tesorero;
 TEMAS.secretaria = [
   {
     id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `
-    <p>Con tu usuario de <b>Secretaría</b> llevas el registro de los miembros de la iglesia (su estado y sus datos de contacto) y la asistencia a los cultos y actividades.</p>
+    <p>Con tu usuario de <b>Secretaría</b> llevas el registro de los miembros de la iglesia (su estado y sus datos de contacto) y la asistencia a los cultos, los discipulados en hogares y las reuniones de los ministerios.</p>
     <ul class="hp-list">
       <li>Ves los apartados <b>Miembros</b>, <b>Asistencia</b> y <b>Mi cuenta</b>.</li>
       <li>La información financiera (tesorería, ministerios y diezmos) es visible solo para tesorería y el pastor.</li>

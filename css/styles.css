@@ -995,6 +995,13 @@ a.tag { text-decoration: none; }
 
 /* Asistencia */
 .asist-tabs { margin-bottom: 18px; }
+.asist-secciones { margin-bottom: 4px; }
+.hogar-grupos { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-2); align-items: center; }
+.hogar-grupos a { font-size: 13px; padding: 6px 12px; }
+.hogar-grupos a small { opacity: .75; font-weight: 500; }
+.hogar-info { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 18px; padding: 14px 18px; }
+.hogar-info > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.asist-ayuda { margin: 10px 0 0; }
 .asist-umbral { min-width: 170px; }
 .asist-umbral select { height: 40px; padding-top: 0; padding-bottom: 0; font-size: 14px; }
 .asist-alertas { list-style: none; margin: 0; padding: 0; }

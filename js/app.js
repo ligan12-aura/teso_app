@@ -41,8 +41,10 @@ const NAV = {
   ]
 };
 
+// Asistencia: solo pastor, secretaría y administrador
 NAV.pastor = NAV.tesorero;
 NAV.admin = NAV.tesorero;
+NAV.tesorero = NAV.tesorero.filter((x) => x.path !== 'asistencia');
 const ADM = ['admin', 'tesorero', 'pastor'];
 const ROUTES = {
   inicio: { view: Dashboard, roles: ADM },
@@ -52,7 +54,7 @@ const ROUTES = {
   rendiciones: { view: Rendiciones, roles: ADM },
   diezmos: { view: Diezmos, roles: ADM },
   miembros: { view: Miembros, roles: [...ADM, 'secretaria'] },
-  asistencia: { view: Asistencia, roles: [...ADM, 'secretaria'] },
+  asistencia: { view: Asistencia, roles: ['admin', 'pastor', 'secretaria'] },
   admin: { view: Admin, roles: ADM },
   'mi-ministerio': { view: Ministerio, roles: ['lider'] },
   perfil: { view: Perfil }

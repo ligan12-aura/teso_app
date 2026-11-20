@@ -54,7 +54,7 @@ export function render(root, ctx) {
       <button class="btn btn-light btn-sm mh-descarga" data-planilla>${icon('download', 15)} Descargar planilla</button>
     </div>
   </section>
-  ${conAct ? tabsMinisterio(m, base, '') : ''}
+  ${conAct ? tabsMinisterio(m, base, '', ctx.user?.rol) : ''}
 
   ${pendientesLider()}
   ${panelRendicion()}

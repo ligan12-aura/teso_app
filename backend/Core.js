@@ -35,7 +35,11 @@ var TesoCore = (function () {
     Asistencias: ['id', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn'],
     // Asistencia de las reuniones de un ministerio (p. ej. Jóvenes) con los integrantes de su listado
     AsistenciasMinisterios: ['id', 'ministerioId', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn'],
-    Visitas: ['id', 'nombre', 'celular', 'notas', 'activo', 'creadoEn', 'actualizadoEn']
+    Visitas: ['id', 'nombre', 'celular', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
+    // Discipulados en hogares: grupos por sector, sus personas (miembros enlazados, no miembros y visitas) y asistencias
+    GruposHogar: ['id', 'nombre', 'sector', 'encargado', 'dia', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
+    PersonasHogar: ['id', 'grupoId', 'tipo', 'miembroId', 'nombre', 'celular', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
+    AsistenciasHogar: ['id', 'grupoId', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn']
   };
   var NUMERIC = { monto: 1, itemMensual: 1, presupuestoMensual: 1, cuota: 1, pagoMonto: 1 };
   var BOOL = { activo: 1, debeCambiarPass: 1 };
@@ -147,6 +151,10 @@ var TesoCore = (function () {
   }
   var MIEMBROS = ['admin', 'tesorero', 'pastor', 'secretaria'];
   var CON_MINISTERIO = ['admin', 'tesorero', 'pastor', 'lider'];
+  // Asistencia (cultos, discipulados y reuniones de ministerios): solo pastor, secretaría y administrador
+  var ASISTENCIA = ['admin', 'pastor', 'secretaria'];
+  // Asistencia de las reuniones de un ministerio: su líder, el pastor y el administrador
+  var ASIST_MIN = ['admin', 'pastor', 'lider'];
   function esAdmin(u) { return !!u && ADMIN.indexOf(u.rol) >= 0; }
   function publicUser(u) {
     return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
@@ -258,7 +266,7 @@ var TesoCore = (function () {
         base.diezmos = [];
         base.integrantes = []; base.actividades = []; base.inscripciones = []; base.miembrosEnlace = [];
         base.asistencias = all('Asistencias'); base.personasAsistencia = personasAsistencia();
-        base.asistenciasMin = [];
+        datosAsistenciaExtra(base, true);
         base.extra = {};
         base.config = { nombreIglesia: base.config.nombreIglesia };
         return base;
@@ -276,9 +284,15 @@ var TesoCore = (function () {
         base.actividades = all('Actividades');
         base.inscripciones = all('Inscripciones');
         base.miembrosEnlace = miembrosEnlace();
-        base.asistencias = all('Asistencias');
-        base.personasAsistencia = personasAsistencia();
-        base.asistenciasMin = all('AsistenciasMinisterios');
+        if (ASISTENCIA.indexOf(user.rol) >= 0) {
+          base.asistencias = all('Asistencias');
+          base.personasAsistencia = personasAsistencia();
+          datosAsistenciaExtra(base, false);
+        } else {
+          // tesorero: no ve asistencia
+          base.asistencias = []; base.personasAsistencia = []; base.asistenciasMin = [];
+          base.gruposHogar = []; base.personasHogar = []; base.asistenciasHogar = [];
+        }
       } else {
         var mid = user.ministerioId;
         var own = function (r) { return r.ministerioId === mid; };
@@ -302,11 +316,120 @@ var TesoCore = (function () {
         base.miembrosEnlace = [];
         base.asistencias = []; base.personasAsistencia = [];
         base.asistenciasMin = conAct ? all('AsistenciasMinisterios').filter(own) : [];
+        base.gruposHogar = []; base.personasHogar = []; base.asistenciasHogar = [];
         base.extra = {};
         // El líder no recibe saldo de caja ni presupuesto de la tesorería general
         base.config = { nombreIglesia: base.config.nombreIglesia };
       }
       return base;
+    }
+
+    // Datos de la página Asistencia: discipulados y reuniones de los ministerios con listado.
+    // La secretaría no recibe los listados completos de los ministerios: solo nombre y si es miembro.
+    function datosAsistenciaExtra(base, soloNombres) {
+      var mins = all('Ministerios').filter(function (m) { return m.actividades === 'si' && toBool(m.activo); });
+      var ids = {};
+      mins.forEach(function (m) { ids[m.id] = true; });
+      base.asistenciasMin = all('AsistenciasMinisterios').filter(function (a) { return ids[a.ministerioId]; });
+      base.ministeriosAsistencia = mins.map(function (m) { return { id: m.id, nombre: m.nombre, icono: m.icono, color: m.color }; });
+      if (soloNombres) base.integrantesAsistencia = vistaIntegrantes(all('Integrantes').filter(function (i) { return ids[i.ministerioId]; })).map(function (i) {
+        return { id: i.id, ministerioId: i.ministerioId, nombre: i.nombre, esMiembro: i.esMiembro, activo: i.activo, creadoEn: i.creadoEn };
+      });
+      base.gruposHogar = all('GruposHogar');
+      base.personasHogar = personasHogar();
+      base.asistenciasHogar = all('AsistenciasHogar');
+    }
+
+    // ---------------- Discipulados en hogares ----------------
+    // Los miembros enlazados muestran el nombre y celular de su ficha de Miembros
+    function personasHogar() {
+      var mb = {};
+      all('Miembros').forEach(function (m) { mb[m.id] = m; });
+      return all('PersonasHogar').map(function (x) {
+        var m = x.miembroId ? mb[x.miembroId] : null;
+        return Object.assign({}, x, { nombre: m ? m.nombre : x.nombre, celular: m ? (m.celular || x.celular) : x.celular, esMiembro: !!m, activo: toBool(x.activo) });
+      });
+    }
+    function saveGrupoHogar(user, p) {
+      var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+      if (!nombre) throw TesoError('Escribe el nombre del grupo');
+      var actual = p.id ? find('GruposHogar', p.id) : null;
+      if (p.id && !actual) throw TesoError('Ese grupo ya no existe');
+      var dup = all('GruposHogar').some(function (g) { return normalNombre(g.nombre) === normalNombre(nombre) && g.id !== p.id; });
+      if (dup) throw TesoError('Ya hay un grupo llamado ' + nombre);
+      var now = env.now();
+      var d = {
+        nombre: nombre, sector: String(p.sector || '').trim().slice(0, 60), encargado: String(p.encargado || '').trim().slice(0, 80),
+        dia: String(p.dia || '').trim().slice(0, 40), notas: String(p.notas || '').trim().slice(0, 300),
+        activo: p.activo === undefined ? true : !!p.activo, actualizadoEn: now
+      };
+      return actual ? update('GruposHogar', actual.id, d) : insert('GruposHogar', Object.assign(d, { id: uid(), creadoEn: now }));
+    }
+    function deleteGrupoHogar(user, p) {
+      var g = find('GruposHogar', p.id);
+      if (!g) throw TesoError('Ese grupo ya no existe');
+      if (all('AsistenciasHogar').some(function (a) { return a.grupoId === g.id; })) throw TesoError('El grupo tiene asistencias registradas: márcalo como inactivo en vez de eliminarlo');
+      all('PersonasHogar').forEach(function (x) { if (x.grupoId === g.id) remove('PersonasHogar', x.id); });
+      remove('GruposHogar', g.id);
+      return { id: g.id };
+    }
+    // tipo: 'integrante' (miembro enlazado con miembroId, o no miembro) o 'visita' (con su contacto)
+    function savePersonaHogar(user, p) {
+      var actual = p.id ? find('PersonasHogar', p.id) : null;
+      if (p.id && !actual) throw TesoError('Esa persona ya no está en el grupo');
+      var grupoId = actual ? actual.grupoId : String(p.grupoId || '');
+      if (!find('GruposHogar', grupoId)) throw TesoError('Elige el grupo');
+      var tipo = p.tipo === 'visita' ? 'visita' : 'integrante';
+      var miembroId = tipo === 'integrante' ? String(p.miembroId || '') : '';
+      var mb = miembroId ? find('Miembros', miembroId) : null;
+      if (miembroId && !mb) throw TesoError('Ese miembro ya no está en el registro');
+      var nombre = mb ? mb.nombre : String(p.nombre || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+      if (!nombre) throw TesoError('Escribe el nombre');
+      var otros = all('PersonasHogar').filter(function (x) { return x.grupoId === grupoId && x.id !== (actual && actual.id); });
+      if (mb && otros.some(function (x) { return x.miembroId === mb.id; })) throw TesoError(mb.nombre + ' ya está en este grupo');
+      if (!mb && otros.some(function (x) { return !x.miembroId && normalNombre(x.nombre) === normalNombre(nombre); })) throw TesoError(nombre + ' ya está en este grupo');
+      var now = env.now();
+      var d = {
+        tipo: tipo, miembroId: miembroId, nombre: mb ? '' : nombre, celular: String(p.celular || '').trim().slice(0, 30),
+        notas: String(p.notas || '').trim().slice(0, 300), activo: p.activo === undefined ? true : !!p.activo, actualizadoEn: now
+      };
+      var creado = p.fecha && isDate(p.fecha) && p.fecha >= '2000-01-01' && p.fecha <= env.today() ? p.fecha : now;
+      var r = actual ? update('PersonasHogar', actual.id, d) : insert('PersonasHogar', Object.assign(d, { id: uid(), grupoId: grupoId, creadoEn: creado }));
+      return Object.assign({}, r, { nombre: nombre, esMiembro: !!mb, celular: mb ? (mb.celular || r.celular) : r.celular, activo: toBool(r.activo) });
+    }
+    function deletePersonaHogar(user, p) {
+      var x = find('PersonasHogar', p.id);
+      if (!x) throw TesoError('Esa persona ya no está en el grupo');
+      var vino = all('AsistenciasHogar').some(function (a) { return a.grupoId === x.grupoId && String(a.presentes || '').split(',').indexOf(x.id) >= 0; });
+      if (vino) throw TesoError('Tiene asistencias registradas: márcala como inactiva en vez de quitarla');
+      remove('PersonasHogar', x.id);
+      return { id: x.id };
+    }
+    function saveAsistenciaHogar(user, p) {
+      var actual = p.id ? find('AsistenciasHogar', p.id) : null;
+      if (p.id && !actual) throw TesoError('Esa asistencia ya no existe');
+      var grupoId = actual ? actual.grupoId : String(p.grupoId || '');
+      if (!find('GruposHogar', grupoId)) throw TesoError('Elige el grupo');
+      var fecha = String(p.fecha || '').trim();
+      if (!isDate(fecha) || fecha > env.today() || fecha < '2000-01-01') throw TesoError('Elige una fecha válida (no futura ni anterior a 2000)');
+      var actividad = String(p.actividad || '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Discipulado';
+      var clave = normalNombre(actividad);
+      var otra = all('AsistenciasHogar').some(function (a) { return a.grupoId === grupoId && a.fecha === fecha && normalNombre(a.actividad) === clave && a.id !== (actual && actual.id); });
+      if (otra) throw TesoError('Ya hay una asistencia de ' + actividad + ' el ' + fecha.split('-').reverse().join('-') + ': ábrela en la lista para editarla');
+      var del = {};
+      all('PersonasHogar').forEach(function (x) { if (x.grupoId === grupoId) del[x.id] = true; });
+      var vistos = {}, presentes = [];
+      (p.presentes || []).map(String).forEach(function (id) { if (del[id] && !vistos[id]) { vistos[id] = true; presentes.push(id); } });
+      if (actual) String(actual.presentes || '').split(',').forEach(function (id) { if (id && !del[id] && !vistos[id]) { vistos[id] = true; presentes.push(id); } });
+      if (!presentes.length) throw TesoError('Marca al menos a una persona presente');
+      var now = env.now();
+      var d = { fecha: fecha, actividad: actividad, notas: String(p.notas || '').trim().slice(0, 300), presentes: presentes.join(','), actualizadoEn: now };
+      return actual ? update('AsistenciasHogar', actual.id, d) : insert('AsistenciasHogar', Object.assign(d, { id: uid(), grupoId: grupoId, creadoPor: user.id, creadoEn: now }));
+    }
+    function deleteAsistenciaHogar(user, p) {
+      if (!find('AsistenciasHogar', p.id)) throw TesoError('Esa asistencia ya no existe');
+      remove('AsistenciasHogar', p.id);
+      return { id: p.id };
     }
 
     // ---------------- Asistencia ----------------
@@ -403,6 +526,7 @@ var TesoCore = (function () {
     function saveAsistenciaMinisterio(user, p) {
       var actual = p.id ? find('AsistenciasMinisterios', p.id) : null;
       if (p.id && !actual) throw TesoError('Esa asistencia ya no existe');
+      if (ASIST_MIN.indexOf(user.rol) < 0) throw TesoError('No tienes permiso', 'FORBIDDEN');
       var m = ministerioConActividades(user, actual ? actual.ministerioId : p.ministerioId);
       if (actual && actual.ministerioId !== m.id) throw TesoError('No tienes permiso', 'FORBIDDEN');
       var fecha = String(p.fecha || '').trim();
@@ -1258,6 +1382,9 @@ var TesoCore = (function () {
       all('Integrantes').forEach(function (i) {
         if (i.miembroId === mb.id) update('Integrantes', i.id, { miembroId: '', nombre: mb.nombre, celular: mb.celular || i.celular, email: mb.email || i.email, fechaNacimiento: mb.fechaNacimiento || i.fechaNacimiento, actualizadoEn: env.now() });
       });
+      all('PersonasHogar').forEach(function (x) {
+        if (x.miembroId === mb.id) update('PersonasHogar', x.id, { miembroId: '', nombre: mb.nombre, celular: x.celular || mb.celular || '', actualizadoEn: env.now() });
+      });
       remove('Miembros', mb.id);
       return { id: mb.id };
     }
@@ -1595,12 +1722,18 @@ var TesoCore = (function () {
       saveIntegrante: { fn: saveIntegrante, role: CON_MINISTERIO, write: true },
       deleteIntegrante: { fn: deleteIntegrante, role: CON_MINISTERIO, write: true },
       agregarMiembrosIntegrantes: { fn: agregarMiembrosIntegrantes, role: ADMIN, write: true },
-      saveAsistencia: { fn: saveAsistencia, role: MIEMBROS, write: true },
-      deleteAsistencia: { fn: deleteAsistencia, role: MIEMBROS, write: true },
-      saveAsistenciaMinisterio: { fn: saveAsistenciaMinisterio, role: CON_MINISTERIO, write: true },
-      deleteAsistenciaMinisterio: { fn: deleteAsistenciaMinisterio, role: CON_MINISTERIO, write: true },
-      saveVisita: { fn: saveVisita, role: MIEMBROS, write: true },
-      deleteVisita: { fn: deleteVisita, role: MIEMBROS, write: true },
+      saveAsistencia: { fn: saveAsistencia, role: ASISTENCIA, write: true },
+      deleteAsistencia: { fn: deleteAsistencia, role: ASISTENCIA, write: true },
+      saveAsistenciaMinisterio: { fn: saveAsistenciaMinisterio, role: ASIST_MIN, write: true },
+      deleteAsistenciaMinisterio: { fn: deleteAsistenciaMinisterio, role: ASIST_MIN, write: true },
+      saveVisita: { fn: saveVisita, role: ASISTENCIA, write: true },
+      deleteVisita: { fn: deleteVisita, role: ASISTENCIA, write: true },
+      saveGrupoHogar: { fn: saveGrupoHogar, role: ASISTENCIA, write: true },
+      deleteGrupoHogar: { fn: deleteGrupoHogar, role: ASISTENCIA, write: true },
+      savePersonaHogar: { fn: savePersonaHogar, role: ASISTENCIA, write: true },
+      deletePersonaHogar: { fn: deletePersonaHogar, role: ASISTENCIA, write: true },
+      saveAsistenciaHogar: { fn: saveAsistenciaHogar, role: ASISTENCIA, write: true },
+      deleteAsistenciaHogar: { fn: deleteAsistenciaHogar, role: ASISTENCIA, write: true },
       saveActividad: { fn: saveActividad, role: CON_MINISTERIO, write: true },
       deleteActividad: { fn: deleteActividad, role: CON_MINISTERIO, write: true },
       setConfirmados: { fn: setConfirmados, role: CON_MINISTERIO, write: true },

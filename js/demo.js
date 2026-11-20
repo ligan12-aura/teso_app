@@ -4,8 +4,8 @@
  * Sirve para probar la app sin configurar Google.
  */
 
-const DB_KEY = 'teso_demo_db_v5';
-try { ['v1', 'v2', 'v3', 'v4'].forEach((v) => localStorage.removeItem('teso_demo_db_' + v)); } catch (e) { /* sin almacenamiento */ }
+const DB_KEY = 'teso_demo_db_v6';
+try { ['v1', 'v2', 'v3', 'v4', 'v5'].forEach((v) => localStorage.removeItem('teso_demo_db_' + v)); } catch (e) { /* sin almacenamiento */ }
 const FILES_KEY = 'teso_demo_files_v1';
 const SECRET_KEY = 'teso_demo_secret';
 
@@ -162,7 +162,7 @@ function seed() {
   let n = 0;
   const id = () => 'd' + (++n).toString(36) + Math.random().toString(36).slice(2, 8);
   const now = new Date().toISOString();
-  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [], Integrantes: [], Actividades: [], Inscripciones: [], Asistencias: [], Visitas: [], AsistenciasMinisterios: [] };
+  const db = { Usuarios: [], Ministerios: [], MovimientosGenerales: [], MovimientosMinisterios: [], Rendiciones: [], Transferencias: [], Config: [], Miembros: [], Diezmos: [], Integrantes: [], Actividades: [], Inscripciones: [], Asistencias: [], Visitas: [], AsistenciasMinisterios: [], GruposHogar: [], PersonasHogar: [], AsistenciasHogar: [] };
   let rnd = 7;
   const rand = () => { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; };
   const between = (a, b) => Math.round((a + rand() * (b - a)) / 500) * 500;
@@ -362,6 +362,20 @@ function seed() {
     const d = new Date(dom + 'T12:00:00'); d.setDate(d.getDate() - 1);
     const pres = jovActivos.filter((x, n) => !(faltan.has(x.id) && k >= 5) && rand() < (n % 4 === 0 ? 0.5 : 0.85)).map((x) => x.id);
     db.AsistenciasMinisterios.push({ id: id(), ministerioId: jov.id, fecha: d.toISOString().slice(0, 10), actividad: 'Reunión de jóvenes', notas: '', presentes: pres.join(','), creadoPor: liderJov.id, creadoEn: now, actualizadoEn: now });
+  });
+  // Discipulados en hogares: dos grupos por sector, los jueves; uno con una visita
+  [['Discipulado Norte', 'Norte', 'Jueves 19:30', 0], ['Discipulado Centro', 'Centro', 'Miércoles 20:00', 1]].forEach(([nombre, sector, dia, k]) => {
+    const g = { id: id(), nombre, sector, encargado: activosM[k * 6]?.nombre || '', dia, notas: '', activo: true, creadoEn: now, actualizadoEn: now };
+    db.GruposHogar.push(g);
+    const gente = activosM.slice(k * 6, k * 6 + 6).map((m) => ({ id: id(), grupoId: g.id, tipo: 'integrante', miembroId: m.id, nombre: '', celular: '', notas: '', activo: true, creadoEn: now, actualizadoEn: now }));
+    gente.push({ id: id(), grupoId: g.id, tipo: 'integrante', miembroId: '', nombre: k ? 'Elena Fuentes' : 'Pablo Rivas', celular: '', notas: 'Vecino del sector', activo: true, creadoEn: now, actualizadoEn: now });
+    if (!k) gente.push({ id: id(), grupoId: g.id, tipo: 'visita', miembroId: '', nombre: 'Javiera Ortiz', celular: '+56 9 5555 1234', notas: 'Invitada por una vecina', activo: true, creadoEn: now, actualizadoEn: now });
+    db.PersonasHogar.push(...gente);
+    domingos.slice(-6).forEach((dom, j) => {
+      const d = new Date(dom + 'T12:00:00'); d.setDate(d.getDate() - (k ? 4 : 3));
+      const pres = gente.filter((x, n) => (x.tipo === 'visita' ? j >= 4 : !(n === 2 && j >= 3) && rand() < 0.8)).map((x) => x.id);
+      if (pres.length) db.AsistenciasHogar.push({ id: id(), grupoId: g.id, fecha: d.toISOString().slice(0, 10), actividad: 'Discipulado', notas: '', presentes: pres.join(','), creadoPor: '', creadoEn: now, actualizadoEn: now });
+    });
   });
   const diaHoy = +today.slice(8, 10);
   const act = { id: id(), ministerioId: jov.id, nombre: 'Campamento de verano', fecha: `${TesoCore.nextMonth(curMonth)}-15`, cuota: 25000, descripcion: 'Tres días en Pucón', estado: 'abierta', creadoPor: liderJov.id, creadoEn: now, actualizadoEn: now };
