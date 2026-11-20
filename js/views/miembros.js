@@ -137,6 +137,7 @@ export function editarMiembro(ctx, m = null) {
         <label class="field" data-baja ${m && m.estado !== 'activo' ? '' : 'hidden'}><span data-baja-lbl>${m?.estado === 'trasladado' ? 'Fecha del traslado' : 'Fecha de baja (desde cuándo no asiste)'}</span><input type="date" name="fechaBaja" value="${esc(m?.fechaBaja || '')}" max="${ctx.data.hoy}"></label>
         <label class="field" data-traslado ${m?.estado === 'trasladado' ? '' : 'hidden'}><span>Iglesia de destino</span><input name="trasladoA" maxlength="100" value="${esc(m?.trasladoA || '')}" placeholder="Ej.: Iglesia Bautista de Temuco"></label>
       </div>
+      <label class="check" data-traslado-conyuge hidden><input type="checkbox" name="trasladarConyuge" checked> <span>Su cónyuge, <b data-conyuge-nombre></b>, también se traslada (misma fecha e iglesia)</span></label>
       <div class="note" data-traslado-nota ${m?.estado === 'trasladado' ? '' : 'hidden'}>${icon('heart', 15)}<span>Sus diezmos cuentan en la estadística hasta la fecha del traslado; desde ahí deja de contarse. También deja de aparecer en la asistencia, los discipulados y los listados de ministerios.</span></div>
       <div class="form-row">
         <label class="field"><span>Fecha de nacimiento</span><input type="date" name="fechaNacimiento" value="${esc(m?.fechaNacimiento || '')}" max="${ctx.data.hoy}"></label>
@@ -180,7 +181,17 @@ export function editarMiembro(ctx, m = null) {
         f.fechaBaja.required = e === 'trasladado';
         if (e !== 'activo' && !f.fechaBaja.value) f.fechaBaja.value = ctx.data.hoy;
         if (e === 'trasladado') f.trasladoA.focus();
+        syncConyuge();
       });
+      // casilla "su cónyuge también se traslada": solo al pasar a trasladado y si el cónyuge no lo está ya
+      const syncConyuge = () => {
+        const c = ctx.data.miembros.find((x) => x.id === f.conyugeId.value);
+        const ver = f.estado.value === 'trasladado' && m?.estado !== 'trasladado' && c && c.estado !== 'trasladado';
+        f.querySelector('[data-traslado-conyuge]').hidden = !ver;
+        if (ver) f.querySelector('[data-conyuge-nombre]').textContent = c.nombre;
+      };
+      f.conyugeId.addEventListener('change', syncConyuge);
+      syncConyuge();
       f.fechaBaja.required = f.estado.value === 'trasladado';
       f.querySelector('[data-unir]')?.addEventListener('click', () => { close(null); unirMiembro(ctx, m); });
       f.querySelector('[data-borrar]')?.addEventListener('click', async () => {
@@ -193,9 +204,11 @@ export function editarMiembro(ctx, m = null) {
       const d = formData(f);
       if (m) d.id = m.id;
       if (d.rut && rutNormal(d.rut) === null) throw new Error('Revisa el RUT: el dígito verificador no calza');
+      // solo cuenta si la casilla está a la vista (traslado de alguien con cónyuge activo)
+      d.trasladarConyuge = !f.querySelector('[data-traslado-conyuge]').hidden && f.trasladarConyuge.checked;
       const r = await call('saveMiembro', d);
       const enl = r?.enlazados?.length ? ` · enlazado en el listado (${r.enlazados.join(', ')})` : '';
-      toast((m ? 'Ficha actualizada' : 'Miembro agregado') + enl);
+      toast((m ? 'Ficha actualizada' : 'Miembro agregado') + enl + (r?.conyugeTrasladado ? ` · también se trasladó ${r.conyugeTrasladado}` : ''));
       await ctx.refresh();
     }
   });

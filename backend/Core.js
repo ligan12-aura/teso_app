@@ -1490,13 +1490,25 @@ var TesoCore = (function () {
       }
       if (p.conyugeId !== undefined) r = vincularConyuge(r.id, p.conyugeId);
       // al trasladarse deja de aparecer en los discipulados y en los listados de ministerios (queda inactivo ahí)
-      if (r.estado === 'trasladado' && (!p.id || previo.estado !== 'trasladado')) {
-        all('PersonasHogar').forEach(function (x) { if (x.miembroId === r.id && toBool(x.activo)) update('PersonasHogar', x.id, { activo: false, actualizadoEn: now }); });
-        all('Integrantes').forEach(function (i) { if (i.miembroId === r.id && toBool(i.activo)) update('Integrantes', i.id, { activo: false, actualizadoEn: now }); });
+      var salirDeGrupos = function (mid) {
+        all('PersonasHogar').forEach(function (x) { if (x.miembroId === mid && toBool(x.activo)) update('PersonasHogar', x.id, { activo: false, actualizadoEn: now }); });
+        all('Integrantes').forEach(function (i) { if (i.miembroId === mid && toBool(i.activo)) update('Integrantes', i.id, { activo: false, actualizadoEn: now }); });
+      };
+      if (r.estado === 'trasladado' && (!p.id || previo.estado !== 'trasladado')) salirDeGrupos(r.id);
+      // el cónyuge también se traslada (misma fecha e iglesia), si así se indicó
+      var conyugeTrasladado = '';
+      if (r.estado === 'trasladado' && toBool(p.trasladarConyuge) && r.conyugeId) {
+        var c = find('Miembros', r.conyugeId);
+        if (c && c.estado !== 'trasladado') {
+          if (c.fechaIngreso && c.fechaIngreso > r.fechaBaja) throw TesoError('La fecha del traslado es anterior a la fecha en que ' + c.nombre + ' se hizo miembro');
+          update('Miembros', c.id, { estado: 'trasladado', fechaBaja: r.fechaBaja, trasladoA: r.trasladoA, actualizadoEn: now });
+          salirDeGrupos(c.id);
+          conyugeTrasladado = c.nombre;
+        }
       }
       var enl = enlazarIntegrantes(user, r, p.integranteId, !p.id);
       if (enl.completar) r = update('Miembros', r.id, enl.completar);
-      return Object.assign({}, r, { enlazados: enl.nombres });
+      return Object.assign({}, r, { enlazados: enl.nombres, conyugeTrasladado: conyugeTrasladado });
     }
     // Al registrar a alguien como miembro, queda enlazado solo a su ficha en los listados de los
     // ministerios (p. ej. Jóvenes): el elegido en el formulario, o el que tenga exactamente su mismo
