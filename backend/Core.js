@@ -1291,7 +1291,8 @@ var TesoCore = (function () {
       all('Miembros').forEach(function (m) { existentes[normalNombre(m.nombre)] = m.id; });
       items.forEach(function (it, i) {
         var d;
-        try { d = datosMiembro(Object.assign({}, it, { estado: 'activo' })); } catch (e) { throw TesoError('Fila ' + (i + 1) + ' (' + (it.nombre || '') + '): ' + e.message); }
+        // inactivo = figura como "miembro inactivo" en el histórico: queda inscrito, pero inactivo
+        try { d = datosMiembro(Object.assign({}, it, { estado: it.inactivo ? 'inactivo' : 'activo', fechaBaja: '' })); } catch (e) { throw TesoError('Fila ' + (i + 1) + ' (' + (it.nombre || '') + '): ' + e.message); }
         if (it.id) {
           var m = find('Miembros', it.id);
           if (!m) throw TesoError('Fila ' + (i + 1) + ': ' + d.nombre + ' ya no está en el registro');
@@ -1305,7 +1306,8 @@ var TesoCore = (function () {
             var otro = existentes[normalNombre(d.nombre)];
             if (!otro || otro === m.id) patch.nombre = d.nombre;
           }
-          if (it.activar && m.estado === 'inactivo') { patch.estado = 'activo'; patch.fechaBaja = ''; }
+          if (it.inactivo) { if (m.estado !== 'inactivo') patch.estado = 'inactivo'; }
+          else if (it.activar && m.estado === 'inactivo') { patch.estado = 'activo'; patch.fechaBaja = ''; }
           if (!Object.keys(patch).length) { sinCambios++; return; }
           if (patch.notas) patch.notas = patch.notas.slice(0, 300);
           patch.actualizadoEn = now;

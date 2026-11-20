@@ -230,7 +230,9 @@ function leerCompleto(act, hist, hoy) {
     filas.push({
       fila: i, nombre: nombrePropio(crudo), nombreHist: h.nombre && !exacto ? nombrePropio(h.nombre) : '',
       fechaNacimiento: fechaCelda(cNac ? row.getCell(cNac).value : null, hoy) || h.fechaNacimiento || '',
-      estadoCivil: h.estadoCivil || '', domicilio: h.domicilio || '', fechaIngreso: h.fechaIngreso || '', notas: h.notas || '', estadoHist: h.estadoHist || ''
+      estadoCivil: h.estadoCivil || '', domicilio: h.domicilio || '', fechaIngreso: h.fechaIngreso || '', notas: h.notas || '', estadoHist: h.estadoHist || '',
+      // en la hoja de activos pero "Miembro inactivo" en el histórico: se inscribe como inactivo
+      inactivo: /inactiv/i.test(h.estadoHist || '')
     });
   });
   return filas;
@@ -292,7 +294,7 @@ function importarListado(ctx) {
         const activar = !!f.querySelector('[data-activar]')?.checked;
         const items = filas.filter((x) => x.destino !== 'omitir').map((x) => ({
           id: x.destino === 'nuevo' ? '' : x.destino, nombre: x.nombre, fechaNacimiento: x.fechaNacimiento, estadoCivil: x.estadoCivil,
-          domicilio: x.domicilio, fechaIngreso: x.fechaIngreso, notas: x.notas, renombrar, activar
+          domicilio: x.domicilio, fechaIngreso: x.fechaIngreso, notas: x.notas, renombrar, activar, inactivo: !!x.inactivo
         }));
         const elegidos = items.filter((x) => x.id).map((x) => x.id);
         const repetido = elegidos.find((id, i) => elegidos.indexOf(id) !== i);
@@ -340,7 +342,8 @@ function pintarCompleto(prev, ctx, filas) {
   };
   const pintar = () => {
     const usados = filas.filter((x) => nom[x.destino]);
-    const inactivos = usados.filter((x) => nom[x.destino].estado === 'inactivo');
+    const inactivos = usados.filter((x) => !x.inactivo && nom[x.destino].estado === 'inactivo');
+    const quedanInactivos = filas.filter((x) => x.inactivo && x.destino !== 'omitir');
     const renombrables = usados.filter((x) => normalNombre(nom[x.destino].nombre) !== normalNombre(x.nombre));
     const fuera = miembros.filter((m) => m.estado === 'activo' && !usados.some((x) => x.destino === m.id));
     const opciones = (x) => {
@@ -361,6 +364,7 @@ function pintarCompleto(prev, ctx, filas) {
         ${renombrables.length ? `<label class="check saldo-check"><input type="checkbox" data-renombrar checked> <span>Poner el nombre completo de la planilla a ${renombrables.length} miembro(s) <small class="muted">(p. ej. ${esc(nom[renombrables[0].destino].nombre)} → ${esc(renombrables[0].nombre)})</small></span></label>` : ''}
         ${inactivos.length ? `<label class="check saldo-check"><input type="checkbox" data-activar checked> <span>Marcar como activos a ${inactivos.length} que hoy figuran inactivos: ${inactivos.map((x) => esc(nom[x.destino].nombre)).join(', ')}</span></label>` : ''}
       </div>
+      ${quedanInactivos.length ? `<p class="muted small">${quedanInactivos.length} figuran como “Miembro inactivo” en el histórico: quedan inscritos como <b>inactivos</b> (${quedanInactivos.map((x) => esc(x.nombre)).join(', ')}).</p>` : ''}
       ${fuera.length ? `<p class="muted small">${fuera.length} miembro(s) activos en la app no aparecen en la hoja de activos: no se modifican.</p>` : ''}
       <div class="table-wrap imp-lista"><table class="table">
         <thead><tr><th>#</th><th>Planilla</th><th>En la app</th><th>Datos que se cargan</th></tr></thead>
@@ -368,7 +372,7 @@ function pintarCompleto(prev, ctx, filas) {
           const cargar = x.destino === 'omitir' ? [] : aCargar(x);
           return `<tr class="${x.destino === 'omitir' ? 'inactive' : ''}${revisar(x) ? ' fila-revisar' : ''}">
             <td class="muted">${i + 1}</td>
-            <td><b>${esc(x.nombre)}</b>${x.nombreHist ? `<br><small class="muted">En el histórico: ${esc(x.nombreHist)}</small>` : ''}${/inactiv|fallec|traslad/i.test(x.estadoHist) ? `<br><small class="falta">Histórico: ${esc(x.estadoHist)}</small>` : ''}</td>
+            <td><b>${esc(x.nombre)}</b>${x.nombreHist ? `<br><small class="muted">En el histórico: ${esc(x.nombreHist)}</small>` : ''}${x.inactivo ? '<br><span class="badge st-open">Queda inactivo</span> <small class="muted">(inactivo en el histórico)</small>' : /fallec|traslad/i.test(x.estadoHist) ? `<br><small class="falta">Histórico: ${esc(x.estadoHist)}</small>` : ''}</td>
             <td><select class="cat-sel" data-fila="${i}">${opciones(x)}</select>${x.como === 'corto' ? '<br><small class="muted">Coincide por nombre: revisa</small>' : x.como === 'sugerido' ? '<br><small class="muted">Hay un nombre parecido: revisa</small>' : ''}</td>
             <td class="small">${cargar.length ? esc(cargar.join(', ')) : `<span class="muted">${x.destino === 'omitir' ? '—' : 'nada nuevo'}</span>`}</td>
           </tr>`;
