@@ -1023,3 +1023,9 @@ a.tag { text-decoration: none; }
 .pres-campos input[type=month] { height: 54px; }
 .pres-campos input[type=month] { min-width: 0; }
 @media (max-width: 900px) { .pres-campos { grid-template-columns: 1fr; } }
+
+/* Celular: los encabezados de tabla pueden usar dos líneas ("Faltas seguidas") para que la tabla quepa */
+@media (max-width: 600px) {
+  .table th, .table th.num { white-space: normal; line-height: 1.25; vertical-align: bottom; }
+  .table td .badge { white-space: normal; }
+}

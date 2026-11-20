@@ -274,13 +274,13 @@ function renderAmbito(root, ctx, cfg, cabecera, redibujar) {
       <div class="seg seg-sm">${filtrosPersona.map(([k, l]) => `<label><input type="radio" name="fasist" value="${k}" ${vista.filtro === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
     </div>
     ${lista.length ? `<div class="table-wrap"><table class="table asist-tabla">
-      <thead><tr><th>Nombre</th><th>Grupo</th><th class="num">Vino</th><th class="num">Faltas seguidas</th><th>Última vez</th><th>Estado</th></tr></thead>
+      <thead><tr><th>Nombre</th><th class="hide-sm">Grupo</th><th class="num">Vino</th><th class="num">Faltas seguidas</th><th class="hide-sm">Última vez</th><th>Estado</th></tr></thead>
       <tbody>${lista.map((p) => { const editable = p.tipo === 'visita' && cfg.editarVisita && !ro; return `<tr data-nombre="${esc(norm(p.nombre))}" data-grupo="${p.tipo === 'visita' ? 'visita' : p.estado}"${editable ? ` class="asist-fila" data-visita-id="${esc(p.id)}" tabindex="0" title="Editar visita"` : ''}>
         <td><b>${esc(p.nombre)}</b>${editable ? ` ${icon('edit', 13)}` : ''}${p.tipo === 'visita' && !p.activo ? ' <small class="muted">(inactiva)</small>' : ''}${p.tipo === 'visita' && p.celular ? `<br><small class="muted">${esc(p.celular)}</small>` : ''}</td>
-        <td><small class="muted">${esc(cfg.etiqueta(p))}</small></td>
+        <td class="hide-sm"><small class="muted">${esc(cfg.etiqueta(p))}</small></td>
         <td class="num">${p.recientes ? `${p.vinoRec}/${p.recientes}` : '—'}</td>
         <td class="num">${p.recientes ? (p.racha >= vista.umbral && p.tipo !== 'visita' ? `<span class="chip-warn">${p.racha}</span>` : p.racha) : '—'}</td>
-        <td class="nowrap">${p.ultima ? fecha(p.ultima) : '<span class="muted">—</span>'}</td>
+        <td class="nowrap hide-sm">${p.ultima ? fecha(p.ultima) : '<span class="muted">—</span>'}</td>
         <td>${p.tipo === 'visita' ? `<span class="badge st-open">Visita · ${p.total ? `${p.total} ${p.total === 1 ? 'vez' : 'veces'}` : 'aún no viene'}</span>` : p.estado === 'nuevo' ? '<span class="badge st-open">Pocos datos</span>' : p.estado === 'regular' ? '<span class="badge st-ok">Regular</span>' : '<span class="badge st-obs">Irregular</span>'}</td></tr>`; }).join('')}</tbody>
     </table></div>` : emptyState(cfg.vacio, 'users')}
   </article>`;
@@ -486,7 +486,7 @@ function renderHogar(root, ctx, grupoId, cabecera, redibujar) {
   const chips = `<nav class="min-tabs hogar-grupos" aria-label="Grupos de discipulado">
       <a href="#/asistencia/discipulados" class="${!g ? 'active' : ''}">Resumen</a>
       ${visibles.map((x) => `<a href="#/asistencia/discipulados/${x.id}" class="${g?.id === x.id ? 'active' : ''}">${esc(x.nombre)}${x.sector ? ` <small>· ${esc(x.sector)}</small>` : ''}${x.activo ? '' : ' <small>(inactivo)</small>'}</a>`).join('')}
-      <button type="button" class="btn btn-ghost btn-sm" data-nuevo-grupo>${icon('plus', 15)} Nuevo grupo</button>
+      ${g ? `<button type="button" class="btn btn-ghost btn-sm" data-nuevo-grupo>${icon('plus', 15)} Nuevo grupo</button>` : ''}
     </nav>`;
   if (!g) {
     // Resumen de todos los grupos

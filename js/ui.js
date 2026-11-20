@@ -229,13 +229,31 @@ export async function verArchivo(id, titulo = 'Boleta') {
 let charts = [];
 // Lee un token del CSS (cambia con el modo claro/oscuro)
 export const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-// Los colores neutros escritos en las vistas se cambian por los del tema actual
+const esOscuro = () => document.documentElement.dataset.theme === 'dark';
+// Modo oscuro: un color muy oscuro (azul marino, por ejemplo) no se distingue del fondo.
+// Se aclara mezclándolo con blanco hasta que se lea; los tonos semitransparentes
+// ('#rrggbb55') suben su opacidad porque sobre fondo oscuro quedaban casi invisibles.
+export function colorTema(c) {
+  if (!esOscuro() || typeof c !== 'string') return c;
+  const m = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c.trim());
+  if (!m) return c;
+  // El azul marino de la marca tiene su par claro fijo para no perder el tono azul
+  if (m[1].toLowerCase() === '23395d') return '#7096d6' + (m[2] ? (parseInt(m[2], 16) < 0x99 ? '99' : m[2]) : '');
+  let [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+  const lum = (x) => { const v = x / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const L = 0.2126 * lum(r) + 0.7152 * lum(g) + 0.0722 * lum(b);
+  if (L < 0.12) { const t = L < 0.05 ? 0.45 : 0.3; [r, g, b] = [r, g, b].map((x) => Math.round(x + (255 - x) * t)); }
+  const hex = '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  if (!m[2]) return hex;
+  return hex + (parseInt(m[2], 16) < 0x99 ? '99' : m[2]);
+}
+// Los colores escritos en las vistas se adaptan al tema actual
 function temaGrafico(v) {
   if (Array.isArray(v)) return v.map(temaGrafico);
   if (v && typeof v === 'object' && v.constructor === Object) { for (const k in v) v[k] = temaGrafico(v[k]); return v; }
   if (v === '#eef0f3') return cssVar('--chart-grid');
   if (v === '#fff' || v === '#ffffff') return cssVar('--surface');
-  return v;
+  return colorTema(v);
 }
 export function chart(canvas, config) {
   if (!canvas || !window.Chart) return null;
@@ -258,17 +276,26 @@ export function setupChartDefaults() {
   C.defaults.animation.easing = 'easeOutQuart';
   C.defaults.plugins.legend.labels.usePointStyle = true;
   C.defaults.plugins.legend.labels.boxWidth = 8;
-  C.defaults.plugins.tooltip.backgroundColor = '#1b2638';
+  // En oscuro el globo informativo se separa del fondo de la tarjeta con un tono más claro y un borde
+  C.defaults.plugins.tooltip.backgroundColor = esOscuro() ? '#2b3447' : '#1b2638';
+  C.defaults.plugins.tooltip.borderColor = esOscuro() ? '#3a4252' : 'transparent';
+  C.defaults.plugins.tooltip.borderWidth = esOscuro() ? 1 : 0;
+  // La paleta también pinta leyendas y barras HTML: su azul marino se aclara en oscuro.
+  // (Se llama antes de dibujar cada vista y al cambiar de tema, por eso basta con actualizarla aquí.)
+  PALETA[0] = colorTema(PALETA_BASE[0]);
+  COLOR.navy = colorTema('#23395d');
   C.defaults.plugins.tooltip.padding = 10;
   C.defaults.plugins.tooltip.cornerRadius = 10;
   C.defaults.plugins.tooltip.titleFont = { weight: '600' };
   C.defaults.maintainAspectRatio = false;
 }
-export const PALETA = ['#23395d', '#c99a3b', '#2f9e8f', '#c2577a', '#7c5cbf', '#e9883a', '#3a6ea5', '#7a8b3a', '#9aa3b2', '#5b7db1', '#d4a35b', '#4fb3a3', '#b07aa1'];
+const PALETA_BASE = ['#23395d', '#c99a3b', '#2f9e8f', '#c2577a', '#7c5cbf', '#e9883a', '#3a6ea5', '#7a8b3a', '#9aa3b2', '#5b7db1', '#d4a35b', '#4fb3a3', '#b07aa1'];
+export const PALETA = [...PALETA_BASE];
 export const COLOR = { ingreso: '#2f9e6e', gasto: '#d4515f', navy: '#23395d', gold: '#c99a3b' };
 
 // Anillo de progreso SVG
 export function ring(pct, color = '#23395d', size = 64, stroke = 7) {
+  color = colorTema(color);
   const r = (size - stroke) / 2, c = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(1, pct));
   const over = pct > 1;
@@ -282,6 +309,7 @@ export function ring(pct, color = '#23395d', size = 64, stroke = 7) {
 // Mini gráfico de línea (sparkline) SVG
 export function sparkline(values, color = '#c99a3b', w = 120, h = 36) {
   if (!values.length) return '';
+  color = colorTema(color);
   const min = Math.min(...values), max = Math.max(...values);
   const span = max - min || 1;
   const pts = values.map((v, i) => [(i / (values.length - 1 || 1)) * w, h - 3 - ((v - min) / span) * (h - 6)]);
