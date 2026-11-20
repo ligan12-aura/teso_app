@@ -128,6 +128,7 @@ const TEMAS = {
       <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Lo ven el administrador, el tesorero, el pastor y la secretaría.</p>
       <ul class="hp-list">
         <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b>. En el resumen de diezmos cuenta como activo hasta el mes anterior a la baja, y desde ahí deja de contar; su historial se conserva. Un miembro con diezmos no se puede eliminar: se marca inactivo.</li>
+        <li><b>Trasladado a otra iglesia:</b> en la ficha elige el estado “Trasladado a otra iglesia”, la <b>fecha del traslado</b> (obligatoria) y la iglesia de destino. Sus diezmos cuentan en la estadística mientras fue miembro (hasta el mes anterior al traslado) y desde ahí deja de contarse, sin aparecer como que dejó de diezmar. También sale de la asistencia, los discipulados y los listados de ministerios. Filtra a los trasladados con “Trasladados”.</li>
         <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
         <li><b>💍 Matrimonio:</b> al elegir el cónyuge, ambos quedan unidos. Al registrar diezmos, el matrimonio aparece en una sola fila y su diezmo cuenta para los dos hermanos.</li>
         <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>
@@ -287,6 +288,7 @@ TEMAS.secretaria = [
     <p>Registro de los miembros de la iglesia con su estado y datos de contacto. Lo ven el administrador, el tesorero, el pastor y la secretaría.</p>
     <ul class="hp-list">
       <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b> (desde cuándo no asiste) y su ficha se conserva. Si vuelve, márcalo activo otra vez.</li>
+      <li><b>Trasladado a otra iglesia:</b> elige ese estado en la ficha con la fecha del traslado y la iglesia de destino. Deja de aparecer en la asistencia y los discipulados, y su ficha se conserva.</li>
       <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
       <li><b>💍 Matrimonio:</b> al elegir el cónyuge, ambos quedan unidos en sus fichas.</li>
       <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>

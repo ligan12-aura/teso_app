@@ -23,7 +23,7 @@ var TesoCore = (function () {
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
-    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil'],
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil', 'trasladoA'],
     Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId'],
     // Listado propio de un ministerio (p. ej. jóvenes): pueden o no ser miembros de la iglesia
     Integrantes: ['id', 'ministerioId', 'nombre', 'celular', 'email', 'fechaNacimiento', 'miembroId', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
@@ -1263,20 +1263,23 @@ var TesoCore = (function () {
       var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim();
       if (!nombre) throw TesoError('Escribe el nombre del miembro');
       if (nombre.length > 80) throw TesoError('El nombre es demasiado largo');
-      var estado = p.estado === 'inactivo' ? 'inactivo' : 'activo';
+      // trasladado = se fue a otra iglesia: deja de contar desde la fecha de traslado (fechaBaja)
+      var estado = p.estado === 'inactivo' || p.estado === 'trasladado' ? p.estado : 'activo';
       var fn = String(p.fechaNacimiento || '').trim();
       if (fn && (!isDate(fn) || fn > env.today() || fn < '1900-01-01')) throw TesoError('Fecha de nacimiento inválida');
       var email = String(p.email || '').trim();
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw TesoError('El correo no parece válido');
       // Fecha de baja: desde cuándo dejó de asistir (solo para inactivos)
-      var baja = estado === 'inactivo' ? String(p.fechaBaja || '').trim() : '';
-      if (baja && (!isDate(baja) || baja > env.today() || baja < '2000-01-01')) throw TesoError('Fecha de baja inválida');
+      var baja = estado !== 'activo' ? String(p.fechaBaja || '').trim() : '';
+      if (baja && (!isDate(baja) || baja > env.today() || baja < '1900-01-01')) throw TesoError(estado === 'trasladado' ? 'Fecha de traslado inválida' : 'Fecha de baja inválida');
+      if (estado === 'trasladado' && !baja) throw TesoError('Indica la fecha del traslado: sus diezmos cuentan hasta esa fecha');
       // Fecha de ingreso: desde cuándo es miembro (vacía = siempre contó). No cuenta en meses anteriores.
       var ingreso = String(p.fechaIngreso || '').trim();
       if (ingreso && (!isDate(ingreso) || ingreso > env.today() || ingreso < '1900-01-01')) throw TesoError('Fecha de ingreso inválida');
-      if (ingreso && baja && baja < ingreso) throw TesoError('La fecha de baja no puede ser anterior a la de ingreso');
+      if (ingreso && baja && baja < ingreso) throw TesoError('La fecha de ' + (estado === 'trasladado' ? 'traslado' : 'baja') + ' no puede ser anterior a la de ingreso');
       return {
         fechaBaja: baja,
+        trasladoA: estado === 'trasladado' ? String(p.trasladoA || '').replace(/\s+/g, ' ').trim().slice(0, 100) : '',
         fechaIngreso: ingreso,
         // Habilitado para diezmar: 'no' = estudiante o sin ingresos (no cuenta en la estadística de diezmos)
         habilitadoDiezmo: p.habilitadoDiezmo === 'no' ? 'no' : 'si',
@@ -1331,6 +1334,11 @@ var TesoCore = (function () {
         r = insert('Miembros', Object.assign(d, { id: uid(), creadoEn: now, actualizadoEn: now, conyugeId: '' }));
       }
       if (p.conyugeId !== undefined) r = vincularConyuge(r.id, p.conyugeId);
+      // al trasladarse deja de aparecer en los discipulados y en los listados de ministerios (queda inactivo ahí)
+      if (r.estado === 'trasladado' && (!p.id || previo.estado !== 'trasladado')) {
+        all('PersonasHogar').forEach(function (x) { if (x.miembroId === r.id && toBool(x.activo)) update('PersonasHogar', x.id, { activo: false, actualizadoEn: now }); });
+        all('Integrantes').forEach(function (i) { if (i.miembroId === r.id && toBool(i.activo)) update('Integrantes', i.id, { activo: false, actualizadoEn: now }); });
+      }
       var enl = enlazarIntegrantes(user, r, p.integranteId, !p.id);
       if (enl.completar) r = update('Miembros', r.id, enl.completar);
       return Object.assign({}, r, { enlazados: enl.nombres });

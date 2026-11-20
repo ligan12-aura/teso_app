@@ -111,7 +111,7 @@ export function importarHistorialDiezmos(ctx) {
   const miembros = [...data.miembros].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const existentes = new Set(data.diezmos.map((d) => d.refId).filter(Boolean));
   let filas = [];
-  const opciones = (sel) => `<option value="">— Sin asignar —</option>${miembros.map((m) => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.nombre)}${m.estado === 'inactivo' ? ' (inactivo)' : ''}</option>`).join('')}`;
+  const opciones = (sel) => `<option value="">— Sin asignar —</option>${miembros.map((m) => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.nombre)}${m.estado === 'inactivo' ? ' (inactivo)' : m.estado === 'trasladado' ? ' (trasladado)' : ''}</option>`).join('')}`;
   return modal({
     title: 'Importar historial de diezmos',
     wide: true,
