@@ -148,7 +148,7 @@ const TEMAS = {
       </ul>
       <h4>Discipulados en hogares</h4>
       <ul class="hp-list">
-        <li>Crea cada grupo con ${btn('plus', 'Nuevo grupo')}: nombre, sector, día y encargado. El <b>Resumen</b> muestra todos los grupos con su última reunión, promedio y cuántos requieren atención.</li>
+        <li>Crea cada grupo con ${btn('plus', 'Nuevo grupo')}: nombre, sector, día y sus <b>líderes</b>, elegidos de la lista de Miembros: generalmente un matrimonio (al elegir a alguien casado se propone su cónyuge), o una sola persona. Los líderes quedan también como integrantes del grupo. El <b>Resumen</b> muestra todos los grupos con su última reunión, promedio y cuántos requieren atención.</li>
         <li>En el grupo, en <b>Personas del grupo</b>: ${btn('users', 'Agregar miembros')} los elige de la lista de Miembros (puedes marcar varios y filtrar “solo sin grupo”); ${btn('plus', 'No miembro')} agrega a quien participa sin ser miembro; ${btn('user', 'Visita')} agrega una visita con su celular y notas.</li>
         <li>${btn('check', 'Tomar asistencia')} funciona igual que en los cultos. Si llega alguien nuevo, escribe su nombre en “¿Vino alguien nuevo?” y queda como visita del grupo; después tócala para anotar su contacto o pasarla a integrante.</li>
         <li>Quien ya tiene asistencias no se quita del grupo: desmárcalo como activo. Un grupo con asistencias tampoco se elimina: se marca inactivo.</li>

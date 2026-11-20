@@ -20,7 +20,7 @@ var PROP_SECRET = 'TOKEN_SECRET';
 var PROP_SCHEMA = 'SCHEMA_VERSION';
 // Súbelo cada vez que cambien las columnas (TABLES) o la hoja Resumen:
 // el servidor se actualiza solo en la siguiente solicitud, sin ejecutar setup().
-var SCHEMA_VERSION = '15';
+var SCHEMA_VERSION = '17';
 
 // =================================================================
 // Instalación inicial — ejecutar UNA vez desde el editor
@@ -54,7 +54,8 @@ function setup() {
   var usuarios = new SheetStore_(ss).read('Usuarios');
   if (!usuarios.length) {
     var salt = Utilities.getUuid().replace(/-/g, '').slice(0, 14);
-    var pass = 'redentor2026';
+    // Contraseña inicial aleatoria (el código es público: nunca una fija). Se muestra solo en el registro de ejecución.
+    var pass = Utilities.getUuid().replace(/-/g, '').slice(0, 12);
     new SheetStore_(ss).insert('Usuarios', {
       id: Utilities.getUuid().replace(/-/g, '').slice(0, 14),
       nombre: 'Tesorero', usuario: 'tesorero', rol: 'tesorero', ministerioId: '', email: '',
@@ -204,7 +205,19 @@ function buildEnv_() {
     now: function () { return new Date().toISOString(); },
     today: function () { return Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd'); },
     secret: props.getProperty(PROP_SECRET),
+    limites: limites_(),
     extra: { sheetUrl: ss.getUrl() }
+  };
+}
+
+// Contador de intentos fallidos de ingreso (caché del servidor, se borra solo)
+function limites_() {
+  var cache = CacheService.getScriptCache();
+  var k = function (clave) { return 'lim_' + sha256Hex_(clave).slice(0, 40); };
+  return {
+    get: function (clave) { return cache.get(k(clave)); },
+    put: function (clave, valor, seg) { cache.put(k(clave), valor, seg); },
+    remove: function (clave) { cache.remove(k(clave)); }
   };
 }
 

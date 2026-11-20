@@ -16,7 +16,7 @@ var TesoCore = (function () {
   // Esquema de datos (cada tabla = una hoja del Excel/Google Sheet)
   // ---------------------------------------------------------------
   var TABLES = {
-    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn'],
+    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde'],
     Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn', 'presupuestoMensual', 'actividades'],
     MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo'],
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'actividadId'],
@@ -37,7 +37,7 @@ var TesoCore = (function () {
     AsistenciasMinisterios: ['id', 'ministerioId', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn'],
     Visitas: ['id', 'nombre', 'celular', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
     // Discipulados en hogares: grupos por sector, sus personas (miembros enlazados, no miembros y visitas) y asistencias
-    GruposHogar: ['id', 'nombre', 'sector', 'encargado', 'dia', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
+    GruposHogar: ['id', 'nombre', 'sector', 'encargado', 'dia', 'notas', 'activo', 'creadoEn', 'actualizadoEn', 'lideres'],
     PersonasHogar: ['id', 'grupoId', 'tipo', 'miembroId', 'nombre', 'celular', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
     AsistenciasHogar: ['id', 'grupoId', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn']
   };
@@ -134,10 +134,31 @@ var TesoCore = (function () {
     });
     return out;
   }
+  // Contraseñas nuevas: 'v2$' + 3000 vueltas de SHA-256 (más lento de adivinar).
+  // Las antiguas (200 vueltas, sin prefijo) se siguen aceptando y se actualizan al ingresar.
+  var PASS_VUELTAS = 3000;
+  var PASS_MIN = 8;
   function hashPassword(pass, salt, sha256Hex) {
+    var h = salt + '|' + pass;
+    for (var i = 0; i < PASS_VUELTAS; i++) h = sha256Hex(h + salt);
+    return 'v2$' + h;
+  }
+  function hashLegado(pass, salt, sha256Hex) {
     var h = salt + '|' + pass;
     for (var i = 0; i < 200; i++) h = sha256Hex(h + salt);
     return h;
+  }
+  function passwordOk(pass, u, sha256Hex) {
+    var hash = String(u.hash || '');
+    var calc = hash.indexOf('v2$') === 0 ? hashPassword(pass, u.salt, sha256Hex) : hashLegado(pass, u.salt, sha256Hex);
+    return iguales(calc, hash);
+  }
+  // Comparación en tiempo constante (no revela cuántos caracteres coinciden)
+  function iguales(a, b) {
+    a = String(a); b = String(b);
+    var dif = a.length ^ b.length;
+    for (var i = 0; i < Math.max(a.length, b.length); i++) dif |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+    return dif === 0;
   }
   // Roles: administrador, tesorero y pastor = acceso completo; secretaria = solo miembros; lider = su ministerio
   var ROLES = ['admin', 'tesorero', 'pastor', 'secretaria', 'lider'];
@@ -192,38 +213,71 @@ var TesoCore = (function () {
     function uid() { return String(env.uuid()).replace(/-/g, '').slice(0, 14); }
 
     // ---------------- Autenticación ----------------
+    var SESION_MS = 7 * 24 * 3600 * 1000; // 7 días
     function signToken(u) {
-      var exp = Date.now() + 7 * 24 * 3600 * 1000; // 7 días
-      var p = u.id + '.' + exp + '.' + u.hash.slice(0, 10);
+      var exp = Date.now() + SESION_MS;
+      var p = u.id + '.' + exp + '.' + u.hash.slice(-10);
       return p + '.' + env.crypto.hmacHex(p, env.secret);
     }
     function verifyToken(tok) {
       var parts = String(tok || '').split('.');
       if (parts.length !== 4) throw TesoError('Debes iniciar sesión', 'AUTH');
       var p = parts.slice(0, 3).join('.');
-      if (env.crypto.hmacHex(p, env.secret) !== parts[3]) throw TesoError('Sesión inválida', 'AUTH');
+      if (!iguales(env.crypto.hmacHex(p, env.secret), parts[3])) throw TesoError('Sesión inválida', 'AUTH');
       if (+parts[1] < Date.now()) throw TesoError('Tu sesión expiró, vuelve a ingresar', 'AUTH');
       var u = find('Usuarios', parts[0]);
       if (!u || !u.activo) throw TesoError('Usuario no habilitado', 'AUTH');
-      if (u.hash.slice(0, 10) !== parts[2]) throw TesoError('Tu contraseña cambió, vuelve a ingresar', 'AUTH');
+      if (!iguales(u.hash.slice(-10), parts[2])) throw TesoError('Tu contraseña cambió, vuelve a ingresar', 'AUTH');
+      // "Cerrar sesión en todos los dispositivos": vale solo lo emitido después de esa fecha
+      if (Number(u.sesionDesde) && (+parts[1] - SESION_MS) < Number(u.sesionDesde)) throw TesoError('Se cerró la sesión en todos los dispositivos, vuelve a ingresar', 'AUTH');
       return u;
     }
 
+    // Límite de intentos: 5 fallos seguidos bloquean ese usuario por 15 minutos.
+    // env.limites = { get(clave), put(clave, valor, segundos), remove(clave) } (opcional, en el servidor usa CacheService)
+    var MAX_INTENTOS = 5, BLOQUEO_SEG = 15 * 60;
+    function exigirNoBloqueado(clave) {
+      if (env.limites && (Number(env.limites.get(clave)) || 0) >= MAX_INTENTOS) {
+        throw TesoError('Demasiados intentos fallidos. Espera 15 minutos antes de volver a intentar.', 'BLOQUEO');
+      }
+    }
+    function registrarFallo(clave) {
+      if (env.limites) env.limites.put(clave, String((Number(env.limites.get(clave)) || 0) + 1), BLOQUEO_SEG);
+    }
+    function limpiarFallos(clave) { if (env.limites) env.limites.remove(clave); }
+
     function login(_, p) {
-      var usuario = String(p.usuario || '').trim().toLowerCase();
+      var usuario = String(p.usuario || '').trim().toLowerCase().slice(0, 60);
+      var clave = 'login:' + usuario;
+      exigirNoBloqueado(clave);
       var u = all('Usuarios').filter(function (x) { return x.usuario === usuario; })[0];
-      if (!u || !u.activo || hashPassword(String(p.password || ''), u.salt, env.crypto.sha256Hex) !== u.hash) {
+      if (!u || !u.activo || !passwordOk(String(p.password || ''), u, env.crypto.sha256Hex)) {
+        registrarFallo(clave);
         throw TesoError('Usuario o contraseña incorrectos');
+      }
+      limpiarFallos(clave);
+      // Contraseña con el formato antiguo: se guarda con el nuevo (más resistente)
+      if (String(u.hash).indexOf('v2$') !== 0) {
+        var salt = uid();
+        u = update('Usuarios', u.id, { salt: salt, hash: hashPassword(String(p.password || ''), salt, env.crypto.sha256Hex) });
       }
       return { token: signToken(u), user: publicUser(u) };
     }
 
     function me(user) { return { user: publicUser(user) }; }
 
+    function cerrarSesiones(user) {
+      update('Usuarios', user.id, { sesionDesde: String(Date.now()) });
+      return { ok: true };
+    }
+
     function cambiarPassword(user, p) {
-      if (hashPassword(String(p.actual || ''), user.salt, env.crypto.sha256Hex) !== user.hash) throw TesoError('La contraseña actual no es correcta');
+      var clave = 'pass:' + user.id;
+      exigirNoBloqueado(clave);
+      if (!passwordOk(String(p.actual || ''), user, env.crypto.sha256Hex)) { registrarFallo(clave); throw TesoError('La contraseña actual no es correcta'); }
+      limpiarFallos(clave);
       var nueva = String(p.nueva || '');
-      if (nueva.length < 6) throw TesoError('La nueva contraseña debe tener al menos 6 caracteres');
+      if (nueva.length < PASS_MIN) throw TesoError('La nueva contraseña debe tener al menos ' + PASS_MIN + ' caracteres');
       var salt = uid();
       var u = update('Usuarios', user.id, { salt: salt, hash: hashPassword(nueva, salt, env.crypto.sha256Hex), debeCambiarPass: false });
       return { token: signToken(u), user: publicUser(u) };
@@ -357,13 +411,32 @@ var TesoCore = (function () {
       if (p.id && !actual) throw TesoError('Ese grupo ya no existe');
       var dup = all('GruposHogar').some(function (g) { return normalNombre(g.nombre) === normalNombre(nombre) && g.id !== p.id; });
       if (dup) throw TesoError('Ya hay un grupo llamado ' + nombre);
+      // Líderes: uno o dos miembros (generalmente un matrimonio). "encargado" guarda sus nombres para el respaldo.
+      var lideres = [];
+      (Array.isArray(p.lideres) ? p.lideres : String(p.lideres || '').split(',')).map(String).forEach(function (id) {
+        id = id.trim();
+        if (!id || lideres.indexOf(id) >= 0) return;
+        if (!find('Miembros', id)) throw TesoError('Uno de los líderes ya no está en el registro de miembros');
+        lideres.push(id);
+      });
+      if (lideres.length > 2) throw TesoError('Elige como máximo dos líderes');
       var now = env.now();
       var d = {
-        nombre: nombre, sector: String(p.sector || '').trim().slice(0, 60), encargado: String(p.encargado || '').trim().slice(0, 80),
+        nombre: nombre, sector: String(p.sector || '').trim().slice(0, 60),
+        lideres: lideres.join(','),
+        encargado: lideres.length ? lideres.map(function (id) { return find('Miembros', id).nombre; }).join(' y ') : String(p.encargado || '').trim().slice(0, 80),
         dia: String(p.dia || '').trim().slice(0, 40), notas: String(p.notas || '').trim().slice(0, 300),
         activo: p.activo === undefined ? true : !!p.activo, actualizadoEn: now
       };
-      return actual ? update('GruposHogar', actual.id, d) : insert('GruposHogar', Object.assign(d, { id: uid(), creadoEn: now }));
+      var g = actual ? update('GruposHogar', actual.id, d) : insert('GruposHogar', Object.assign(d, { id: uid(), creadoEn: now }));
+      // los líderes también son parte del grupo (aparecen al tomar asistencia)
+      var del = all('PersonasHogar').filter(function (x) { return x.grupoId === g.id; });
+      lideres.forEach(function (id) {
+        var ya = del.filter(function (x) { return x.miembroId === id; })[0];
+        if (!ya) insert('PersonasHogar', { id: uid(), grupoId: g.id, tipo: 'integrante', miembroId: id, nombre: '', celular: '', notas: '', activo: true, creadoEn: now, actualizadoEn: now });
+        else if (!toBool(ya.activo)) update('PersonasHogar', ya.id, { activo: true, actualizadoEn: now });
+      });
+      return g;
     }
     function deleteGrupoHogar(user, p) {
       var g = find('GruposHogar', p.id);
@@ -1585,10 +1658,16 @@ var TesoCore = (function () {
     function getArchivo(user, p) {
       var id = String(p.id || '');
       if (!id) throw TesoError('Archivo inválido');
-      if (!esAdmin(user)) {
-        var ok = all('MovimientosMinisterios').some(function (m) { return m.archivoId === id && m.ministerioId === user.ministerioId; });
-        if (!ok) throw TesoError('No tienes permiso para ver este archivo', 'FORBIDDEN');
+      var ok;
+      if (esAdmin(user)) {
+        // Solo archivos registrados en la app (no cualquier archivo del Drive de la cuenta que publicó el servidor)
+        ok = ['MovimientosMinisterios', 'MovimientosGenerales', 'Diezmos'].some(function (t) {
+          return all(t).some(function (r) { return r.archivoId === id; });
+        });
+      } else {
+        ok = all('MovimientosMinisterios').some(function (m) { return m.archivoId === id && m.ministerioId === user.ministerioId; });
       }
+      if (!ok) throw TesoError('No tienes permiso para ver este archivo', 'FORBIDDEN');
       return files.get(id);
     }
 
@@ -1634,7 +1713,7 @@ var TesoCore = (function () {
       if (p.id === user.id && user.rol === 'admin' && d.rol !== 'admin') throw TesoError('No puedes quitarte a ti mismo el rol de administrador: pídeselo a otro administrador');
       var pass = String(p.password || '');
       if (pass) {
-        if (pass.length < 6) throw TesoError('La contraseña debe tener al menos 6 caracteres');
+        if (pass.length < PASS_MIN) throw TesoError('La contraseña debe tener al menos ' + PASS_MIN + ' caracteres');
         d.salt = uid();
         d.hash = hashPassword(pass, d.salt, env.crypto.sha256Hex);
         d.debeCambiarPass = true;
@@ -1700,8 +1779,9 @@ var TesoCore = (function () {
     // ---------------- Router ----------------
     var T = ADMIN;
     var ACTIONS = {
-      login: { fn: login, pub: true },
+      login: { fn: login, pub: true, write: true },
       me: { fn: me, pending: true },
+      cerrarSesiones: { fn: cerrarSesiones, pending: true, write: true },
       cambiarPassword: { fn: cambiarPassword, pending: true },
       getData: { fn: getData },
       addMovMinisterio: { fn: addMovMinisterio, write: true },
@@ -1762,7 +1842,13 @@ var TesoCore = (function () {
         if (a.role && a.role.indexOf(user.rol) < 0) throw TesoError('No tienes permiso para esta acción', 'FORBIDDEN');
         return { ok: true, data: a.fn(user, payload || {}) };
       } catch (e) {
-        return { ok: false, error: e && e.message ? e.message : String(e), code: (e && e.code) || 'ERR' };
+        // Errores propios (TesoError, con código): se muestra el mensaje. Otros (Drive, Sheets, etc.):
+        // se registran en el servidor y la página recibe un mensaje genérico sin detalles internos.
+        if (!e || !e.code) {
+          try { console.error(action, e && e.stack ? e.stack : e); } catch (x) { /* sin consola */ }
+          return { ok: false, error: 'Ocurrió un error inesperado. Intenta de nuevo en unos minutos.', code: 'ERR' };
+        }
+        return { ok: false, error: e.message, code: e.code };
       }
     }
 

@@ -365,7 +365,8 @@ function seed() {
   });
   // Discipulados en hogares: dos grupos por sector, los jueves; uno con una visita
   [['Discipulado Norte', 'Norte', 'Jueves 19:30', 0], ['Discipulado Centro', 'Centro', 'Miércoles 20:00', 1]].forEach(([nombre, sector, dia, k]) => {
-    const g = { id: id(), nombre, sector, encargado: activosM[k * 6]?.nombre || '', dia, notas: '', activo: true, creadoEn: now, actualizadoEn: now };
+    const lid = activosM[k * 6];
+    const g = { id: id(), nombre, sector, lideres: lid ? lid.id : '', encargado: lid?.nombre || '', dia, notas: '', activo: true, creadoEn: now, actualizadoEn: now };
     db.GruposHogar.push(g);
     const gente = activosM.slice(k * 6, k * 6 + 6).map((m) => ({ id: id(), grupoId: g.id, tipo: 'integrante', miembroId: m.id, nombre: '', celular: '', notas: '', activo: true, creadoEn: now, actualizadoEn: now }));
     gente.push({ id: id(), grupoId: g.id, tipo: 'integrante', miembroId: '', nombre: k ? 'Elena Fuentes' : 'Pablo Rivas', celular: '', notas: 'Vecino del sector', activo: true, creadoEn: now, actualizadoEn: now });

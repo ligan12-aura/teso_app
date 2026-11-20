@@ -506,11 +506,11 @@ function renderHogar(root, ctx, grupoId, cabecera, redibujar) {
         <header class="card-head wrap"><div><h3>${icon('users', 16)} Discipulados en hogares</h3><p class="muted">Grupos por sector. Elige un grupo para tomar su asistencia y ver sus personas.</p></div>
           ${grupos.some((x) => !x.activo) ? `<label class="check"><input type="checkbox" data-inactivos ${verInactivos ? 'checked' : ''}> Ver grupos inactivos</label>` : ''}</header>
         ${filas.length ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Grupo</th><th class="hide-sm">Sector</th><th class="hide-sm">Encargado</th><th class="num">Personas</th><th>Última reunión</th><th class="num">Promedio</th><th class="num">Atención</th></tr></thead>
+          <thead><tr><th>Grupo</th><th class="hide-sm">Sector</th><th class="hide-sm">Líderes</th><th class="num">Personas</th><th>Última reunión</th><th class="num">Promedio</th><th class="num">Atención</th></tr></thead>
           <tbody>${filas.map((r) => `<tr class="asist-fila${r.x.activo ? '' : ' inactive'}" data-ir="${r.x.id}" tabindex="0">
             <td><b>${esc(r.x.nombre)}</b>${r.x.dia ? `<br><small class="muted">${esc(r.x.dia)}</small>` : ''}</td>
             <td class="hide-sm">${esc(r.x.sector) || '<span class="muted">—</span>'}</td>
-            <td class="hide-sm">${esc(r.x.encargado) || '<span class="muted">—</span>'}</td>
+            <td class="hide-sm">${esc(lideresDe(data, r.x)) || '<span class="muted">—</span>'}</td>
             <td class="num">${r.personas}${r.visitas ? `<br><small class="muted">+${r.visitas} visita${r.visitas === 1 ? '' : 's'}</small>` : ''}</td>
             <td class="nowrap">${r.ult ? `${fecha(r.ult.fecha)}<br><small class="muted">${String(r.ult.presentes || '').split(',').filter(Boolean).length} presentes</small>` : '<span class="muted">Sin registros</span>'}</td>
             <td class="num">${r.rec ? r.prom : '—'}</td>
@@ -529,7 +529,7 @@ function renderHogar(root, ctx, grupoId, cabecera, redibujar) {
   const cfg = ambitoHogar(data, g);
   const info = `<article class="card hogar-info">
       <div><b>${esc(g.nombre)}</b>${g.activo ? '' : ' <span class="badge st-open">Inactivo</span>'}
-        <small class="muted">${[g.sector && `Sector ${g.sector}`, g.encargado && `Encargado: ${g.encargado}`, g.dia].filter(Boolean).map(esc).join(' · ') || 'Sin sector ni encargado'}</small>
+        <small class="muted">${[g.sector && `Sector ${g.sector}`, lideresDe(data, g) && `${idsLideres(g).length > 1 ? 'Líderes' : 'Líder'}: ${lideresDe(data, g)}`, g.dia].filter(Boolean).map(esc).join(' · ') || 'Sin sector ni líderes'}</small>
         ${g.notas ? `<small class="muted">${esc(g.notas)}</small>` : ''}</div>
       <button type="button" class="btn btn-ghost btn-sm" data-editar-grupo>${icon('edit', 15)} Editar grupo</button>
     </article>`;
@@ -549,7 +549,7 @@ function renderHogar(root, ctx, grupoId, cabecera, redibujar) {
       ${ph.length ? `<div class="table-wrap"><table class="table">
         <thead><tr><th>Nombre</th><th>Tipo</th><th>Celular</th><th class="hide-sm">Notas</th></tr></thead>
         <tbody>${ph.map((x) => `<tr class="asist-fila${x.activo ? '' : ' inactive'}" data-persona="${x.id}" tabindex="0" title="Editar">
-          <td><b>${esc(x.nombre)}</b> ${icon('edit', 13)}${x.activo ? '' : ' <small class="muted">(inactivo)</small>'}</td>
+          <td><b>${esc(x.nombre)}</b> ${icon('edit', 13)}${x.miembroId && idsLideres(g).includes(x.miembroId) ? ' <span class="tag">Líder</span>' : ''}${x.activo ? '' : ' <small class="muted">(inactivo)</small>'}</td>
           <td>${tipoHogar(x) === 'miembro' ? '<span class="badge st-ok">Miembro</span>' : tipoHogar(x) === 'visita' ? '<span class="badge st-open">Visita</span>' : '<span class="badge st-obs">No miembro</span>'}</td>
           <td class="nowrap">${x.celular ? `<a class="link" href="tel:${esc(x.celular.replace(/[^\d+]/g, ''))}">${esc(x.celular)}</a>` : '<span class="muted">—</span>'}</td>
           <td class="hide-sm"><small class="muted">${esc(x.notas)}</small></td></tr>`).join('')}</tbody>
@@ -564,7 +564,19 @@ function renderHogar(root, ctx, grupoId, cabecera, redibujar) {
   });
 }
 
+// Nombres de los líderes del grupo (desde su ficha de Miembros; en grupos antiguos, el texto "encargado")
+const idsLideres = (g) => String(g?.lideres || '').split(',').filter(Boolean);
+function lideresDe(data, g) {
+  const nom = Object.fromEntries((data.miembros || []).map((m) => [m.id, m.nombre]));
+  const n = idsLideres(g).map((id) => nom[id]).filter(Boolean);
+  return n.length ? n.join(' y ') : g.encargado || '';
+}
+
 function editarGrupo(ctx, g = null) {
+  const miembros = (ctx.data.miembros || []).filter((m) => m.estado === 'activo' || idsLideres(g).includes(m.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const porId = Object.fromEntries(miembros.map((m) => [m.id, m]));
+  const [l1, l2] = idsLideres(g);
+  const opciones = (sel, vacio) => `<option value="">${vacio}</option>${miembros.map((m) => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.nombre)}${m.conyugeId && porId[m.conyugeId] ? ' 💍' : ''}</option>`).join('')}`;
   return modal({
     title: g ? 'Editar grupo' : 'Nuevo grupo de discipulado',
     body: `
@@ -573,12 +585,23 @@ function editarGrupo(ctx, g = null) {
         <label class="field"><span>Sector</span><input name="sector" maxlength="60" value="${esc(g?.sector || '')}" placeholder="Ej.: Norte, Centro, Pedro de Valdivia"></label>
         <label class="field"><span>Día y hora <small class="muted">(opcional)</small></span><input name="dia" maxlength="40" list="dias-hogar" value="${esc(g?.dia || '')}" placeholder="Ej.: Jueves 19:30"><datalist id="dias-hogar">${DIAS.map((d) => `<option value="${d}">`).join('')}</datalist></label>
       </div>
-      <label class="field"><span>Encargado(s) <small class="muted">(opcional)</small></span><input name="encargado" maxlength="80" value="${esc(g?.encargado || '')}" placeholder="Quién dirige el grupo"></label>
+      <div class="form-row">
+        <label class="field"><span>Líder del grupo</span><select name="lider1">${opciones(l1, '— Elegir de Miembros —')}</select></label>
+        <label class="field"><span>Segundo líder <small class="muted">(cónyuge u otro)</small></span><select name="lider2">${opciones(l2, '— Lo dirige solo —')}</select></label>
+      </div>
+      <p class="muted small" data-lider-ayuda>Generalmente es un matrimonio: al elegir a alguien casado (💍), su cónyuge se propone como segundo líder. Si lo dirige una sola persona, deja el segundo en “Lo dirige solo”. Los líderes quedan también como integrantes del grupo.</p>
+      ${!l1 && g?.encargado ? `<p class="muted small">Antes se anotó como encargado: <b>${esc(g.encargado)}</b>. Elige a los líderes de la lista de miembros.</p>` : ''}
       <label class="field"><span>Notas <small class="muted">(opcional)</small></span><input name="notas" maxlength="300" value="${esc(g?.notas || '')}" placeholder="Ej.: se reúnen en casa de la familia…"></label>
       ${g ? `<label class="check"><input type="checkbox" name="activo" ${g.activo ? 'checked' : ''}> Grupo activo</label>
       <p style="margin-top:12px"><button type="button" class="link-btn danger-link" data-eliminar>${icon('trash', 14)} Eliminar grupo</button> <small class="muted">Solo si aún no tiene asistencias; si no, desmarca “Grupo activo”.</small></p>` : ''}`,
     submitLabel: g ? 'Guardar' : 'Crear grupo',
     onOpen(f, { close } = {}) {
+      // al elegir a alguien casado, su cónyuge queda propuesto como segundo líder (se puede cambiar)
+      f.lider1.addEventListener('change', () => {
+        const m = porId[f.lider1.value];
+        if (m?.conyugeId && porId[m.conyugeId] && (!f.lider2.value || f.lider2.value === f.lider1.value)) f.lider2.value = m.conyugeId;
+        if (f.lider2.value === f.lider1.value) f.lider2.value = '';
+      });
       f.querySelector('[data-eliminar]')?.addEventListener('click', async () => {
         close?.(null);
         if (!(await confirmar(`¿Eliminar el grupo <b>${esc(g.nombre)}</b> y su lista de personas?`, { boton: 'Eliminar', danger: true }))) return;
@@ -586,7 +609,11 @@ function editarGrupo(ctx, g = null) {
       });
     },
     async onSubmit(f) {
-      const r = await call('saveGrupoHogar', { id: g?.id, nombre: f.nombre.value, sector: f.sector.value, dia: f.dia.value, encargado: f.encargado.value, notas: f.notas.value, activo: g ? f.activo.checked : true });
+      if (!f.lider1.value && f.lider2.value) { f.lider1.value = f.lider2.value; f.lider2.value = ''; }
+      if (!f.lider1.value) throw new Error('Elige al líder del grupo');
+      if (f.lider1.value === f.lider2.value) throw new Error('Elige dos personas distintas, o deja el segundo en “Lo dirige solo”');
+      const lideres = [f.lider1.value, f.lider2.value].filter(Boolean);
+      const r = await call('saveGrupoHogar', { id: g?.id, nombre: f.nombre.value, sector: f.sector.value, dia: f.dia.value, lideres, encargado: g?.encargado || '', notas: f.notas.value, activo: g ? f.activo.checked : true });
       toast(g ? 'Grupo actualizado' : 'Grupo creado: ahora agrega a sus integrantes');
       await ctx.refresh();
       if (!g) ctx.go(`asistencia/discipulados/${r.id}`);
