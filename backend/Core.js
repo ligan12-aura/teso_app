@@ -23,7 +23,7 @@ var TesoCore = (function () {
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
-    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil', 'trasladoA'],
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil', 'trasladoA', 'rut'],
     Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId'],
     // Listado propio de un ministerio (p. ej. jóvenes): pueden o no ser miembros de la iglesia
     Integrantes: ['id', 'ministerioId', 'nombre', 'celular', 'email', 'fechaNacimiento', 'miembroId', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
@@ -1359,8 +1359,31 @@ var TesoCore = (function () {
         nombre: nombre, estado: estado, fechaNacimiento: fn,
         celular: String(p.celular || '').trim().slice(0, 30), email: email.slice(0, 120),
         domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300),
-        estadoCivil: estadoCivilValido(p.estadoCivil)
+        estadoCivil: estadoCivilValido(p.estadoCivil),
+        rut: rutValido(p.rut)
       };
+    }
+    // RUT chileno: se guarda como 12.345.678-9 y se revisa el dígito verificador
+    function rutNormal(v) {
+      var t = String(v || '').toUpperCase().replace(/[^0-9K]/g, '');
+      if (t.length < 2) return '';
+      var cuerpo = t.slice(0, -1), dv = t.slice(-1);
+      if (!/^\d{6,8}$/.test(cuerpo)) return null;
+      var suma = 0, mul = 2;
+      for (var i = cuerpo.length - 1; i >= 0; i--) { suma += Number(cuerpo[i]) * mul; mul = mul === 7 ? 2 : mul + 1; }
+      var r = 11 - (suma % 11);
+      var esperado = r === 11 ? '0' : r === 10 ? 'K' : String(r);
+      if (dv !== esperado) return null;
+      return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+    }
+    function rutValido(v) {
+      if (!String(v || '').trim()) return '';
+      var r = rutNormal(v);
+      if (!r) throw TesoError('El RUT ' + String(v).trim() + ' no es válido (revisa el dígito verificador)');
+      return r;
+    }
+    function rutRepetido(rut, id) {
+      return rut ? all('Miembros').filter(function (m) { return m.rut === rut && m.id !== id; })[0] : null;
     }
     var ESTADOS_CIVILES = ['soltero', 'casado', 'conviviente', 'separado', 'divorciado', 'viudo'];
     function estadoCivilValido(v) {
@@ -1402,8 +1425,13 @@ var TesoCore = (function () {
         var previo = find('Miembros', p.id);
         if (!previo) throw TesoError('Miembro no encontrado');
         if (p.estadoCivil === undefined) d.estadoCivil = previo.estadoCivil || '';
+        if (p.rut === undefined) d.rut = previo.rut || '';
+        var otroRut = rutRepetido(d.rut, p.id);
+        if (otroRut) throw TesoError('Ese RUT ya está registrado para ' + otroRut.nombre);
         r = update('Miembros', p.id, Object.assign(d, { actualizadoEn: now }));
       } else {
+        var otroRutN = rutRepetido(d.rut, '');
+        if (otroRutN) throw TesoError('Ese RUT ya está registrado para ' + otroRutN.nombre);
         r = insert('Miembros', Object.assign(d, { id: uid(), creadoEn: now, actualizadoEn: now, conyugeId: '' }));
       }
       if (p.conyugeId !== undefined) r = vincularConyuge(r.id, p.conyugeId);
@@ -1508,6 +1536,7 @@ var TesoCore = (function () {
           usados[m.id] = true;
           var patch = {};
           ['fechaNacimiento', 'estadoCivil', 'domicilio', 'fechaIngreso', 'celular', 'email'].forEach(function (k) { if (d[k] && !m[k]) patch[k] = d[k]; });
+          if (d.rut && !m.rut && !rutRepetido(d.rut, m.id)) patch.rut = d.rut;
           if (d.notas && normalNombre(m.notas).indexOf(normalNombre(d.notas)) < 0) patch.notas = (m.notas ? m.notas + ' · ' : '') + d.notas;
           if (patch.fechaIngreso && m.fechaBaja && m.fechaBaja < patch.fechaIngreso) delete patch.fechaIngreso;
           if (it.renombrar && d.nombre !== m.nombre) {
@@ -1525,6 +1554,7 @@ var TesoCore = (function () {
         } else {
           var k = normalNombre(d.nombre);
           if (existentes[k]) throw TesoError(d.nombre + ' ya está en el registro: elígelo en vez de agregarlo como nuevo');
+          if (rutRepetido(d.rut, '')) d.rut = '';
           var id = uid();
           existentes[k] = id;
           nuevos.push(Object.assign(d, { id: id, conyugeId: '', creadoEn: now, actualizadoEn: now }));

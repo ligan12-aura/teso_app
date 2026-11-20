@@ -18,6 +18,18 @@ export function edad(fn, hoy) {
 }
 export const ESTADOS_CIVILES = [['soltero', 'Soltero/a'], ['casado', 'Casado/a'], ['conviviente', 'Conviviente civil'], ['separado', 'Separado/a'], ['divorciado', 'Divorciado/a'], ['viudo', 'Viudo/a']];
 export const estadoCivilTexto = (v) => (ESTADOS_CIVILES.find(([k]) => k === v) || [, ''])[1];
+// RUT chileno: normaliza a 12.345.678-9 y revisa el dígito verificador (null = inválido, '' = vacío)
+export function rutNormal(v) {
+  const t = String(v || '').toUpperCase().replace(/[^0-9K]/g, '');
+  if (t.length < 2) return '';
+  const cuerpo = t.slice(0, -1), dv = t.slice(-1);
+  if (!/^\d{6,8}$/.test(cuerpo)) return null;
+  let suma = 0, mul = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) { suma += +cuerpo[i] * mul; mul = mul === 7 ? 2 : mul + 1; }
+  const r = 11 - (suma % 11);
+  if (dv !== (r === 11 ? '0' : r === 10 ? 'K' : String(r))) return null;
+  return cuerpo.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '-' + dv;
+}
 const fichaCompleta = (m) => !!(m.fechaNacimiento && m.celular && m.email && m.domicilio);
 
 export function render(root, ctx) {
@@ -38,7 +50,7 @@ export function render(root, ctx) {
     if (filtros.estado === 'trasladados' && m.estado !== 'trasladado') return false;
     if (filtros.estado === 'incompletas' && fichaCompleta(m)) return false;
     if (filtros.estado === 'nohab' && m.habilitadoDiezmo !== 'no') return false;
-    return !q || `${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas}`.toLowerCase().includes(q);
+    return !q || `${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas} ${m.rut || ''} ${String(m.rut || '').replace(/\./g, '')}`.toLowerCase().includes(q);
   });
 
   root.innerHTML = `
@@ -67,7 +79,7 @@ export function render(root, ctx) {
       <div><h3>Listado</h3><p class="muted">${lista.length} de ${miembros.length}</p></div>
     </header>
     <div class="filters">
-      <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar por nombre, celular, correo…" value="${esc(filtros.q)}" data-q></div>
+      <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar por nombre, RUT, celular, correo…" value="${esc(filtros.q)}" data-q></div>
       <div class="seg seg-sm">
         ${[['todos', 'Todos'], ['activos', 'Activos'], ['inactivos', 'Inactivos'], ...(trasladados.length || filtros.estado === 'trasladados' ? [['trasladados', 'Trasladados']] : []), ['incompletas', 'Ficha incompleta'], ['nohab', 'No habilitados']].map(([k, l]) => `<label><input type="radio" name="fest" value="${k}" ${filtros.estado === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
@@ -77,7 +89,7 @@ export function render(root, ctx) {
       <tbody>${lista.map((m) => {
         const e = edad(m.fechaNacimiento, hoy);
         return `<tr class="${m.estado !== 'activo' ? 'inactive' : ''}">
-          <td><b>${esc(m.nombre)}</b>${m.estadoCivil ? ` <small class="muted">· ${estadoCivilTexto(m.estadoCivil)}</small>` : ''}${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.habilitadoDiezmo === 'no' ? '<br><span class="tag tag-gris">No habilitado para diezmar</span>' : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
+          <td><b>${esc(m.nombre)}</b>${m.estadoCivil ? ` <small class="muted">· ${estadoCivilTexto(m.estadoCivil)}</small>` : ''}${m.rut ? `<br><small class="muted">RUT ${esc(m.rut)}</small>` : ''}${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.habilitadoDiezmo === 'no' ? '<br><span class="tag tag-gris">No habilitado para diezmar</span>' : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
           <td>${m.estado === 'activo' ? `<span class="badge st-ok">Activo</span>${m.fechaIngreso ? `<br><small class="muted">desde ${fecha(m.fechaIngreso)}</small>` : ''}` : m.estado === 'trasladado' ? `<span class="badge st-obs">Trasladado</span><br><small class="muted">${m.trasladoA ? `a ${esc(m.trasladoA)} · ` : ''}${fecha(m.fechaBaja)}</small>` : `<span class="badge st-open">Inactivo</span>${m.fechaBaja ? `<br><small class="muted">desde ${fecha(m.fechaBaja)}</small>` : ''}`}</td>
           <td class="nowrap">${m.fechaNacimiento ? `${fecha(m.fechaNacimiento)}<br><small class="muted">${e} años</small>` : '<span class="falta">—</span>'}</td>
           <td class="nowrap">${m.celular ? `<a class="link" href="tel:${esc(m.celular.replace(/[^\d+]/g, ''))}">${esc(m.celular)}</a>` : '<span class="falta">—</span>'}</td>
@@ -112,7 +124,10 @@ export function editarMiembro(ctx, m = null) {
     body: `
       ${candidatos.length && esAdmin(ctx.user) ? `<label class="field"><span>¿Ya está en un listado de ministerio? <small class="muted">(opcional)</small></span><select name="integranteId"><option value="">— No —</option>${candidatos.map((i) => `<option value="${i.id}">${esc(i.nombre)} · ${esc(minNom[i.ministerioId] || '')}</option>`).join('')}</select><small class="hint">Al elegirlo, queda marcado como miembro en ese listado${m ? '' : ' y se copian sus datos'}.</small></label>` : ''}
       ${enlazadoEn.length ? `<p class="muted small">${icon('users', 13)} También está en el listado de ${esc(enlazadoEn.join(', '))}.</p>` : ''}
-      <label class="field"><span>Nombre y apellidos</span><input name="nombre" value="${esc(m?.nombre || '')}" required maxlength="80"></label>
+      <div class="form-row">
+        <label class="field"><span>Nombre y apellidos</span><input name="nombre" value="${esc(m?.nombre || '')}" required maxlength="80"></label>
+        <label class="field"><span>RUT <small class="muted">(opcional)</small></span><input name="rut" value="${esc(m?.rut || '')}" maxlength="12" placeholder="12.345.678-9" autocomplete="off"><small class="hint" data-rut-aviso></small></label>
+      </div>
       <div class="form-row">
         <label class="field"><span>Estado</span><select name="estado"><option value="activo" ${!m || m.estado === 'activo' ? 'selected' : ''}>Activo</option><option value="inactivo" ${m?.estado === 'inactivo' ? 'selected' : ''}>Inactivo (alejado)</option><option value="trasladado" ${m?.estado === 'trasladado' ? 'selected' : ''}>Trasladado a otra iglesia</option></select></label>
         <label class="field"><span>Miembro desde <small class="muted">(opcional)</small></span><input type="date" name="fechaIngreso" value="${esc(m?.fechaIngreso || '')}" max="${ctx.data.hoy}"><small class="hint">Déjalo vacío si ya era miembro: sus diezmos anteriores siguen contando.</small></label>
@@ -135,6 +150,14 @@ export function editarMiembro(ctx, m = null) {
       ${m && ctx.user?.rol !== 'secretaria' ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar miembro</button>` : ''}`,
     submitLabel: m ? 'Guardar ficha' : 'Agregar',
     onOpen(f, { close }) {
+      // RUT: se ordena al salir del campo y avisa si el dígito verificador no calza
+      f.rut.addEventListener('blur', () => {
+        const r = rutNormal(f.rut.value);
+        const aviso = f.querySelector('[data-rut-aviso]');
+        if (r) f.rut.value = r;
+        aviso.textContent = r === null ? 'Revisa el RUT: el dígito verificador no calza' : '';
+        aviso.classList.toggle('falta', r === null);
+      });
       // al elegir a alguien del listado de un ministerio, se completan los datos vacíos
       f.integranteId?.addEventListener('change', () => {
         const it = candidatos.find((i) => i.id === f.integranteId.value);
@@ -164,6 +187,7 @@ export function editarMiembro(ctx, m = null) {
     async onSubmit(f) {
       const d = formData(f);
       if (m) d.id = m.id;
+      if (d.rut && rutNormal(d.rut) === null) throw new Error('Revisa el RUT: el dígito verificador no calza');
       const r = await call('saveMiembro', d);
       const enl = r?.enlazados?.length ? ` · enlazado en el listado (${r.enlazados.join(', ')})` : '';
       toast((m ? 'Ficha actualizada' : 'Miembro agregado') + enl);
@@ -215,7 +239,7 @@ async function leerListado(file, hoy) {
 // completada con los datos de la hoja histórica
 function leerCompleto(act, hist, hoy) {
   const col = (ws, re) => { let c = 0; ws.getRow(1).eachCell((cell, j) => { if (!c && re.test(txtCelda(cell.value))) c = j; }); return c; };
-  const H = { nombre: col(hist, /^nombre/i) || 1, nac: col(hist, /nacimiento/i), civil: col(hist, /estado civil/i), dom: col(hist, /domicilio/i), ing: col(hist, /ingreso/i), obs: col(hist, /observ/i), estado: col(hist, /membres/i) };
+  const H = { nombre: col(hist, /^nombre/i) || 1, nac: col(hist, /nacimiento/i), civil: col(hist, /estado civil/i), dom: col(hist, /domicilio/i), ing: col(hist, /ingreso/i), obs: col(hist, /observ/i), estado: col(hist, /membres/i), rut: col(hist, /^r\.?u\.?t/i) };
   const historico = [];
   hist.eachRow((row, i) => {
     if (i === 1) return;
@@ -223,7 +247,9 @@ function leerCompleto(act, hist, hoy) {
     if (!nombre) return;
     const v = (c) => (c ? row.getCell(c).value : null);
     const obs = txtCelda(v(H.obs));
+    const rutCrudo = H.rut ? (typeof v(H.rut) === 'number' ? String(v(H.rut)) : txtCelda(v(H.rut))) : '';
     historico.push({
+      rut: rutNormal(rutCrudo) || '', rutMalo: rutCrudo && rutNormal(rutCrudo) === null ? rutCrudo : '',
       nombre, fechaNacimiento: fechaCelda(v(H.nac), hoy), estadoCivil: txtCelda(v(H.civil)), domicilio: txtCelda(v(H.dom)),
       fechaIngreso: fechaCelda(v(H.ing), hoy), notas: /[a-záéíóúñ]{3}/i.test(obs) ? obs : '', estadoHist: txtCelda(v(H.estado))
     });
@@ -242,7 +268,7 @@ function leerCompleto(act, hist, hoy) {
     filas.push({
       fila: i, nombre: nombrePropio(crudo), nombreHist: h.nombre && !exacto ? nombrePropio(h.nombre) : '',
       fechaNacimiento: fechaCelda(cNac ? row.getCell(cNac).value : null, hoy) || h.fechaNacimiento || '',
-      estadoCivil: h.estadoCivil || '', domicilio: h.domicilio || '', fechaIngreso: h.fechaIngreso || '', notas: h.notas || '', estadoHist: h.estadoHist || '',
+      estadoCivil: h.estadoCivil || '', domicilio: h.domicilio || '', fechaIngreso: h.fechaIngreso || '', notas: h.notas || '', estadoHist: h.estadoHist || '', rut: h.rut || '', rutMalo: h.rutMalo || '',
       // en la hoja de activos pero "Miembro inactivo" en el histórico: se inscribe como inactivo
       inactivo: /inactiv/i.test(h.estadoHist || '')
     });
@@ -258,7 +284,7 @@ function importarListado(ctx) {
     title: 'Importar listado de miembros',
     wide: true,
     body: `<p class="muted">Elige el Excel con el listado: el nombre en la primera columna y, si corresponde, una nota en la segunda. Quienes digan <b>“alejado/a”</b> quedan como <b>inactivos</b>; el resto como activos.</p>
-      <p class="muted small">También sirve la planilla <b>Listado de miembros</b> con las hojas “Miembros activos” y “Miembros histórico”: completa las fichas de los activos con su nacimiento, estado civil, domicilio, fecha de ingreso y observaciones.</p>
+      <p class="muted small">También sirve la planilla <b>Listado de miembros</b> con las hojas “Miembros activos” y “Miembros histórico”: completa las fichas de los activos con su RUT, nacimiento, estado civil, domicilio, fecha de ingreso y observaciones (solo lo que les falte).</p>
       <label class="upload"><input type="file" accept=".xlsx" data-file><div class="upload-ui"><div class="upload-cta">${icon('sheet', 22)}<span><strong>Elegir archivo Excel</strong><small>.xlsx · se lee en tu navegador</small></span></div></div></label>
       <div data-prev></div>`,
     submitLabel: 'Importar',
@@ -305,7 +331,7 @@ function importarListado(ctx) {
         const renombrar = !!f.querySelector('[data-renombrar]')?.checked;
         const activar = !!f.querySelector('[data-activar]')?.checked;
         const items = filas.filter((x) => x.destino !== 'omitir').map((x) => ({
-          id: x.destino === 'nuevo' ? '' : x.destino, nombre: x.nombre, fechaNacimiento: x.fechaNacimiento, estadoCivil: x.estadoCivil,
+          id: x.destino === 'nuevo' ? '' : x.destino, nombre: x.nombre, fechaNacimiento: x.fechaNacimiento, estadoCivil: x.estadoCivil, rut: x.rut,
           domicilio: x.domicilio, fechaIngreso: x.fechaIngreso, notas: x.notas, renombrar, activar, inactivo: !!x.inactivo
         }));
         const elegidos = items.filter((x) => x.id).map((x) => x.id);
@@ -347,7 +373,7 @@ function pintarCompleto(prev, ctx, filas) {
     else if (x.cands.length) { x.destino = 'omitir'; x.como = 'dudoso'; }
     else { x.destino = 'nuevo'; x.como = x.sugeridos.length ? 'sugerido' : 'nuevo'; }
   });
-  const CAMPOS = [['fechaNacimiento', 'nacimiento'], ['estadoCivil', 'estado civil'], ['domicilio', 'domicilio'], ['fechaIngreso', 'miembro desde'], ['notas', 'observación']];
+  const CAMPOS = [['rut', 'RUT'], ['fechaNacimiento', 'nacimiento'], ['estadoCivil', 'estado civil'], ['domicilio', 'domicilio'], ['fechaIngreso', 'miembro desde'], ['notas', 'observación']];
   const aCargar = (x) => {
     const m = nom[x.destino];
     return CAMPOS.filter(([k]) => x[k] && (!m || !m[k] || (k === 'notas' && !normalNombre(m.notas).includes(normalNombre(x.notas))))).map(([, l]) => l);
@@ -371,6 +397,7 @@ function pintarCompleto(prev, ctx, filas) {
         <div><b>${filas.filter((x) => x.destino === 'omitir').length}</b><span>sin cargar</span></div>
       </div>
       <div class="note">${icon('sparkle', 16)}<span>A quienes ya están en la app solo se les llenan los datos que <b>les faltan</b>; lo que ya tienen no se cambia. Revisa la columna “En la app”: ${usados.filter((x) => x.como === 'corto').length} se reconocieron por su nombre corto${filas.some(revisar) ? ` y ${filas.filter(revisar).length} en amarillo ${filas.filter(revisar).length === 1 ? 'tiene' : 'tienen'} un nombre parecido o más de una opción` : ''}. Si alguien ya está en la app con otro nombre, elige “Buscar otro miembro…”.</span></div>
+      ${filas.some((x) => x.rutMalo) ? `<div class="note warn">${icon('alert', 16)}<span>${filas.filter((x) => x.rutMalo).length} RUT de la planilla tienen el dígito verificador malo y no se cargan: ${filas.filter((x) => x.rutMalo).map((x) => `${esc(x.nombre)} (${esc(x.rutMalo)})`).join(', ')}. Corrígelos después en la ficha.</span></div>` : ''}
       ${filas.some((x) => x.como === 'dudoso') ? `<div class="note warn">${icon('alert', 16)}<span>${filas.filter((x) => x.como === 'dudoso').length} persona(s) calzan con más de un miembro: quedaron en “No cargar” hasta que elijas.</span></div>` : ''}
       <div class="imp-opciones">
         ${renombrables.length ? `<label class="check saldo-check"><input type="checkbox" data-renombrar checked> <span>Poner el nombre completo de la planilla a ${renombrables.length} miembro(s) <small class="muted">(p. ej. ${esc(nom[renombrables[0].destino].nombre)} → ${esc(renombrables[0].nombre)})</small></span></label>` : ''}
