@@ -1,5 +1,5 @@
 // Control de diezmos por hermano (solo tesorero)
-import { icon, esc, money, moneyShort, modal, formData, toast, confirmar, emptyState, fecha, chart, COLOR, pesos, formatoPesos, cap, mesLargo, fileToPayload, verArchivo } from '../ui.js';
+import { icon, esc, money, moneyShort, modal, formData, toast, confirmar, emptyState, fecha, chart, COLOR, pesos, formatoPesos, cap, mesLargo, fileToPayload, verArchivo, sinTildes } from '../ui.js';
 import { isDemo } from '../api.js';
 import { call } from '../api.js';
 import { editarMiembro } from './miembros.js';
@@ -158,8 +158,8 @@ export function render(root, ctx) {
   data.diezmos.forEach((d) => anios.add(Number(d.fecha.slice(0, 4))));
   const listaAnios = [...anios].sort((a, b) => b - a);
 
-  const q = vista.q.toLowerCase();
-  const lista = todos.filter((x) => (vista.inactivos || x.enPeriodo) && (vista.filtro === 'todos' || (x.enPeriodo && x.cat === vista.filtro)) && (!q || x.m.nombre.toLowerCase().includes(q)));
+  const q = sinTildes(vista.q);
+  const lista = todos.filter((x) => (vista.inactivos || x.enPeriodo) && (vista.filtro === 'todos' || (x.enPeriodo && x.cat === vista.filtro)) && (!q || sinTildes(x.m.nombre).includes(q)));
   const maxCelda = Math.max(1, ...todos.flatMap((x) => x.meses));
   const nomMes = cap(mesLargo(mes));
 
@@ -434,7 +434,7 @@ function registrarLote(ctx) {
       </div>
       <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general)<br><small class="muted">Desmárcalo solo si este dinero ya está incluido en un culto registrado.</small></span></label>
       <div class="search lote-buscar">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
-      <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(m.nombre.toLowerCase())}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><input class="lote-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
+      <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(sinTildes(m.nombre))}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><input class="lote-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
       <div class="culto-total"><span data-cant>0 hermanos</span> · Total: <strong data-total>$0</strong></div>`,
     submitLabel: 'Guardar diezmos',
     onOpen(f) {
@@ -446,7 +446,7 @@ function registrarLote(ctx) {
       };
       inputs.forEach((i) => { formatoPesos(i); i.addEventListener('input', upd); });
       f.querySelector('[data-buscar]').addEventListener('input', (e) => {
-        const t = e.target.value.toLowerCase();
+        const t = sinTildes(e.target.value);
         f.querySelectorAll('.lote-lista li').forEach((li) => { li.hidden = t && !li.dataset.nombre.includes(t); });
       });
     },

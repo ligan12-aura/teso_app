@@ -1,5 +1,5 @@
 // Registro de miembros de la iglesia (solo tesorero): estado y datos de contacto
-import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha, esAdmin } from '../ui.js';
+import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha, esAdmin, sinTildes } from '../ui.js';
 import { call } from '../api.js';
 import { cargarExcelJS } from '../planillaDescarga.js';
 
@@ -43,7 +43,7 @@ export function render(root, ctx) {
   const mesHoy = +hoy.slice(5, 7);
   const cumple = miembros.filter((m) => m.estado === 'activo' && m.fechaNacimiento && +m.fechaNacimiento.slice(5, 7) === mesHoy)
     .sort((a, b) => a.fechaNacimiento.slice(8).localeCompare(b.fechaNacimiento.slice(8)));
-  const q = filtros.q.toLowerCase();
+  const q = sinTildes(filtros.q);
   // RUT: también se encuentra escrito sin puntos ni guion (123456785 → 12.345.678-5)
   const qRut = q.replace(/[.\-\s]/g, '');
   const lista = miembros.filter((m) => {
@@ -52,7 +52,7 @@ export function render(root, ctx) {
     if (filtros.estado === 'trasladados' && m.estado !== 'trasladado') return false;
     if (filtros.estado === 'incompletas' && fichaCompleta(m)) return false;
     if (filtros.estado === 'nohab' && m.habilitadoDiezmo !== 'no') return false;
-    return !q || `${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas} ${m.rut || ''} ${String(m.rut || '').replace(/\./g, '')}`.toLowerCase().includes(q)
+    return !q || sinTildes(`${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas} ${m.rut || ''} ${String(m.rut || '').replace(/\./g, '')}`).includes(q)
       || (qRut.length >= 3 && /^[0-9k]+$/.test(qRut) && String(m.rut || '').toLowerCase().replace(/[^0-9k]/g, '').includes(qRut));
   });
 

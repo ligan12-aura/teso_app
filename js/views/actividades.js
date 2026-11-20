@@ -1,6 +1,6 @@
 // Listado de integrantes (p. ej. jóvenes) y actividades con cuota de un ministerio.
 // Lo usa el líder del ministerio y también tesorería/administración.
-import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, mesLargo, esAdmin } from '../ui.js';
+import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, mesLargo, esAdmin, sinTildes } from '../ui.js';
 import { rendicionDe } from '../calc.js';
 import { call } from '../api.js';
 import { abrirFormMovimiento } from './movform.js';
@@ -73,13 +73,13 @@ function renderIntegrantes(root, ctx, m, base, esTes) {
   const mesHoy = +hoy.slice(5, 7);
   const cumple = activos.filter((i) => i.fechaNacimiento && +i.fechaNacimiento.slice(5, 7) === mesHoy)
     .sort((a, b) => a.fechaNacimiento.slice(8).localeCompare(b.fechaNacimiento.slice(8)));
-  const q = filtros.q.toLowerCase();
+  const q = sinTildes(filtros.q);
   const lista = todos.filter((i) => {
     if (filtros.tipo === 'activos' && !i.activo) return false;
     if (filtros.tipo === 'miembros' && !(i.activo && i.esMiembro)) return false;
     if (filtros.tipo === 'nomiembros' && !(i.activo && !i.esMiembro)) return false;
     if (filtros.tipo === 'inactivos' && i.activo) return false;
-    return !q || `${i.nombre} ${i.celular} ${i.email}`.toLowerCase().includes(q);
+    return !q || sinTildes(`${i.nombre} ${i.celular} ${i.email}`).includes(q);
   });
   const lbl = etiquetaIntegrantes(m);
 
@@ -141,14 +141,14 @@ function agregarVariosMiembros(ctx, m) {
       <div class="pick-tools"><div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar…" data-buscar></div>
         <select data-edad><option value="">Todas las edades</option><option value="25">Hasta 25 años</option><option value="30">Hasta 30 años</option><option value="35">Hasta 35 años</option></select>
         <button type="button" class="link-btn" data-todos>Marcar visibles</button><button type="button" class="link-btn" data-ninguno>Ninguno</button></div>
-      <ul class="pick-list">${lista.map((x) => `<li data-nombre="${esc(x.nombre.toLowerCase())}" data-edad="${x.edad ?? ''}"><label class="check"><input type="checkbox" name="mb" value="${x.id}"> ${esc(x.nombre)}${x.edad != null ? ` <small class="muted">· ${x.edad} años</small>` : ''}</label></li>`).join('')}</ul>
+      <ul class="pick-list">${lista.map((x) => `<li data-nombre="${esc(sinTildes(x.nombre))}" data-edad="${x.edad ?? ''}"><label class="check"><input type="checkbox" name="mb" value="${x.id}"> ${esc(x.nombre)}${x.edad != null ? ` <small class="muted">· ${x.edad} años</small>` : ''}</label></li>`).join('')}</ul>
       <p class="muted small" data-cuenta></p>`,
     submitLabel: 'Agregar al listado',
     onOpen(f) {
       const cajas = [...f.querySelectorAll('[name=mb]')];
       const contar = () => { const n = cajas.filter((c) => c.checked).length; f.querySelector('[data-cuenta]').textContent = `${n} seleccionado${n === 1 ? '' : 's'}`; };
       const filtrar = () => {
-        const q = f.querySelector('[data-buscar]').value.toLowerCase();
+        const q = sinTildes(f.querySelector('[data-buscar]').value);
         const max = +f.querySelector('[data-edad]').value || 0;
         f.querySelectorAll('.pick-list li').forEach((li) => {
           const e = li.dataset.edad === '' ? null : +li.dataset.edad;
@@ -410,7 +410,7 @@ function elegirConfirmados(ctx, m, a, r) {
         <button type="button" class="link-btn" data-todos>Marcar todos</button><button type="button" class="link-btn" data-ninguno>Ninguno</button></div>
       <ul class="pick-list">${lista.map((i) => {
         const x = ya.get(i.id);
-        return `<li data-nombre="${esc(i.nombre.toLowerCase())}"><label class="check"><input type="checkbox" name="i" value="${i.id}" ${x ? 'checked' : ''} ${x?.movId ? 'disabled data-pagado' : ''}> ${esc(i.nombre)}${x?.movId ? ' <small class="muted">· ya pagó</small>' : ''}${!i.activo ? ' <small class="muted">· inactivo</small>' : ''}</label></li>`;
+        return `<li data-nombre="${esc(sinTildes(i.nombre))}"><label class="check"><input type="checkbox" name="i" value="${i.id}" ${x ? 'checked' : ''} ${x?.movId ? 'disabled data-pagado' : ''}> ${esc(i.nombre)}${x?.movId ? ' <small class="muted">· ya pagó</small>' : ''}${!i.activo ? ' <small class="muted">· inactivo</small>' : ''}</label></li>`;
       }).join('')}</ul>
       <p class="muted small" data-cuenta></p>`,
     submitLabel: 'Guardar confirmados',
@@ -419,7 +419,7 @@ function elegirConfirmados(ctx, m, a, r) {
       const contar = () => { f.querySelector('[data-cuenta]').textContent = `${cajas.filter((c) => c.checked).length} confirmados`; };
       cajas.forEach((c) => c.addEventListener('change', contar)); contar();
       f.querySelector('[data-buscar]').addEventListener('input', (e) => {
-        const q = e.target.value.toLowerCase();
+        const q = sinTildes(e.target.value);
         f.querySelectorAll('.pick-list li').forEach((li) => { li.hidden = q && !li.dataset.nombre.includes(q); });
       });
       f.querySelector('[data-todos]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.closest('li').hidden) c.checked = true; }); contar(); });

@@ -1,4 +1,4 @@
-import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState } from '../ui.js';
+import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState, sinTildes } from '../ui.js';
 import { call } from '../api.js';
 import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe, presupuestoGeneralMensual } from '../calc.js';
 import { PALETA } from '../ui.js';
@@ -30,7 +30,7 @@ export function registrarCulto(ctx) {
         <div class="det-panel" hidden>
           <p class="muted small">Escribe cuánto diezmó cada hermano. El total de <b>Diezmos</b> se calcula solo (hermanos + sin identificar) y cada diezmo queda registrado en el apartado Diezmos.</p>
           <div class="search lote-buscar">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
-          <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(m.nombre.toLowerCase())}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><input class="lote-monto det-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
+          <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(sinTildes(m.nombre))}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><input class="lote-monto det-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
           <div class="det-sin"><span>Sin identificar <small class="muted">(sobres sin nombre)</small></span><input class="lote-monto" data-sin inputmode="numeric" placeholder="$0"></div>
           <div class="det-resumen" data-det-resumen></div>
         </div>
@@ -70,7 +70,7 @@ export function registrarCulto(ctx) {
         if (abrir) form.querySelector('[data-buscar]').focus();
       });
       form.querySelector('[data-buscar]')?.addEventListener('input', (e) => {
-        const t = e.target.value.toLowerCase();
+        const t = sinTildes(e.target.value);
         form.querySelectorAll('.lote-lista li').forEach((li) => { li.hidden = t && !li.dataset.nombre.includes(t); });
       });
       form._detalle = () => (detalleActivo() ? dets.map((i) => ({ miembroId: i.dataset.id, conyugeId: i.dataset.conyuge || '', monto: pesos(i.value) })).filter((x) => x.monto > 0) : null);
@@ -96,10 +96,10 @@ export function render(root, ctx) {
   const anio = mes.slice(0, 4);
   const enPeriodo = (m) => (filtros.periodo === 'mes' ? m.mes === mes : m.mes.startsWith(anio));
   const periodoMovs = data.movGenerales.filter(enPeriodo);
-  const q = filtros.q.toLowerCase();
+  const q = sinTildes(filtros.q);
   const lista = periodoMovs
     .filter((m) => (!filtros.tipo || m.tipo === filtros.tipo) && (!filtros.categoria || m.categoria === filtros.categoria) && (!filtros.grupo || grupoDe(m.tipo, m.categoria) === filtros.grupo))
-    .filter((m) => !q || `${m.categoria} ${m.descripcion} ${m.medio}`.toLowerCase().includes(q))
+    .filter((m) => !q || sinTildes(`${m.categoria} ${m.descripcion} ${m.medio}`).includes(q))
     .sort((a, b) => (b.fecha + b.creadoEn).localeCompare(a.fecha + a.creadoEn));
   const s = split(periodoMovs);
   const saldoFinal = filtros.periodo === 'mes' ? saldoGeneralHasta(data, mes) : saldoGeneralHasta(data, `${anio}-12`);

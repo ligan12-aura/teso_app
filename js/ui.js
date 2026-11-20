@@ -18,6 +18,8 @@ export function moneyShort(n) {
   if (v >= 1e3) return `${s}$${Math.round(v / 1e3).toLocaleString(CONFIG.LOCALE)}k`;
   return `${s}$${Math.round(v)}`;
 }
+// Para buscar: sin tildes ni mayúsculas ("Ramírez" = "ramirez", "Muñoz" = "munoz")
+export const sinTildes = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
