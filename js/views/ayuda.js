@@ -31,7 +31,7 @@ const TEMAS = {
       <h4>El ciclo de cada mes</h4>${FLUJO}
       <h4>Qué ve cada persona</h4>
       <ul class="hp-list">
-        <li><b>Administrador, tesorero y pastor:</b> todo. Tesorería general, todos los ministerios y sus actividades, rendiciones, diezmos, miembros y configuración.</li>
+        <li><b>Administrador, tesorero y pastor:</b> todo. Tesorería general, todos los ministerios y sus actividades, rendiciones, diezmos, miembros y configuración. La <b>asistencia</b> la ven solo el pastor, el administrador y la secretaría.</li>
         <li><b>Secretaría:</b> el registro de Miembros y la Asistencia. No ve dinero ni diezmos.</li>
         <li><b>Líder de ministerio:</b> solo su ministerio. No ve la tesorería general ni los otros ministerios.</li>
       </ul>
@@ -166,7 +166,7 @@ const TEMAS = {
       ${pasos(`Presiona ${btn('plus', 'Nuevo usuario')}.`, 'Escribe el nombre, un usuario corto (ej: <code>alabanza</code>), el rol <b>Líder</b> y su ministerio.', 'Inventa una <b>contraseña temporal</b> y envíasela junto con el enlace de la página.', 'Al entrar por primera vez, el líder deberá crear su propia contraseña.')}
       ${tip('Si un líder olvida su contraseña, edita su usuario y escribe una nueva contraseña temporal.')}
       <h4>Presupuesto</h4>
-      <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. Al cambiarlo eliges <b>desde qué mes rige</b>: los meses anteriores conservan el presupuesto que tenían, y en el historial se ve cada cambio (los futuros aparecen como “programado” y se pueden quitar). En la misma pantalla se fijan, por separado, el <b>ítem mensual</b> de cada ministerio (lo que se le transfiere; la transferencia no puede superarlo) y su <b>presupuesto mensual</b> (lo máximo que puede gastar en el mes). Solo el tesorero y el pastor pueden cambiar estos montos.</p>
+      <p>Define el <b>presupuesto mensual de la tesorería general</b>: el máximo para todos los gastos de cada mes, incluidos los ítems de los ministerios. Si un gasto o una transferencia lo supera, la app no lo deja registrar; para autorizarlo hay que subir el presupuesto. Al cambiarlo eliges <b>desde qué mes rige</b>: los meses anteriores conservan el presupuesto que tenían, y en el historial se ve cada cambio (los futuros aparecen como “programado” y se pueden quitar). En la misma pantalla se fijan, por separado, el <b>ítem mensual</b> de cada ministerio (lo que se le transfiere; la transferencia no puede superarlo) y su <b>presupuesto mensual</b> (lo máximo que puede gastar en el mes). Solo el administrador, el tesorero y el pastor pueden cambiar estos montos.</p>
       <h4>Importar historial</h4>
       <p>Carga el historial desde una <b>planilla tipo</b> (la misma que descarga la página, de la tesorería general o de un ministerio) o desde el libro antiguo de entradas y salidas. La app muestra un resumen antes de importar y no duplica lo que ya existe.</p>
       <h4>General</h4>
@@ -294,7 +294,7 @@ TEMAS.secretaria = [
       <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>
       <li><b>Cumpleaños del mes:</b> aparecen arriba los hermanos activos que cumplen años este mes.</li>
       <li><b>Importar listado:</b> carga un Excel con los nombres en la primera columna; quienes digan “alejado/a” quedan inactivos.</li>
-      <li><b>Eliminar</b> a alguien del registro lo hace el tesorero o el pastor. Si solo dejó de asistir, márcalo inactivo.</li>
+      <li><b>Eliminar</b> a alguien del registro lo hace el administrador, el tesorero o el pastor. Si solo dejó de asistir, márcalo inactivo.</li>
     </ul>`
   },
   TEMAS.tesorero.find((t) => t.id === 'asistencia'),
@@ -308,6 +308,8 @@ export function abrirAyuda(rol, ruta = '', { conActividades = false } = {}) {
   let temas = TEMAS[rol] || TEMAS.lider;
   // el tema de actividades solo lo ve el líder cuyo ministerio las tiene activadas
   if (!TEMAS[rol] || rol === 'lider') temas = temas.filter((t) => t.id !== 'actividades' || conActividades);
+  // el tesorero no tiene acceso a Asistencia
+  if (rol === 'tesorero') temas = temas.filter((t) => t.id !== 'asistencia').map((t) => (t.id === 'actividades' ? { ...t, html: t.html.replace(' · Asistencia', '').replace(/<li><b>Asistencia del ministerio:<\/b>[\s\S]*?<\/li>/, '') } : t));
   const partes = String(ruta).split('/');
   const sub = partes.find((x) => ['integrantes', 'asistencia', 'actividades', 'actividad'].includes(x));
   // la asistencia dentro de un ministerio se explica en el tema de integrantes y actividades

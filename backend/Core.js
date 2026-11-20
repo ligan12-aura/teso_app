@@ -319,7 +319,7 @@ var TesoCore = (function () {
         base.miembros = all('Miembros');
         base.diezmos = [];
         base.integrantes = []; base.actividades = []; base.inscripciones = []; base.miembrosEnlace = [];
-        base.asistencias = all('Asistencias'); base.personasAsistencia = personasAsistencia();
+        base.asistencias = all('Asistencias'); base.personasAsistencia = personasAsistencia(true);
         datosAsistenciaExtra(base, true);
         base.extra = {};
         base.config = { nombreIglesia: base.config.nombreIglesia };
@@ -461,6 +461,10 @@ var TesoCore = (function () {
       var otros = all('PersonasHogar').filter(function (x) { return x.grupoId === grupoId && x.id !== (actual && actual.id); });
       if (mb && otros.some(function (x) { return x.miembroId === mb.id; })) throw TesoError(mb.nombre + ' ya está en este grupo');
       if (!mb && otros.some(function (x) { return !x.miembroId && normalNombre(x.nombre) === normalNombre(nombre); })) throw TesoError(nombre + ' ya está en este grupo');
+      // la misma persona no debe quedar dos veces (una como miembro y otra como no miembro)
+      var nombreDe = function (x) { var m = x.miembroId && find('Miembros', x.miembroId); return m ? m.nombre : x.nombre; };
+      if (!mb && otros.some(function (x) { return x.miembroId && normalNombre(nombreDe(x)) === normalNombre(nombre); })) throw TesoError(nombre + ' ya está en este grupo como miembro');
+      if (mb && otros.some(function (x) { return !x.miembroId && normalNombre(x.nombre) === normalNombre(mb.nombre); })) throw TesoError(mb.nombre + ' ya está en este grupo como no miembro: edítalo y enlázalo a su ficha en vez de agregarlo otra vez');
       var now = env.now();
       var d = {
         tipo: tipo, miembroId: miembroId, nombre: mb ? '' : nombre, celular: String(p.celular || '').trim().slice(0, 30),
@@ -508,7 +512,8 @@ var TesoCore = (function () {
     // ---------------- Asistencia ----------------
     // Personas que se pueden marcar: miembros (todos, con su estado), integrantes de ministerios que no son
     // miembros (sin repetir el mismo nombre en dos ministerios) y visitas
-    function personasAsistencia() {
+    // sinContactoIntegrantes: para la secretaría, que no debe recibir el contacto de los listados de los ministerios
+    function personasAsistencia(sinContactoIntegrantes) {
       var mins = {};
       all('Ministerios').forEach(function (m) { mins[m.id] = m.nombre; });
       var miembros = {};
@@ -533,7 +538,7 @@ var TesoCore = (function () {
           if (toBool(i.activo)) ya.activo = true;
           return;
         }
-        var r = { id: 'i:' + i.id, tipo: 'integrante', nombre: i.nombre, activo: toBool(i.activo), desde: String(i.creadoEn || '').slice(0, 10), celular: i.celular || '', ministerios: mins[i.ministerioId] ? [mins[i.ministerioId]] : [] };
+        var r = { id: 'i:' + i.id, tipo: 'integrante', nombre: i.nombre, activo: toBool(i.activo), desde: String(i.creadoEn || '').slice(0, 10), celular: sinContactoIntegrantes ? '' : (i.celular || ''), ministerios: mins[i.ministerioId] ? [mins[i.ministerioId]] : [] };
         porNombre[k] = r; out.push(r);
       });
       all('Visitas').forEach(function (v) {
@@ -565,6 +570,7 @@ var TesoCore = (function () {
       if (actual) String(actual.presentes || '').split(',').forEach(function (id) {
         if (id && !canon[id] && !vistos[id]) { vistos[id] = true; presentes.push(id); }
       });
+      if (!presentes.length) throw TesoError('Marca al menos a una persona presente');
       var now = env.now();
       var d = { fecha: fecha, actividad: actividad, notas: String(p.notas || '').trim().slice(0, 300), presentes: presentes.join(','), actualizadoEn: now };
       return actual ? update('Asistencias', actual.id, d) : insert('Asistencias', Object.assign(d, { id: uid(), creadoPor: user.id, creadoEn: now }));
@@ -937,6 +943,17 @@ var TesoCore = (function () {
       });
       return { agregados: agregados, enlazados: enlazados, omitidos: omitidos };
     }
+    // Reuniones de la asistencia general donde está una persona ("m:<id>", "i:<id>" o "v:<id>")
+    function asistenciasCon(pid) {
+      return all('Asistencias').filter(function (a) { return String(a.presentes || '').split(',').indexOf(pid) >= 0; });
+    }
+    function reemplazarPresente(asis, de, a) {
+      asis.forEach(function (x) {
+        var ids = String(x.presentes || '').split(',').filter(Boolean).map(function (id) { return id === de ? a : id; });
+        var unicos = ids.filter(function (id, k) { return ids.indexOf(id) === k; });
+        update('Asistencias', x.id, { presentes: unicos.join(','), actualizadoEn: env.now() });
+      });
+    }
     function deleteIntegrante(user, p) {
       var it = find('Integrantes', p.id);
       if (!it) throw TesoError('Integrante no encontrado');
@@ -945,6 +962,11 @@ var TesoCore = (function () {
       if (ins.some(function (x) { return x.movId; })) throw TesoError('Tiene cuotas pagadas en actividades: márcalo como inactivo en vez de eliminarlo.');
       var vino = all('AsistenciasMinisterios').some(function (a) { return a.ministerioId === it.ministerioId && String(a.presentes || '').split(',').indexOf(it.id) >= 0; });
       if (vino) throw TesoError('Tiene asistencias registradas: márcalo como inactivo en vez de eliminarlo.');
+      // Asistencia de cultos: si está enlazado a su ficha, sus asistencias pasan al miembro; si no, no se elimina
+      var mbEnl = it.miembroId && find('Miembros', it.miembroId);
+      var conCultos = asistenciasCon('i:' + it.id);
+      if (conCultos.length && !mbEnl) throw TesoError('Tiene asistencias registradas en los cultos: márcalo como inactivo en vez de eliminarlo.');
+      if (conCultos.length) reemplazarPresente(conCultos, 'i:' + it.id, 'm:' + mbEnl.id);
       ins.forEach(function (x) { remove('Inscripciones', x.id); });
       remove('Integrantes', it.id);
       return { id: it.id };
@@ -1556,7 +1578,13 @@ var TesoCore = (function () {
       if (all('Diezmos').some(function (x) { return x.miembroId === mb.id || x.conyugeId === mb.id; })) {
         throw TesoError(esAdmin(user) ? 'Este miembro tiene diezmos registrados. Márcalo como inactivo en vez de eliminarlo.' : 'Este miembro no se puede eliminar. Márcalo como inactivo.');
       }
+      // Asistencia de cultos: si está en el listado de un ministerio, sus asistencias vuelven a ese integrante;
+      // si no, no se elimina (se perdería su historial)
+      var conCultos = asistenciasCon('m:' + mb.id);
+      var integEnl = all('Integrantes').filter(function (i) { return i.miembroId === mb.id; })[0];
+      if (conCultos.length && !integEnl) throw TesoError('Tiene asistencias registradas: márcalo como inactivo en vez de eliminarlo.');
       if (mb.conyugeId) { var c = find('Miembros', mb.conyugeId); if (c && c.conyugeId === mb.id) update('Miembros', c.id, { conyugeId: '' }); }
+      if (conCultos.length) reemplazarPresente(conCultos, 'm:' + mb.id, 'i:' + integEnl.id);
       // Los integrantes de ministerios enlazados a esta ficha quedan como no miembros con sus datos
       all('Integrantes').forEach(function (i) {
         if (i.miembroId === mb.id) update('Integrantes', i.id, { miembroId: '', nombre: mb.nombre, celular: mb.celular || i.celular, email: mb.email || i.email, fechaNacimiento: mb.fechaNacimiento || i.fechaNacimiento, actualizadoEn: env.now() });
@@ -1592,7 +1620,13 @@ var TesoCore = (function () {
       var items = p.items || [];
       if (!items.length) throw TesoError('No hay miembros para cargar');
       if (items.length > 2000) throw TesoError('Demasiadas filas');
-      var now = env.now(), completados = 0, sinCambios = 0, nuevos = [], usados = {};
+      // Todo o nada: primero se validan todas las filas y se arman los cambios; recién al final se guardan
+      var now = env.now(), completados = 0, sinCambios = 0, nuevos = [], usados = {}, cambios = [], rutOmitidos = [], rutsLote = {};
+      var rutLibre = function (rut, id, nombre) {
+        if (!rut) return false;
+        if (rutRepetido(rut, id) || (rutsLote[rut] && rutsLote[rut] !== id)) { rutOmitidos.push(nombre + ' (' + rut + ')'); return false; }
+        rutsLote[rut] = id; return true;
+      };
       var existentes = {};
       all('Miembros').forEach(function (m) { existentes[normalNombre(m.nombre)] = m.id; });
       items.forEach(function (it, i) {
@@ -1606,32 +1640,34 @@ var TesoCore = (function () {
           usados[m.id] = true;
           var patch = {};
           ['fechaNacimiento', 'estadoCivil', 'domicilio', 'fechaIngreso', 'celular', 'email'].forEach(function (k) { if (d[k] && !m[k]) patch[k] = d[k]; });
-          if (d.rut && !m.rut && !rutRepetido(d.rut, m.id)) patch.rut = d.rut;
+          if (d.rut && !m.rut && rutLibre(d.rut, m.id, d.nombre)) patch.rut = d.rut;
           if (d.notas && normalNombre(m.notas).indexOf(normalNombre(d.notas)) < 0) patch.notas = (m.notas ? m.notas + ' · ' : '') + d.notas;
           if (patch.fechaIngreso && m.fechaBaja && m.fechaBaja < patch.fechaIngreso) delete patch.fechaIngreso;
           if (it.renombrar && d.nombre !== m.nombre) {
             var otro = existentes[normalNombre(d.nombre)];
             if (!otro || otro === m.id) patch.nombre = d.nombre;
           }
-          if (it.inactivo) { if (m.estado !== 'inactivo') patch.estado = 'inactivo'; }
+          // solo un miembro activo pasa a inactivo (un trasladado conserva su estado y su iglesia de destino)
+          if (it.inactivo) { if (m.estado === 'activo') patch.estado = 'inactivo'; }
           else if (it.activar && m.estado === 'inactivo') { patch.estado = 'activo'; patch.fechaBaja = ''; }
           if (!Object.keys(patch).length) { sinCambios++; return; }
           if (patch.notas) patch.notas = patch.notas.slice(0, 300);
           patch.actualizadoEn = now;
-          update('Miembros', m.id, patch);
+          cambios.push({ id: m.id, patch: patch });
           if (patch.nombre) { delete existentes[normalNombre(m.nombre)]; existentes[normalNombre(patch.nombre)] = m.id; }
           completados++;
         } else {
           var k = normalNombre(d.nombre);
           if (existentes[k]) throw TesoError(d.nombre + ' ya está en el registro: elígelo en vez de agregarlo como nuevo');
-          if (rutRepetido(d.rut, '')) d.rut = '';
           var id = uid();
+          if (d.rut && !rutLibre(d.rut, id, d.nombre)) d.rut = '';
           existentes[k] = id;
           nuevos.push(Object.assign(d, { id: id, conyugeId: '', creadoEn: now, actualizadoEn: now }));
         }
       });
+      cambios.forEach(function (c) { update('Miembros', c.id, c.patch); });
       if (nuevos.length) insertMany('Miembros', nuevos);
-      return { completados: completados, agregados: nuevos.length, sinCambios: sinCambios };
+      return { completados: completados, agregados: nuevos.length, sinCambios: sinCambios, rutOmitidos: rutOmitidos };
     }
 
     // ---------------- Diezmos por hermano (solo tesorero) ----------------

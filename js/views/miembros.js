@@ -44,13 +44,16 @@ export function render(root, ctx) {
   const cumple = miembros.filter((m) => m.estado === 'activo' && m.fechaNacimiento && +m.fechaNacimiento.slice(5, 7) === mesHoy)
     .sort((a, b) => a.fechaNacimiento.slice(8).localeCompare(b.fechaNacimiento.slice(8)));
   const q = filtros.q.toLowerCase();
+  // RUT: también se encuentra escrito sin puntos ni guion (123456785 → 12.345.678-5)
+  const qRut = q.replace(/[.\-\s]/g, '');
   const lista = miembros.filter((m) => {
     if (filtros.estado === 'activos' && m.estado !== 'activo') return false;
     if (filtros.estado === 'inactivos' && m.estado !== 'inactivo') return false;
     if (filtros.estado === 'trasladados' && m.estado !== 'trasladado') return false;
     if (filtros.estado === 'incompletas' && fichaCompleta(m)) return false;
     if (filtros.estado === 'nohab' && m.habilitadoDiezmo !== 'no') return false;
-    return !q || `${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas} ${m.rut || ''} ${String(m.rut || '').replace(/\./g, '')}`.toLowerCase().includes(q);
+    return !q || `${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas} ${m.rut || ''} ${String(m.rut || '').replace(/\./g, '')}`.toLowerCase().includes(q)
+      || (qRut.length >= 3 && /^[0-9k]+$/.test(qRut) && String(m.rut || '').toLowerCase().replace(/[^0-9k]/g, '').includes(qRut));
   });
 
   root.innerHTML = `
@@ -392,6 +395,7 @@ function importarListado(ctx) {
         if (!items.length) throw new Error('No hay nada que cargar');
         const r = await call('completarMiembros', { items });
         toast(`${r.completados} fichas completadas · ${r.agregados} miembros agregados${r.sinCambios ? ` · ${r.sinCambios} ya tenían todo` : ''}`);
+        if (r.rutOmitidos?.length) toast(`RUT no guardado por estar repetido en otra ficha: ${r.rutOmitidos.slice(0, 5).join(', ')}${r.rutOmitidos.length > 5 ? '…' : ''}`, 'err');
         await ctx.refresh();
         return;
       }
