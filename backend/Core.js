@@ -23,7 +23,7 @@ var TesoCore = (function () {
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
-    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso'],
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil'],
     Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId'],
     // Listado propio de un ministerio (p. ej. jóvenes): pueden o no ser miembros de la iglesia
     Integrantes: ['id', 'ministerioId', 'nombre', 'celular', 'email', 'fechaNacimiento', 'miembroId', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
@@ -1158,8 +1158,20 @@ var TesoCore = (function () {
         habilitadoDiezmo: p.habilitadoDiezmo === 'no' ? 'no' : 'si',
         nombre: nombre, estado: estado, fechaNacimiento: fn,
         celular: String(p.celular || '').trim().slice(0, 30), email: email.slice(0, 120),
-        domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300)
+        domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300),
+        estadoCivil: estadoCivilValido(p.estadoCivil)
       };
+    }
+    var ESTADOS_CIVILES = ['soltero', 'casado', 'conviviente', 'separado', 'divorciado', 'viudo'];
+    function estadoCivilValido(v) {
+      var k = normalNombre(v).toLowerCase().replace(/\/a$|\(a\)$/, '');
+      if (/^conviviente/.test(k)) k = 'conviviente';
+      if (/^solter/.test(k)) k = 'soltero';
+      if (/^casad/.test(k)) k = 'casado';
+      if (/^viud/.test(k)) k = 'viudo';
+      if (/^divorciad/.test(k)) k = 'divorciado';
+      if (/^separad/.test(k)) k = 'separado';
+      return ESTADOS_CIVILES.indexOf(k) >= 0 ? k : '';
     }
     // Une a dos miembros como matrimonio (vínculo en ambos sentidos). cid vacío = deshacer.
     function vincularConyuge(mid, cid) {
@@ -1187,7 +1199,9 @@ var TesoCore = (function () {
       var now = env.now();
       var r;
       if (p.id) {
-        if (!find('Miembros', p.id)) throw TesoError('Miembro no encontrado');
+        var previo = find('Miembros', p.id);
+        if (!previo) throw TesoError('Miembro no encontrado');
+        if (p.estadoCivil === undefined) d.estadoCivil = previo.estadoCivil || '';
         r = update('Miembros', p.id, Object.assign(d, { actualizadoEn: now }));
       } else {
         r = insert('Miembros', Object.assign(d, { id: uid(), creadoEn: now, actualizadoEn: now, conyugeId: '' }));
@@ -1264,6 +1278,50 @@ var TesoCore = (function () {
       });
       if (nuevos.length) insertMany('Miembros', nuevos);
       return { importados: nuevos.length, omitidos: omitidos };
+    }
+
+    // Completar fichas desde un listado: a los que ya existen solo se les llenan los datos vacíos
+    // (opcionalmente se pone el nombre completo y se marcan activos); los demás se agregan como activos.
+    function completarMiembros(user, p) {
+      var items = p.items || [];
+      if (!items.length) throw TesoError('No hay miembros para cargar');
+      if (items.length > 2000) throw TesoError('Demasiadas filas');
+      var now = env.now(), completados = 0, sinCambios = 0, nuevos = [], usados = {};
+      var existentes = {};
+      all('Miembros').forEach(function (m) { existentes[normalNombre(m.nombre)] = m.id; });
+      items.forEach(function (it, i) {
+        var d;
+        try { d = datosMiembro(Object.assign({}, it, { estado: 'activo' })); } catch (e) { throw TesoError('Fila ' + (i + 1) + ' (' + (it.nombre || '') + '): ' + e.message); }
+        if (it.id) {
+          var m = find('Miembros', it.id);
+          if (!m) throw TesoError('Fila ' + (i + 1) + ': ' + d.nombre + ' ya no está en el registro');
+          if (usados[m.id]) throw TesoError(m.nombre + ' quedó elegido para dos personas del listado');
+          usados[m.id] = true;
+          var patch = {};
+          ['fechaNacimiento', 'estadoCivil', 'domicilio', 'fechaIngreso', 'celular', 'email'].forEach(function (k) { if (d[k] && !m[k]) patch[k] = d[k]; });
+          if (d.notas && normalNombre(m.notas).indexOf(normalNombre(d.notas)) < 0) patch.notas = (m.notas ? m.notas + ' · ' : '') + d.notas;
+          if (patch.fechaIngreso && m.fechaBaja && m.fechaBaja < patch.fechaIngreso) delete patch.fechaIngreso;
+          if (it.renombrar && d.nombre !== m.nombre) {
+            var otro = existentes[normalNombre(d.nombre)];
+            if (!otro || otro === m.id) patch.nombre = d.nombre;
+          }
+          if (it.activar && m.estado === 'inactivo') { patch.estado = 'activo'; patch.fechaBaja = ''; }
+          if (!Object.keys(patch).length) { sinCambios++; return; }
+          if (patch.notas) patch.notas = patch.notas.slice(0, 300);
+          patch.actualizadoEn = now;
+          update('Miembros', m.id, patch);
+          if (patch.nombre) { delete existentes[normalNombre(m.nombre)]; existentes[normalNombre(patch.nombre)] = m.id; }
+          completados++;
+        } else {
+          var k = normalNombre(d.nombre);
+          if (existentes[k]) throw TesoError(d.nombre + ' ya está en el registro: elígelo en vez de agregarlo como nuevo');
+          var id = uid();
+          existentes[k] = id;
+          nuevos.push(Object.assign(d, { id: id, conyugeId: '', creadoEn: now, actualizadoEn: now }));
+        }
+      });
+      if (nuevos.length) insertMany('Miembros', nuevos);
+      return { completados: completados, agregados: nuevos.length, sinCambios: sinCambios };
     }
 
     // ---------------- Diezmos por hermano (solo tesorero) ----------------
@@ -1527,6 +1585,7 @@ var TesoCore = (function () {
       saveMiembro: { fn: saveMiembro, role: MIEMBROS, write: true },
       deleteMiembro: { fn: deleteMiembro, role: ADMIN, write: true },
       importarMiembros: { fn: importarMiembros, role: MIEMBROS, write: true },
+      completarMiembros: { fn: completarMiembros, role: MIEMBROS, write: true },
       saveDiezmo: { fn: saveDiezmo, role: T, write: true },
       saveDiezmosLote: { fn: saveDiezmosLote, role: T, write: true },
       importarDiezmos: { fn: importarDiezmos, role: T, write: true },

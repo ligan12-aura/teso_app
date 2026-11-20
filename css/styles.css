@@ -840,6 +840,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .imp-resumen b { font-family: var(--display); font-size: 22px; font-weight: 600; }
 .imp-resumen span { font-size: 12px; color: var(--muted); }
 .imp-lista { max-height: 300px; overflow-y: auto; }
+.imp-lista tr.fila-revisar td { background: var(--amber-soft); }
 .diezmo-wrap { max-height: 70vh; overflow: auto; margin: 0; padding: 0; }
 .diezmo-grid { font-size: 12.5px; }
 .diezmo-grid th, .diezmo-grid td { padding: 8px 6px; }
