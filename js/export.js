@@ -116,5 +116,5 @@ export async function exportarExcel(data) {
     }), [28, 30, 8, 12, 14]);
   }
 
-  XLSX.writeFile(wb, `Tesoreria_ElRedentor_${data.hoy}.xlsx`);
+  XLSX.writeFile(wb, `Administracion_ElRedentor_${data.hoy}.xlsx`);
 }

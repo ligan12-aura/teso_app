@@ -1,6 +1,6 @@
-# Tesorería · Iglesia Bautista El Redentor
+# Administración · Iglesia Bautista El Redentor
 
-Aplicación web para llevar el control de la **tesorería general** de la iglesia y de los **fondos de cada ministerio** (Alabanza, Infantil, Jóvenes, Misiones, etc.), con rendición mensual de gastos, fotos de boletas y respaldo automático en una planilla.
+Aplicación web para la administración de la iglesia: la **tesorería general**, los **fondos de cada ministerio** (Alabanza, Infantil, Jóvenes, Misiones, etc.) con rendición mensual de gastos y fotos de boletas, la **ficha de miembros** con sus diezmos y la **asistencia** a cultos, discipulados y ministerios. Todo queda respaldado automáticamente en una planilla.
 
 > **Modo demo:** agrega `?demo` al final de la dirección (ej: `https://ligan12-aura.github.io/teso_app/?demo`) para practicar con datos de ejemplo guardados solo en tu navegador, sin tocar los datos reales. Contraseña para todos los usuarios demo: `demo`. Útil para capacitar a los líderes.
 >

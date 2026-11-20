@@ -1,7 +1,7 @@
 {
-  "name": "Tesorería · Iglesia Bautista El Redentor",
+  "name": "Administración · Iglesia Bautista El Redentor",
   "short_name": "El Redentor",
-  "description": "Tesorería de la Iglesia Bautista El Redentor",
+  "description": "Administración de la Iglesia Bautista El Redentor: tesorería, ministerios, miembros y asistencia",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

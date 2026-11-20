@@ -91,8 +91,9 @@ function renderLogin(msg = '') {
         <h1>${esc(CONFIG.NOMBRE_IGLESIA)}</h1>
         <p class="login-verse">“Cada uno dé como propuso en su corazón… porque Dios ama al dador alegre.”<span>2 Corintios 9:7</span></p>
         <ul class="login-points">
-          <li>${icon('wallet')} Tesorería general ordenada</li>
-          <li>${icon('receipt')} Rendición de gastos por ministerio</li>
+          <li>${icon('wallet')} Tesorería y rendiciones de cada ministerio</li>
+          <li>${icon('users')} Ficha de miembros y diezmos</li>
+          <li>${icon('calendar')} Asistencia a cultos, discipulados y ministerios</li>
           <li>${icon('sheet')} Respaldo automático en planilla</li>
         </ul>
       </div>
@@ -101,9 +102,9 @@ function renderLogin(msg = '') {
       ${botonTema('theme-fab', true)}
       <form class="login-form" novalidate>
         <div class="login-head">
-          <span class="eyebrow">Equipo de finanzas</span>
+          <span class="eyebrow">Equipo de administración</span>
           <h2>Ingresar</h2>
-          <p class="muted">Usa el usuario que te entregó el tesorero.</p>
+          <p class="muted">Usa el usuario que te entregó el administrador.</p>
         </div>
         <label class="field"><span>Usuario</span><input name="usuario" autocomplete="username" autocapitalize="none" required></label>
         <label class="field"><span>Contraseña</span><input name="password" type="password" autocomplete="current-password" required></label>
@@ -208,7 +209,7 @@ function shell(active) {
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark">${icon('church', 22)}</div>
-      <div><strong>El Redentor</strong><span>Tesorería</span></div>
+      <div><strong>El Redentor</strong><span>Administración</span></div>
     </div>
     <nav class="nav">${links}</nav>
     <div class="side-foot">
@@ -319,7 +320,7 @@ seguirSistema(alCambiarTema);
 (async function start() {
   aplicarTema(temaActual());
   setupChartDefaults();
-  document.title = `Tesorería · ${CONFIG.NOMBRE_IGLESIA}`;
+  document.title = `Administración · ${CONFIG.NOMBRE_IGLESIA}`;
   if (!auth.token) return renderLogin();
   app.innerHTML = '<div class="boot"><div class="spinner"></div></div>';
   try {

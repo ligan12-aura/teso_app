@@ -89,7 +89,7 @@ export function construirPlanilla(ExcelJS, d) {
   const anio = Number(d.anio);
   const acento = general ? C.gold : hexArgb(d.color, C.gold);
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'App Tesorería · ' + (d.iglesia || '');
+  wb.creator = 'App de administración · ' + (d.iglesia || '');
   wb.created = new Date();
   wb.calcProperties.fullCalcOnLoad = true;
 
@@ -209,7 +209,7 @@ export function construirPlanilla(ExcelJS, d) {
   });
   res.mergeCells('A27:I28');
   const nota = res.getCell('A27');
-  nota.value = 'Planilla generada por la app de Tesorería. Las celdas amarillas se pueden editar; todo lo demás se calcula solo a partir de la hoja "Movimientos". Para agregar un movimiento, escríbelo en la primera fila vacía de "Movimientos".';
+  nota.value = 'Planilla generada por la app de administración de la iglesia. Las celdas amarillas se pueden editar; todo lo demás se calcula solo a partir de la hoja "Movimientos". Para agregar un movimiento, escríbelo en la primera fila vacía de "Movimientos".';
   nota.font = { name: FUENTE, size: 9.5, italic: true, color: { argb: C.grey } };
   nota.alignment = { wrapText: true, vertical: 'top', horizontal: 'left', indent: 1 };
   res.pageSetup = { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } };

@@ -27,7 +27,7 @@ const TEMAS = {
   tesorero: [
     {
       id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `
-      <p>Esta app reúne en un solo lugar la <b>tesorería general</b> de la iglesia y el <b>control de los fondos de cada ministerio</b>. Todo lo que se registra queda guardado automáticamente en la planilla de Google y las boletas en Google Drive.</p>
+      <p>Esta app reúne en un solo lugar la <b>administración</b> de la iglesia: la <b>tesorería general</b>, el <b>control de los fondos de cada ministerio</b>, la <b>ficha de los miembros</b> y la <b>asistencia</b>. Todo lo que se registra queda guardado automáticamente en la planilla de Google y las boletas en Google Drive.</p>
       <h4>El ciclo de cada mes</h4>${FLUJO}
       <h4>Qué ve cada persona</h4>
       <ul class="hp-list">
@@ -239,7 +239,7 @@ const TEMAS = {
       id: 'perfil', titulo: 'Mi cuenta', ico: 'user', html: `
       <ul class="hp-list">
         <li>En <b>Mi cuenta</b> puedes cambiar tu contraseña cuando quieras.</li>
-        <li>Si olvidas tu contraseña, pídele al tesorero que te asigne una temporal.</li>
+        <li>Si olvidas tu contraseña, pídele al administrador que te asigne una temporal.</li>
         <li>Para salir, usa el botón ${icon('logout', 13)} de arriba.</li>
       </ul>
       ${tip('En el celular puedes agregar la página a tu pantalla de inicio (en el menú del navegador, “Agregar a pantalla de inicio”) para abrirla como una app.')}`
