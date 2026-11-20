@@ -261,7 +261,7 @@ function renderAmbito(root, ctx, cfg, cabecera, redibujar) {
         <tbody>${sesiones.map((s, i) => [s, i]).reverse().slice(0, 15).map(([s, i]) => { const c = cuenta(i); return `<tr class="asist-fila" data-sesion="${s.id}" tabindex="0" title="${ro ? 'Ver quiénes vinieron' : 'Corregir esta reunión'}">
           <td class="nowrap"><b>${fecha(s.fecha)}</b>${s.notas ? `<br><small class="muted">${esc(s.notas)}</small>` : ''}</td>
           <td class="num strong">${pres[i].size}</td>${cfg.grupos.map(([t], k) => `<td class="num${colCls(k)}">${c[t] || 0}</td>`).join('')}
-          ${ro ? '' : `<td class="row-actions"><button class="icon-btn sm" data-borrar="${s.id}" title="Eliminar">${icon('trash', 15)}</button></td>`}</tr>`; }).join('')}</tbody>
+          ${ro ? '' : `<td class="row-actions"><button class="icon-btn sm" data-editar-sesion title="Corregir (fecha, presentes…)">${icon('edit', 15)}</button><button class="icon-btn sm" data-borrar="${s.id}" title="Eliminar">${icon('trash', 15)}</button></td>`}</tr>`; }).join('')}</tbody>
       </table></div>${sesiones.length > 15 ? `<p class="muted small">Se muestran las últimas 15 de ${sesiones.length}.</p>` : ''}`
         : emptyState(`Aún no hay reuniones de ${esc(vista.actividad)}.${ro ? '' : ' Presiona “Tomar asistencia”.'}`, 'calendar')}
     </article>
@@ -343,7 +343,9 @@ function tomarAsistencia(ctx, cfg, vista, sesion = null) {
   const buscar = (f, act) => cfg.sesiones.find((s) => s.fecha === f && norm(s.actividad) === norm(act));
   const deActividad = (act) => cfg.sesiones.filter((s) => norm(s.actividad) === norm(act)).sort((a, b) => a.fecha.localeCompare(b.fecha));
   const propuesta = cfg.fechaPropuesta(data.hoy, deActividad(vista.actividad));
-  // al abrir: si ya existe la reunión de la fecha propuesta, se corrige esa
+  // corregir una reunión elegida en la lista: se puede cambiar su fecha y actividad (se mueve esa misma reunión)
+  const editar = !!sesion;
+  // al abrir "Tomar asistencia": si ya existe la reunión de la fecha propuesta, se corrige esa
   if (!sesion) sesion = buscar(propuesta, vista.actividad) || null;
   const marcados = sesion ? presentesDe(sesion, canon) : new Set();
   // personas disponibles: activos + visitas activas + quien ya estaba marcado en esta reunión
@@ -353,14 +355,16 @@ function tomarAsistencia(ctx, cfg, vista, sesion = null) {
   const actInicial = sesion?.actividad || vista.actividad;
   const fila = (p) => `<li data-nombre="${esc(norm(p.nombre))}" data-tipo="${p.tipo}"><label class="check"><input type="checkbox" name="p" value="${esc(p.id)}" ${marcados.has(p.id) ? 'checked' : ''}> ${esc(p.nombre)} <small class="muted">· ${esc(cfg.etiqueta(p))}</small></label></li>`;
   return modal({
-    title: 'Asistencia',
+    title: editar ? `Corregir asistencia · ${esc(sesion.actividad)} del ${fecha(sesion.fecha)}` : 'Asistencia',
     wide: true,
     body: `
       <div class="form-row">
         <label class="field"><span>Fecha</span><input type="date" name="fecha" value="${esc(sesion?.fecha || propuesta)}" max="${data.hoy}" required></label>
         <label class="field"><span>Actividad</span><select name="actividad">${actividades.map((a) => `<option ${norm(a) === norm(actInicial) ? 'selected' : ''}>${esc(a)}</option>`).join('')}<option value="__otra">Otra actividad…</option></select></label>
       </div>
-      <div class="note" data-existente ${sesion ? '' : 'hidden'}>${icon('edit', 16)}<span>Esta reunión ya estaba registrada: estás corrigiéndola.</span></div>
+      ${editar ? `<div class="note">${icon('edit', 16)}<span>Estás corrigiendo esta reunión: puedes cambiar la <b>fecha</b>, la actividad, los presentes o las notas. Se guarda sobre la misma reunión.</span></div>
+      <div class="note warn" data-choque hidden>${icon('alert', 16)}<span data-choque-txt></span></div>`
+      : `<div class="note" data-existente ${sesion ? '' : 'hidden'}>${icon('edit', 16)}<span>Esta reunión ya estaba registrada: estás corrigiéndola.</span></div>`}
       <label class="field" data-otra hidden><span>Nombre de la actividad</span><input name="otra" maxlength="60" placeholder="${esc(cfg.otraEj)}"></label>
       <div class="pick-tools">
         <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar nombre…" data-buscar></div>
@@ -372,9 +376,10 @@ function tomarAsistencia(ctx, cfg, vista, sesion = null) {
       <div class="asist-nueva"><input name="nuevaVisita" placeholder="¿Vino alguien nuevo? Escribe su nombre" maxlength="80"><button type="button" class="btn btn-ghost btn-sm" data-add-visita>${icon('plus', 15)} Agregar ${cfg.nuevoLbl}</button></div>
       ${cfg.notaNuevo ? `<p class="muted small">${esc(cfg.notaNuevo)}</p>` : ''}
       <label class="field"><span>Notas <small class="muted">(opcional)</small></span><input name="notas" maxlength="300" value="${esc(sesion?.notas || '')}" placeholder="${esc(cfg.notasEj)}"></label>
-      <p class="muted small" data-cuenta></p>`,
-    submitLabel: 'Guardar asistencia',
-    onOpen(f) {
+      <p class="muted small" data-cuenta></p>
+      ${editar ? `<p><button type="button" class="link-btn danger-link" data-eliminar-sesion>${icon('trash', 14)} Eliminar esta reunión</button></p>` : ''}`,
+    submitLabel: editar ? 'Guardar cambios' : 'Guardar asistencia',
+    onOpen(f, { close } = {}) {
       const contar = () => {
         const c = [...f.querySelectorAll('[name=p]')].filter((x) => x.checked);
         const tipo = Object.fromEntries(personas.map((p) => [p.id, p.tipo]));
@@ -401,6 +406,13 @@ function tomarAsistencia(ctx, cfg, vista, sesion = null) {
       // si cambian la fecha o la actividad a una reunión ya registrada, se carga para corregirla
       const revisarExistente = () => {
         const ex = actividadElegida() ? buscar(f.fecha.value, actividadElegida()) : null;
+        if (editar) {
+          // corrigiendo: no se cambia de reunión; solo se avisa si la nueva fecha ya tiene otra
+          const choque = ex && ex.id !== sesion.id;
+          f.querySelector('[data-choque]').hidden = !choque;
+          if (choque) f.querySelector('[data-choque-txt]').textContent = `Ya hay otra reunión de ${ex.actividad} el ${fecha(ex.fecha)}. Elige otra fecha, o si esta sobra, elimínala.`;
+          return;
+        }
         if (ex && ex !== sesion) {
           sesion = ex;
           const m = presentesDe(ex, canon);
@@ -413,6 +425,11 @@ function tomarAsistencia(ctx, cfg, vista, sesion = null) {
       f.actividad.addEventListener('change', () => { otra.hidden = f.actividad.value !== '__otra'; if (!otra.hidden) f.otra.focus(); revisarExistente(); });
       f.fecha.addEventListener('change', revisarExistente);
       f.otra.addEventListener('change', revisarExistente);
+      f.querySelector('[data-eliminar-sesion]')?.addEventListener('click', async () => {
+        close?.(null);
+        if (!(await confirmar(`¿Eliminar la asistencia de ${esc(sesion.actividad)} del ${fecha(sesion.fecha)}?`, { boton: 'Eliminar', danger: true }))) return;
+        try { await call(cfg.acciones.del, { id: sesion.id }); toast('Asistencia eliminada'); await ctx.refresh(); } catch (er) { toast(er.message, 'err'); }
+      });
       // alta rápida (visita o integrante según el ámbito): queda guardado y marcado
       const agregar = async () => {
         const nombre = f.nuevaVisita.value.trim();
