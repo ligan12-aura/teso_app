@@ -4,8 +4,8 @@
  * Sirve para probar la app sin configurar Google.
  */
 
-const DB_KEY = 'teso_demo_db_v6';
-try { ['v1', 'v2', 'v3', 'v4', 'v5'].forEach((v) => localStorage.removeItem('teso_demo_db_' + v)); } catch (e) { /* sin almacenamiento */ }
+const DB_KEY = 'teso_demo_db_v7';
+try { ['v1', 'v2', 'v3', 'v4', 'v5', 'v6'].forEach((v) => localStorage.removeItem('teso_demo_db_' + v)); } catch (e) { /* sin almacenamiento */ }
 const FILES_KEY = 'teso_demo_files_v1';
 const SECRET_KEY = 'teso_demo_secret';
 
@@ -368,6 +368,11 @@ function seed() {
     const lid = activosM[k * 6];
     const g = { id: id(), nombre, sector, lideres: lid ? lid.id : '', encargado: lid?.nombre || '', dia, notas: '', activo: true, creadoEn: now, actualizadoEn: now };
     db.GruposHogar.push(g);
+    // líder de discipulado del grupo Norte (usuario "discipulado")
+    if (!k) {
+      const salt = id();
+      db.Usuarios.push({ id: id(), nombre: 'Héctor Díaz', usuario: 'discipulado', rol: 'discipulado', ministerioId: '', grupoId: g.id, email: '', activo: true, debeCambiarPass: false, salt, hash: TesoCore.hashPassword('demo', salt, sha256Hex), creadoEn: now });
+    }
     const gente = activosM.slice(k * 6, k * 6 + 6).map((m) => ({ id: id(), grupoId: g.id, tipo: 'integrante', miembroId: m.id, nombre: '', celular: '', notas: '', activo: true, creadoEn: now, actualizadoEn: now }));
     gente.push({ id: id(), grupoId: g.id, tipo: 'integrante', miembroId: '', nombre: k ? 'Elena Fuentes' : 'Pablo Rivas', celular: '', notas: 'Vecino del sector', activo: true, creadoEn: now, actualizadoEn: now });
     if (!k) gente.push({ id: id(), grupoId: g.id, tipo: 'visita', miembroId: '', nombre: 'Javiera Ortiz', celular: '+56 9 5555 1234', notas: 'Invitada por una vecina', activo: true, creadoEn: now, actualizadoEn: now });

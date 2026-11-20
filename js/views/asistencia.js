@@ -179,6 +179,15 @@ function analizar(cfg, actividad) {
 // ---------------------------------------------------------------
 export function render(root, ctx) {
   const { data } = ctx;
+  // Líder de discipulado: solo su grupo, sin las demás secciones
+  if (ctx.user?.rol === 'discipulado') {
+    const cab = (titulo, extra = '') => (acciones) => `
+  <section class="page-head">
+    <div><span class="eyebrow">Discipulado</span><h1>Mi grupo</h1></div>
+    <div class="head-actions">${acciones}</div>
+  </section>${extra}`;
+    return renderHogar(root, ctx, (data.gruposHogar || [])[0]?.id, cab, () => render(root, ctx), true);
+  }
   const mins = data.ministeriosAsistencia || [];
   const [sec, sub] = ctx.params || [];
   const seccion = sec === 'discipulados' ? 'hogar' : sec === 'min' && mins.some((m) => m.id === sub) ? 'min' : 'cultos';
@@ -495,12 +504,16 @@ function editarVisita(ctx, v = null) {
 // Discipulados en hogares
 // ---------------------------------------------------------------
 let verInactivos = false;
-function renderHogar(root, ctx, grupoId, cabecera, redibujar) {
+function renderHogar(root, ctx, grupoId, cabecera, redibujar, soloGrupo = false) {
   const { data } = ctx;
   const grupos = [...(data.gruposHogar || [])].sort((a, b) => (a.sector || '').localeCompare(b.sector || '', 'es') || a.nombre.localeCompare(b.nombre, 'es'));
   const visibles = grupos.filter((g) => g.activo || verInactivos || g.id === grupoId);
   const g = grupos.find((x) => x.id === grupoId);
-  const chips = `<nav class="min-tabs hogar-grupos" aria-label="Grupos de discipulado">
+  if (soloGrupo && !g) {
+    root.innerHTML = `${cabecera('Mi grupo')('')}${emptyState('Tu usuario aún no tiene un grupo de discipulado asignado. Pídele al administrador que lo enlace a tu grupo.', 'users')}`;
+    return;
+  }
+  const chips = soloGrupo ? '' : `<nav class="min-tabs hogar-grupos" aria-label="Grupos de discipulado">
       <a href="#/asistencia/discipulados" class="${!g ? 'active' : ''}">Resumen</a>
       ${visibles.map((x) => `<a href="#/asistencia/discipulados/${x.id}" class="${g?.id === x.id ? 'active' : ''}">${esc(x.nombre)}${x.sector ? ` <small>· ${esc(x.sector)}</small>` : ''}${x.activo ? '' : ' <small>(inactivo)</small>'}</a>`).join('')}
       ${g ? `<button type="button" class="btn btn-ghost btn-sm" data-nuevo-grupo>${icon('plus', 15)} Nuevo grupo</button>` : ''}
@@ -548,18 +561,18 @@ function renderHogar(root, ctx, grupoId, cabecera, redibujar) {
       <div><b>${esc(g.nombre)}</b>${g.activo ? '' : ' <span class="badge st-open">Inactivo</span>'}
         <small class="muted">${[g.sector && `Sector ${g.sector}`, lideresDe(data, g) && `${idsLideres(g).length > 1 ? 'Líderes' : 'Líder'}: ${lideresDe(data, g)}`, g.dia].filter(Boolean).map(esc).join(' · ') || 'Sin sector ni líderes'}</small>
         ${g.notas ? `<small class="muted">${esc(g.notas)}</small>` : ''}</div>
-      <button type="button" class="btn btn-ghost btn-sm" data-editar-grupo>${icon('edit', 15)} Editar grupo</button>
+      ${soloGrupo ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-editar-grupo>${icon('edit', 15)} Editar grupo</button>`}
     </article>`;
   renderAmbito(root, ctx, cfg, cabecera('Asistencia', chips + info), redibujar);
   root.querySelectorAll('[data-nuevo-grupo]').forEach((b) => b.addEventListener('click', () => editarGrupo(ctx)));
-  root.querySelector('[data-editar-grupo]').addEventListener('click', () => editarGrupo(ctx, g));
+  root.querySelector('[data-editar-grupo]')?.addEventListener('click', () => editarGrupo(ctx, g));
   // Personas del grupo (miembros enlazados, no miembros y visitas)
   const ph = (data.personasHogar || []).filter((x) => x.grupoId === g.id).sort((a, b) => (a.tipo === 'visita') - (b.tipo === 'visita') || (!a.activo) - (!b.activo) || a.nombre.localeCompare(b.nombre, 'es'));
   root.insertAdjacentHTML('beforeend', `
     <article class="card">
       <header class="card-head wrap"><div><h3>${icon('users', 16)} Personas del grupo</h3><p class="muted">${ph.filter((x) => x.activo && x.tipo !== 'visita').length} integrantes${ph.some((x) => x.tipo === 'visita') ? ` · ${ph.filter((x) => x.tipo === 'visita').length} visitas` : ''} · toca a alguien para editarlo</p></div>
         <div class="head-actions">
-          <button class="btn btn-ghost btn-sm" data-add-miembros>${icon('users', 15)} Agregar miembros</button>
+          ${soloGrupo ? '' : `<button class="btn btn-ghost btn-sm" data-add-miembros>${icon('users', 15)} Agregar miembros</button>`}
           <button class="btn btn-ghost btn-sm" data-add-nomiembro>${icon('plus', 15)} No miembro</button>
           <button class="btn btn-ghost btn-sm" data-add-visita>${icon('user', 15)} Visita</button>
         </div></header>
@@ -570,9 +583,10 @@ function renderHogar(root, ctx, grupoId, cabecera, redibujar) {
           <td>${tipoHogar(x) === 'miembro' ? '<span class="badge st-ok">Miembro</span>' : tipoHogar(x) === 'visita' ? '<span class="badge st-open">Visita</span>' : '<span class="badge st-obs">No miembro</span>'}</td>
           <td class="nowrap">${x.celular ? `<a class="link" href="tel:${esc(x.celular.replace(/[^\d+]/g, ''))}">${esc(x.celular)}</a>` : '<span class="muted">—</span>'}</td>
           <td class="hide-sm"><small class="muted">${esc(x.notas)}</small></td></tr>`).join('')}</tbody>
-      </table></div>` : emptyState('Agrega a los integrantes del grupo desde la lista de miembros, o a personas que no son miembros.', 'users')}
+      </table></div>` : emptyState(soloGrupo ? 'Aún no hay personas en el grupo. Los miembros los agrega la secretaría o el pastor; tú puedes agregar visitas y no miembros.' : 'Agrega a los integrantes del grupo desde la lista de miembros, o a personas que no son miembros.', 'users')}
+      ${soloGrupo && ph.length ? '<p class="muted small">Los miembros de la iglesia los agrega o quita la secretaría o el pastor.</p>' : ''}
     </article>`);
-  root.querySelector('[data-add-miembros]').addEventListener('click', () => agregarMiembrosHogar(ctx, g));
+  root.querySelector('[data-add-miembros]')?.addEventListener('click', () => agregarMiembrosHogar(ctx, g));
   root.querySelector('[data-add-nomiembro]').addEventListener('click', () => editarPersonaHogar(ctx, g, null, 'integrante'));
   root.querySelectorAll('[data-add-visita]').forEach((b) => b.addEventListener('click', () => editarPersonaHogar(ctx, g, null, 'visita')));
   root.querySelectorAll('[data-persona]').forEach((tr) => {
@@ -695,7 +709,7 @@ function editarPersonaHogar(ctx, g, x = null, tipoNuevo = 'integrante') {
       <label class="field"><span>Notas <small class="muted">(opcional)</small></span><input name="notas" maxlength="300" value="${esc(x?.notas || '')}" placeholder="${tipo === 'visita' ? 'Ej.: invitada por la hermana…, dirección' : 'Ej.: rol en el grupo'}"></label>
       ${x && tipo === 'visita' ? `<label class="check"><input type="checkbox" name="pasar"> Ya participa siempre: pasarla a integrante (no miembro)</label>` : ''}
       ${x ? `<label class="check"><input type="checkbox" name="activo" ${x.activo ? 'checked' : ''}> Activo en el grupo (aparece al tomar asistencia)</label>
-      <p style="margin-top:12px">${total ? `<small class="muted">Tiene ${total} asistencia${total === 1 ? '' : 's'}: si ya no participa, desmarca “Activo”.</small>` : `<button type="button" class="link-btn danger-link" data-quitar>${icon('trash', 14)} Quitar del grupo</button>`}</p>` : ''}`,
+      <p style="margin-top:12px">${total ? `<small class="muted">Tiene ${total} asistencia${total === 1 ? '' : 's'}: si ya no participa, desmarca “Activo”.</small>` : esMiembro && ctx.user?.rol === 'discipulado' ? '' : `<button type="button" class="link-btn danger-link" data-quitar>${icon('trash', 14)} Quitar del grupo</button>`}</p>` : ''}`,
     submitLabel: x ? 'Guardar' : 'Agregar',
     onOpen(f, { close } = {}) {
       f.querySelector('[data-quitar]')?.addEventListener('click', async () => {

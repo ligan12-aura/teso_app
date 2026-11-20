@@ -16,7 +16,7 @@ var TesoCore = (function () {
   // Esquema de datos (cada tabla = una hoja del Excel/Google Sheet)
   // ---------------------------------------------------------------
   var TABLES = {
-    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde'],
+    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde', 'grupoId'],
     Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn', 'presupuestoMensual', 'actividades'],
     MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo'],
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'actividadId'],
@@ -161,7 +161,8 @@ var TesoCore = (function () {
     return dif === 0;
   }
   // Roles: administrador, tesorero y pastor = acceso completo; secretaria = solo miembros; lider = su ministerio
-  var ROLES = ['admin', 'tesorero', 'pastor', 'secretaria', 'lider'];
+  // discipulado = líder de un grupo de discipulado: solo ve y toma la asistencia de su grupo (grupoId)
+  var ROLES = ['admin', 'tesorero', 'pastor', 'secretaria', 'lider', 'discipulado'];
   var ADMIN = ['admin', 'tesorero', 'pastor'];
   // Presupuesto general de un mes: el último cambio con "desde" <= mes. Sin historial, el monto único antiguo.
   function presupuestoVigente(hist, legado, mes) {
@@ -176,9 +177,11 @@ var TesoCore = (function () {
   var ASISTENCIA = ['admin', 'pastor', 'secretaria'];
   // Asistencia de las reuniones de un ministerio: su líder, el pastor y el administrador
   var ASIST_MIN = ['admin', 'pastor', 'lider'];
+  // Asistencia de un grupo de discipulado: además, el líder de ese grupo
+  var ASIST_HOGAR = ['admin', 'pastor', 'secretaria', 'discipulado'];
   function esAdmin(u) { return !!u && ADMIN.indexOf(u.rol) >= 0; }
   function publicUser(u) {
-    return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
+    return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, grupoId: u.grupoId || '', email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
   }
 
   // ---------------------------------------------------------------
@@ -313,6 +316,21 @@ var TesoCore = (function () {
         hoy: env.today(),
         extra: env.extra || {}
       };
+      if (user.rol === 'discipulado') {
+        // solo su grupo: sus personas y sus asistencias (no recibe Miembros, dinero ni otros grupos)
+        var gid = user.grupoId;
+        base.ministerios = []; base.usuarios = [publicUser(user)];
+        base.movMinisterios = []; base.movGenerales = []; base.rendiciones = []; base.transferencias = [];
+        base.miembros = []; base.diezmos = [];
+        base.integrantes = []; base.actividades = []; base.inscripciones = []; base.miembrosEnlace = [];
+        base.asistencias = []; base.personasAsistencia = []; base.asistenciasMin = []; base.ministeriosAsistencia = [];
+        base.gruposHogar = gid ? all('GruposHogar').filter(function (g) { return g.id === gid; }) : [];
+        base.personasHogar = gid ? personasHogar().filter(function (x) { return x.grupoId === gid; }) : [];
+        base.asistenciasHogar = gid ? all('AsistenciasHogar').filter(function (a) { return a.grupoId === gid; }) : [];
+        base.extra = {};
+        base.config = { nombreIglesia: base.config.nombreIglesia };
+        return base;
+      }
       if (user.rol === 'secretaria') {
         base.ministerios = []; base.usuarios = [publicUser(user)];
         base.movMinisterios = []; base.movGenerales = []; base.rendiciones = []; base.transferencias = [];
@@ -438,9 +456,15 @@ var TesoCore = (function () {
       });
       return g;
     }
+    // El líder de discipulado solo puede tocar su propio grupo
+    function exigirGrupo(user, grupoId) {
+      if (user.rol === 'discipulado' && (!user.grupoId || grupoId !== user.grupoId)) throw TesoError('No tienes permiso', 'FORBIDDEN');
+    }
     function deleteGrupoHogar(user, p) {
       var g = find('GruposHogar', p.id);
       if (!g) throw TesoError('Ese grupo ya no existe');
+      var lider = all('Usuarios').filter(function (u) { return u.rol === 'discipulado' && u.grupoId === g.id; })[0];
+      if (lider) throw TesoError('El usuario ' + lider.usuario + ' es líder de este grupo: cámbialo de grupo o elimínalo antes');
       if (all('AsistenciasHogar').some(function (a) { return a.grupoId === g.id; })) throw TesoError('El grupo tiene asistencias registradas: márcalo como inactivo en vez de eliminarlo');
       all('PersonasHogar').forEach(function (x) { if (x.grupoId === g.id) remove('PersonasHogar', x.id); });
       remove('GruposHogar', g.id);
@@ -452,8 +476,11 @@ var TesoCore = (function () {
       if (p.id && !actual) throw TesoError('Esa persona ya no está en el grupo');
       var grupoId = actual ? actual.grupoId : String(p.grupoId || '');
       if (!find('GruposHogar', grupoId)) throw TesoError('Elige el grupo');
+      exigirGrupo(user, grupoId);
       var tipo = p.tipo === 'visita' ? 'visita' : 'integrante';
       var miembroId = tipo === 'integrante' ? String(p.miembroId || '') : '';
+      // el líder de discipulado no enlaza fichas de Miembros (no tiene acceso al registro)
+      if (user.rol === 'discipulado' && miembroId !== String((actual && actual.miembroId) || '')) throw TesoError('Los miembros del grupo los agrega la secretaría o el pastor', 'FORBIDDEN');
       var mb = miembroId ? find('Miembros', miembroId) : null;
       if (miembroId && !mb) throw TesoError('Ese miembro ya no está en el registro');
       var nombre = mb ? mb.nombre : String(p.nombre || '').replace(/\s+/g, ' ').trim().slice(0, 80);
@@ -477,6 +504,8 @@ var TesoCore = (function () {
     function deletePersonaHogar(user, p) {
       var x = find('PersonasHogar', p.id);
       if (!x) throw TesoError('Esa persona ya no está en el grupo');
+      exigirGrupo(user, x.grupoId);
+      if (user.rol === 'discipulado' && x.miembroId) throw TesoError('Los miembros del grupo los quita la secretaría o el pastor', 'FORBIDDEN');
       var vino = all('AsistenciasHogar').some(function (a) { return a.grupoId === x.grupoId && String(a.presentes || '').split(',').indexOf(x.id) >= 0; });
       if (vino) throw TesoError('Tiene asistencias registradas: márcala como inactiva en vez de quitarla');
       remove('PersonasHogar', x.id);
@@ -487,6 +516,7 @@ var TesoCore = (function () {
       if (p.id && !actual) throw TesoError('Esa asistencia ya no existe');
       var grupoId = actual ? actual.grupoId : String(p.grupoId || '');
       if (!find('GruposHogar', grupoId)) throw TesoError('Elige el grupo');
+      exigirGrupo(user, grupoId);
       var fecha = String(p.fecha || '').trim();
       if (!isDate(fecha) || fecha > env.today() || fecha < '2000-01-01') throw TesoError('Elige una fecha válida (no futura ni anterior a 2000)');
       var actividad = String(p.actividad || '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Discipulado';
@@ -504,7 +534,9 @@ var TesoCore = (function () {
       return actual ? update('AsistenciasHogar', actual.id, d) : insert('AsistenciasHogar', Object.assign(d, { id: uid(), grupoId: grupoId, creadoPor: user.id, creadoEn: now }));
     }
     function deleteAsistenciaHogar(user, p) {
-      if (!find('AsistenciasHogar', p.id)) throw TesoError('Esa asistencia ya no existe');
+      var a = find('AsistenciasHogar', p.id);
+      if (!a) throw TesoError('Esa asistencia ya no existe');
+      exigirGrupo(user, a.grupoId);
       remove('AsistenciasHogar', p.id);
       return { id: p.id };
     }
@@ -1842,9 +1874,11 @@ var TesoCore = (function () {
       var rol = ROLES.indexOf(p.rol) >= 0 ? p.rol : 'lider';
       var ministerioId = rol === 'lider' ? String(p.ministerioId || '') : '';
       if (rol === 'lider' && !ministerioId) throw TesoError('Asigna un ministerio al líder');
+      var grupoId = rol === 'discipulado' ? String(p.grupoId || '') : '';
+      if (rol === 'discipulado' && !find('GruposHogar', grupoId)) throw TesoError('Elige el grupo de discipulado de este líder');
       var dup = all('Usuarios').some(function (u) { return u.usuario === usuario && u.id !== p.id; });
       if (dup) throw TesoError('Ese nombre de usuario ya existe');
-      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, email: String(p.email || '').trim(), activo: p.activo === undefined ? true : toBool(p.activo) };
+      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, grupoId: grupoId, email: String(p.email || '').trim(), activo: p.activo === undefined ? true : toBool(p.activo) };
       if (p.id === user.id && (!d.activo || ADMIN.indexOf(d.rol) < 0)) throw TesoError('No puedes quitarte a ti mismo el acceso completo ni desactivarte');
       if (p.id === user.id && user.rol === 'admin' && d.rol !== 'admin') throw TesoError('No puedes quitarte a ti mismo el rol de administrador: pídeselo a otro administrador');
       var pass = String(p.password || '');
@@ -1955,10 +1989,10 @@ var TesoCore = (function () {
       deleteVisita: { fn: deleteVisita, role: ASISTENCIA, write: true },
       saveGrupoHogar: { fn: saveGrupoHogar, role: ASISTENCIA, write: true },
       deleteGrupoHogar: { fn: deleteGrupoHogar, role: ASISTENCIA, write: true },
-      savePersonaHogar: { fn: savePersonaHogar, role: ASISTENCIA, write: true },
-      deletePersonaHogar: { fn: deletePersonaHogar, role: ASISTENCIA, write: true },
-      saveAsistenciaHogar: { fn: saveAsistenciaHogar, role: ASISTENCIA, write: true },
-      deleteAsistenciaHogar: { fn: deleteAsistenciaHogar, role: ASISTENCIA, write: true },
+      savePersonaHogar: { fn: savePersonaHogar, role: ASIST_HOGAR, write: true },
+      deletePersonaHogar: { fn: deletePersonaHogar, role: ASIST_HOGAR, write: true },
+      saveAsistenciaHogar: { fn: saveAsistenciaHogar, role: ASIST_HOGAR, write: true },
+      deleteAsistenciaHogar: { fn: deleteAsistenciaHogar, role: ASIST_HOGAR, write: true },
       saveActividad: { fn: saveActividad, role: CON_MINISTERIO, write: true },
       deleteActividad: { fn: deleteActividad, role: CON_MINISTERIO, write: true },
       setConfirmados: { fn: setConfirmados, role: CON_MINISTERIO, write: true },

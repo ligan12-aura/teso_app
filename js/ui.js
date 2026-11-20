@@ -82,7 +82,7 @@ export const icon = (name, size = 18) =>
   `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 
 // ---------------- Roles ----------------
-export const ROL_LABEL = { admin: 'Administrador', tesorero: 'Tesorero', pastor: 'Pastor', secretaria: 'Secretaría', lider: 'Líder de ministerio' };
+export const ROL_LABEL = { admin: 'Administrador', tesorero: 'Tesorero', pastor: 'Pastor', secretaria: 'Secretaría', lider: 'Líder de ministerio', discipulado: 'Líder de discipulado' };
 export const esAdmin = (u) => !!u && ['admin', 'tesorero', 'pastor'].includes(u.rol);
 
 // ---------------- Estados de rendición ----------------

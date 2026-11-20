@@ -38,6 +38,11 @@ const NAV = {
   lider: [
     { path: 'mi-ministerio', label: 'Mi ministerio', icon: 'wallet' },
     { path: 'perfil', label: 'Mi cuenta', icon: 'user' }
+  ],
+  // líder de un grupo de discipulado: solo la asistencia de su grupo
+  discipulado: [
+    { path: 'asistencia', label: 'Mi grupo', icon: 'users' },
+    { path: 'perfil', label: 'Mi cuenta', icon: 'user' }
   ]
 };
 
@@ -54,13 +59,13 @@ const ROUTES = {
   rendiciones: { view: Rendiciones, roles: ADM },
   diezmos: { view: Diezmos, roles: ADM },
   miembros: { view: Miembros, roles: [...ADM, 'secretaria'] },
-  asistencia: { view: Asistencia, roles: ['admin', 'pastor', 'secretaria'] },
+  asistencia: { view: Asistencia, roles: ['admin', 'pastor', 'secretaria', 'discipulado'] },
   admin: { view: Admin, roles: ADM },
   'mi-ministerio': { view: Ministerio, roles: ['lider'] },
   perfil: { view: Perfil }
 };
 
-const home = () => (esAdmin(state.user) ? 'inicio' : state.user?.rol === 'secretaria' ? 'miembros' : 'mi-ministerio');
+const home = () => (esAdmin(state.user) ? 'inicio' : state.user?.rol === 'secretaria' ? 'miembros' : state.user?.rol === 'discipulado' ? 'asistencia' : 'mi-ministerio');
 const permitido = (r) => !r.roles || r.roles.includes(state.user.rol);
 export const go = (path) => { location.hash = '#/' + path; };
 
@@ -122,6 +127,7 @@ function renderLogin(msg = '') {
             <button type="button" data-u="alabanza">Líder Alabanza</button>
             <button type="button" data-u="jovenes">Líder Jóvenes</button>
             <button type="button" data-u="mujeres">Líder Mujeres</button>
+            <button type="button" data-u="discipulado">Líder Discipulado</button>
           </div>
           <button type="button" class="link-btn" data-reset>Reiniciar datos de ejemplo</button>
         </div>` : ''}

@@ -300,6 +300,21 @@ TEMAS.secretaria = [
   TEMAS.tesorero.find((t) => t.id === 'asistencia'),
   TEMAS.lider.find((t) => t.id === 'perfil')
 ];
+// Líder de un grupo de discipulado
+TEMAS.discipulado = [
+  {
+    id: 'asistencia', titulo: 'Mi grupo', ico: 'users', html: `
+    <p>Con tu usuario de <b>Líder de discipulado</b> llevas la asistencia de tu grupo.</p>
+    <ul class="hp-list">
+      <li>${btn('check', 'Tomar asistencia')}: elige la fecha (se propone el día del grupo) y marca a los presentes.</li>
+      <li>Si llega alguien nuevo, escribe su nombre en “¿Vino alguien nuevo?” y queda como visita. Después tócala en <b>Personas del grupo</b> para anotar su celular.</li>
+      <li>Para corregir una reunión (por ejemplo, la fecha), toca el ${btn('edit', '')} de esa reunión, cambia lo que necesites y guarda.</li>
+      <li>La app te avisa quién lleva varias reuniones seguidas sin venir, para llamarlo o visitarlo.</li>
+      <li>Los miembros de la iglesia los agrega al grupo la secretaría o el pastor. Tú puedes agregar visitas y personas que no son miembros.</li>
+    </ul>`
+  },
+  TEMAS.lider.find((t) => t.id === 'perfil')
+];
 
 const RUTA_A_TEMA = { integrantes: 'actividades', asistencia: 'asistencia', actividades: 'actividades', actividad: 'actividades', inicio: 'inicio', general: 'general', ministerios: 'ministerios', ministerio: 'ministerios', rendiciones: 'rendiciones', diezmos: 'diezmos', miembros: 'miembros', admin: 'admin', 'mi-ministerio': 'mi-ministerio', perfil: 'perfil' };
 
