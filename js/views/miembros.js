@@ -147,6 +147,7 @@ export function editarMiembro(ctx, m = null) {
       <label class="field"><span>💍 Cónyuge (diezman como matrimonio)</span><select name="conyugeId"><option value="">— Sin cónyuge registrado —</option>${[...ctx.data.miembros].filter((x) => x.id !== m?.id).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((x) => `<option value="${x.id}" ${x.id === m?.conyugeId ? 'selected' : ''}>${esc(x.nombre)}${x.conyugeId && x.conyugeId !== m?.id ? ' (ya tiene cónyuge)' : ''}${x.estado === 'inactivo' ? ' · inactivo' : x.estado === 'trasladado' ? ' · trasladado' : ''}</option>`).join('')}</select></label>
       <label class="field"><span>Habilitado para diezmar</span><select name="habilitadoDiezmo"><option value="si" ${m?.habilitadoDiezmo !== 'no' ? 'selected' : ''}>Sí · trabaja o tiene ingresos</option><option value="no" ${m?.habilitadoDiezmo === 'no' ? 'selected' : ''}>No · estudiante o sin ingresos</option></select><small class="hint">Los no habilitados no se cuentan en la estadística de diezmos.</small></label>
       <label class="field"><span>Notas</span><input name="notas" maxlength="300" value="${esc(m?.notas || '')}"></label>
+      ${m && esAdmin(ctx.user) ? `<p class="ficha-extra"><button type="button" class="link-btn" data-unir>${icon('users', 14)} Es la misma persona que otro miembro…</button></p>` : ''}
       ${m && ctx.user?.rol !== 'secretaria' ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar miembro</button>` : ''}`,
     submitLabel: m ? 'Guardar ficha' : 'Agregar',
     onOpen(f, { close }) {
@@ -178,6 +179,7 @@ export function editarMiembro(ctx, m = null) {
         if (e === 'trasladado') f.trasladoA.focus();
       });
       f.fechaBaja.required = f.estado.value === 'trasladado';
+      f.querySelector('[data-unir]')?.addEventListener('click', () => { close(null); unirMiembro(ctx, m); });
       f.querySelector('[data-borrar]')?.addEventListener('click', async () => {
         close(null);
         if (!(await confirmar(`¿Eliminar a <b>${esc(m.nombre)}</b> del registro?<br><span class="muted">Elimina solo si fue un error al ingresarlo: desaparece también de los análisis de meses pasados. Si dejó la iglesia, márcalo <b>inactivo</b> o <b>trasladado</b> con su fecha y su historial se conserva.</span>`, { boton: 'Eliminar', danger: true }))) return;
@@ -191,6 +193,56 @@ export function editarMiembro(ctx, m = null) {
       const r = await call('saveMiembro', d);
       const enl = r?.enlazados?.length ? ` · enlazado en el listado (${r.enlazados.join(', ')})` : '';
       toast((m ? 'Ficha actualizada' : 'Miembro agregado') + enl);
+      await ctx.refresh();
+    }
+  });
+}
+
+// ---------------- Unir dos fichas de la misma persona ----------------
+// Queda la ficha abierta; la otra se elimina y todo lo suyo (diezmos, asistencia, discipulados) pasa a esta
+function unirMiembro(ctx, m) {
+  const { data } = ctx;
+  const tk = (n) => normalNombre(n).split(' ').filter((t) => t.length > 2);
+  const mios = tk(m.nombre);
+  const parecido = (x) => tk(x.nombre).filter((t) => mios.includes(t)).length;
+  const otros = data.miembros.filter((x) => x.id !== m.id).sort((a, b) => parecido(b) - parecido(a) || a.nombre.localeCompare(b.nombre, 'es'));
+  const sugeridos = otros.filter((x) => parecido(x) > 0);
+  const resto = otros.filter((x) => !parecido(x));
+  const op = (x) => `<option value="${x.id}">${esc(x.nombre)}${x.estado !== 'activo' ? ` · ${x.estado}` : ''}${x.rut ? ` · ${esc(x.rut)}` : ''}</option>`;
+  const diezmosDe = (id) => (data.diezmos || []).filter((d) => d.miembroId === id || d.conyugeId === id).length;
+  return modal({
+    title: 'Unir fichas de la misma persona',
+    body: `
+      <p class="muted">Si <b>${esc(m.nombre)}</b> quedó registrado dos veces (por ejemplo, con el nombre escrito distinto), une las dos fichas en una sola.</p>
+      <label class="field"><span>¿Con qué otra ficha es la misma persona?</span><select name="otroId" required><option value="">— Elegir —</option>
+        ${sugeridos.length ? `<optgroup label="Nombres parecidos">${sugeridos.map(op).join('')}</optgroup>` : ''}<optgroup label="Todos">${resto.map(op).join('')}</optgroup></select></label>
+      <div data-detalle hidden>
+        <div class="field"><span>¿Qué nombre queda?</span>
+          <label class="check"><input type="radio" name="nombre" value="${esc(m.nombre)}" checked> <span data-n1>${esc(m.nombre)}</span></label>
+          <label class="check"><input type="radio" name="nombre" value="" data-r2> <span data-n2></span></label></div>
+        <div class="note">${icon('sparkle', 16)}<span data-resumen></span></div>
+      </div>`,
+    submitLabel: 'Unir fichas',
+    onOpen(f) {
+      f.otroId.addEventListener('change', () => {
+        const o = data.miembros.find((x) => x.id === f.otroId.value);
+        f.querySelector('[data-detalle]').hidden = !o;
+        if (!o) return;
+        f.querySelector('[data-r2]').value = o.nombre;
+        f.querySelector('[data-n2]').textContent = o.nombre;
+        // propone el nombre más completo
+        f.querySelectorAll('[name=nombre]')[o.nombre.length > m.nombre.length ? 1 : 0].checked = true;
+        const dz = diezmosDe(o.id);
+        f.querySelector('[data-resumen]').innerHTML = `Queda una sola ficha. Los datos que le falten se completan con los de la otra${dz ? `, y sus <b>${dz} diezmo${dz === 1 ? '' : 's'}</b> pasan a la ficha que queda` : ''}. También se juntan su asistencia, sus grupos de discipulado y los listados de ministerios. Lo que ya tiene la ficha de ${esc(m.nombre)} no se cambia.`;
+      });
+    },
+    async onSubmit(f) {
+      const o = data.miembros.find((x) => x.id === f.otroId.value);
+      if (!o) throw new Error('Elige la otra ficha');
+      const nombre = f.querySelector('[name=nombre]:checked').value;
+      if (!(await confirmar(`Se unirán <b>${esc(m.nombre)}</b> y <b>${esc(o.nombre)}</b> en una sola ficha con el nombre <b>${esc(nombre)}</b>. No se puede deshacer.`, { boton: 'Unir', danger: true }))) return false;
+      const r = await call('unirMiembros', { id: m.id, otroId: o.id, nombre });
+      toast(`Fichas unidas: ${r.miembro.nombre}${r.diezmos ? ` · ${r.diezmos} diezmo${r.diezmos === 1 ? '' : 's'} movido${r.diezmos === 1 ? '' : 's'}` : ''}`);
       await ctx.refresh();
     }
   });

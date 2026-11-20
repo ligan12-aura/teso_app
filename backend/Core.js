@@ -1480,6 +1480,76 @@ var TesoCore = (function () {
       if (Object.keys(completar).length) completar.actualizadoEn = env.now();
       return { nombres: elegidos.map(function (i) { return i.nombre; }), completar: Object.keys(completar).length ? completar : null };
     }
+    // Unir dos fichas de la misma persona (p. ej. "Amir" y "Amirahmad"): queda la ficha p.id, se completan sus
+    // datos vacíos con los de la otra y todo lo de la otra (diezmos, asistencia, discipulados, listados) pasa a ella.
+    function unirMiembros(user, p) {
+      var queda = find('Miembros', p.id), sale = find('Miembros', p.otroId);
+      if (!queda || !sale) throw TesoError('Miembro no encontrado');
+      if (queda.id === sale.id) throw TesoError('Elige a otra persona');
+      var now = env.now();
+      var patch = { actualizadoEn: now };
+      var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim();
+      if (nombre && nombre !== queda.nombre) {
+        if (nombre !== sale.nombre) throw TesoError('Elige uno de los dos nombres');
+        patch.nombre = nombre;
+      }
+      ['fechaNacimiento', 'celular', 'email', 'domicilio', 'estadoCivil', 'rut', 'trasladoA'].forEach(function (k) { if (!queda[k] && sale[k]) patch[k] = sale[k]; });
+      if (sale.notas && normalNombre(queda.notas).indexOf(normalNombre(sale.notas)) < 0) patch.notas = ((queda.notas ? queda.notas + ' · ' : '') + sale.notas).slice(0, 300);
+      // miembro desde: la fecha más antigua (vacía = siempre fue miembro)
+      if (!queda.fechaIngreso || !sale.fechaIngreso) patch.fechaIngreso = '';
+      else if (sale.fechaIngreso < queda.fechaIngreso) patch.fechaIngreso = sale.fechaIngreso;
+      // si una de las dos fichas está activa, queda activa
+      if (queda.estado !== 'activo' && sale.estado === 'activo') { patch.estado = 'activo'; patch.fechaBaja = ''; patch.trasladoA = ''; }
+      if (queda.habilitadoDiezmo === 'no' && sale.habilitadoDiezmo !== 'no') patch.habilitadoDiezmo = 'si';
+      // cónyuge
+      if (!queda.conyugeId && sale.conyugeId && sale.conyugeId !== queda.id) patch.conyugeId = sale.conyugeId;
+      all('Miembros').forEach(function (m) { if (m.conyugeId === sale.id && m.id !== queda.id) update('Miembros', m.id, { conyugeId: patch.conyugeId === m.id || !queda.conyugeId ? queda.id : '' }); });
+      if (patch.conyugeId === undefined && queda.conyugeId === sale.id) patch.conyugeId = '';
+      // diezmos
+      var diezmos = 0;
+      all('Diezmos').forEach(function (d) {
+        var cambio = {};
+        if (d.miembroId === sale.id) cambio.miembroId = queda.id;
+        if (d.conyugeId === sale.id) cambio.conyugeId = queda.id;
+        if (!Object.keys(cambio).length) return;
+        var mid = cambio.miembroId || d.miembroId;
+        if ((cambio.conyugeId || d.conyugeId) === mid) cambio.conyugeId = '';
+        update('Diezmos', d.id, cambio); diezmos++;
+      });
+      // asistencia de cultos
+      var reemplazarIds = function (lista, de, a) {
+        var ids = String(lista || '').split(',').filter(Boolean), out = [];
+        ids.forEach(function (id) { id = id === de ? a : id; if (out.indexOf(id) < 0) out.push(id); });
+        return out.join(',');
+      };
+      all('Asistencias').forEach(function (s) {
+        if (String(s.presentes || '').split(',').indexOf('m:' + sale.id) >= 0) update('Asistencias', s.id, { presentes: reemplazarIds(s.presentes, 'm:' + sale.id, 'm:' + queda.id) });
+      });
+      // discipulados: si ambas estaban en el mismo grupo, se juntan sus asistencias en una sola fila
+      all('PersonasHogar').forEach(function (x) {
+        if (x.miembroId !== sale.id) return;
+        var ya = all('PersonasHogar').filter(function (y) { return y.grupoId === x.grupoId && y.miembroId === queda.id; })[0];
+        if (!ya) { update('PersonasHogar', x.id, { miembroId: queda.id, actualizadoEn: now }); return; }
+        all('AsistenciasHogar').forEach(function (s) {
+          if (s.grupoId === x.grupoId && String(s.presentes || '').split(',').indexOf(x.id) >= 0) update('AsistenciasHogar', s.id, { presentes: reemplazarIds(s.presentes, x.id, ya.id) });
+        });
+        if (toBool(x.activo) && !toBool(ya.activo)) update('PersonasHogar', ya.id, { activo: true });
+        remove('PersonasHogar', x.id);
+      });
+      all('GruposHogar').forEach(function (g) {
+        var ids = String(g.lideres || '').split(',');
+        if (ids.indexOf(sale.id) >= 0) update('GruposHogar', g.id, { lideres: reemplazarIds(g.lideres, sale.id, queda.id) });
+      });
+      // listados de ministerios
+      all('Integrantes').forEach(function (i) {
+        if (i.miembroId !== sale.id) return;
+        var ya = all('Integrantes').some(function (j) { return j.ministerioId === i.ministerioId && j.miembroId === queda.id; });
+        update('Integrantes', i.id, ya ? { miembroId: '', nombre: sale.nombre, actualizadoEn: now } : { miembroId: queda.id, actualizadoEn: now });
+      });
+      remove('Miembros', sale.id);
+      var r = update('Miembros', queda.id, patch);
+      return { miembro: r, diezmos: diezmos };
+    }
     function deleteMiembro(user, p) {
       var mb = find('Miembros', p.id);
       if (!mb) throw TesoError('Miembro no encontrado');
@@ -1831,6 +1901,7 @@ var TesoCore = (function () {
       importarMovimientosMinisterio: { fn: importarMovimientosMinisterio, role: T, write: true },
       saveMiembro: { fn: saveMiembro, role: MIEMBROS, write: true },
       deleteMiembro: { fn: deleteMiembro, role: ADMIN, write: true },
+      unirMiembros: { fn: unirMiembros, role: ADMIN, write: true },
       importarMiembros: { fn: importarMiembros, role: MIEMBROS, write: true },
       completarMiembros: { fn: completarMiembros, role: MIEMBROS, write: true },
       saveDiezmo: { fn: saveDiezmo, role: T, write: true },
