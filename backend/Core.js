@@ -17,7 +17,7 @@ var TesoCore = (function () {
   // ---------------------------------------------------------------
   var TABLES = {
     Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde', 'grupoId'],
-    Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn', 'presupuestoMensual', 'actividades'],
+    Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn', 'presupuestoMensual', 'actividades', 'porMatrimonio'],
     MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo'],
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'actividadId'],
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
@@ -26,7 +26,8 @@ var TesoCore = (function () {
     Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil', 'trasladoA', 'rut', 'habilitadoDesde'],
     Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId'],
     // Listado propio de un ministerio (p. ej. jóvenes): pueden o no ser miembros de la iglesia
-    Integrantes: ['id', 'ministerioId', 'nombre', 'celular', 'email', 'fechaNacimiento', 'miembroId', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
+    // En un ministerio "por matrimonio" (p. ej. Familia) cada integrante es un matrimonio: miembroId2 / nombre2 = su cónyuge
+    Integrantes: ['id', 'ministerioId', 'nombre', 'celular', 'email', 'fechaNacimiento', 'miembroId', 'notas', 'activo', 'creadoEn', 'actualizadoEn', 'miembroId2', 'nombre2'],
     // Actividades con cuota de un ministerio y sus inscritos (confirmados y pagos)
     Actividades: ['id', 'ministerioId', 'nombre', 'fecha', 'cuota', 'descripcion', 'estado', 'creadoPor', 'creadoEn', 'actualizadoEn'],
     Inscripciones: ['id', 'actividadId', 'integranteId', 'pagoMonto', 'fechaPago', 'movId', 'creadoEn', 'actualizadoEn'],
@@ -403,7 +404,7 @@ var TesoCore = (function () {
       var ids = {};
       mins.forEach(function (m) { ids[m.id] = true; });
       base.asistenciasMin = all('AsistenciasMinisterios').filter(function (a) { return ids[a.ministerioId]; });
-      base.ministeriosAsistencia = mins.map(function (m) { return { id: m.id, nombre: m.nombre, icono: m.icono, color: m.color }; });
+      base.ministeriosAsistencia = mins.map(function (m) { return { id: m.id, nombre: m.nombre, icono: m.icono, color: m.color, porMatrimonio: m.porMatrimonio || '' }; });
       if (soloNombres) base.integrantesAsistencia = vistaIntegrantes(all('Integrantes').filter(function (i) { return ids[i.ministerioId]; })).map(function (i) {
         return { id: i.id, ministerioId: i.ministerioId, nombre: i.nombre, esMiembro: i.esMiembro, activo: i.activo, creadoEn: i.creadoEn };
       });
@@ -570,7 +571,7 @@ var TesoCore = (function () {
           if (toBool(i.activo)) ya.activo = true;
           return;
         }
-        var r = { id: 'i:' + i.id, tipo: 'integrante', nombre: i.nombre, activo: toBool(i.activo), desde: String(i.creadoEn || '').slice(0, 10), celular: sinContactoIntegrantes ? '' : (i.celular || ''), ministerios: mins[i.ministerioId] ? [mins[i.ministerioId]] : [] };
+        var r = { id: 'i:' + i.id, tipo: 'integrante', nombre: i.nombre2 ? i.nombre + ' y ' + i.nombre2 : i.nombre, activo: toBool(i.activo), desde: String(i.creadoEn || '').slice(0, 10), celular: sinContactoIntegrantes ? '' : (i.celular || ''), ministerios: mins[i.ministerioId] ? [mins[i.ministerioId]] : [] };
         porNombre[k] = r; out.push(r);
       });
       all('Visitas').forEach(function (v) {
@@ -843,7 +844,7 @@ var TesoCore = (function () {
     // ---------------- Integrantes y actividades de un ministerio ----------------
     function miembrosEnlace() {
       return all('Miembros').filter(function (m) { return m.estado === 'activo'; })
-        .map(function (m) { return { id: m.id, nombre: m.nombre }; });
+        .map(function (m) { return { id: m.id, nombre: m.nombre, conyugeId: m.conyugeId || '' }; });
     }
     // Un integrante enlazado a un miembro toma sus datos de la ficha de Miembros (no se registra dos veces)
     // Integrante enlazado: nombre, contacto y fecha de nacimiento vienen de su ficha de Miembros (también para
@@ -853,10 +854,15 @@ var TesoCore = (function () {
       all('Miembros').forEach(function (m) { mb[m.id] = m; });
       return lista.map(function (i) {
         var m = i.miembroId && mb[i.miembroId];
-        if (!m) return Object.assign({}, i, { esMiembro: false });
-        if (soloNombre) return Object.assign({}, i, { nombre: m.nombre, esMiembro: true });
-        return Object.assign({}, i, {
-          nombre: m.nombre, celular: m.celular || i.celular, email: m.email || i.email,
+        // cónyuge (ministerio por matrimonio): de su ficha si es miembro, o el nombre escrito
+        var m2 = i.miembroId2 && mb[i.miembroId2];
+        var n2 = m2 ? m2.nombre : String(i.nombre2 || '');
+        var pareja = function (n1) { return n2 ? n1 + ' y ' + n2 : n1; };
+        var extra = { nombreBase: i.nombre, nombre2: n2, conyugeEsMiembro: !!m2, esMatrimonio: !!n2 };
+        if (!m) return Object.assign({}, i, extra, { nombre: pareja(i.nombre), esMiembro: false });
+        if (soloNombre) return Object.assign({}, i, extra, { nombre: pareja(m.nombre), esMiembro: true });
+        return Object.assign({}, i, extra, {
+          nombre: pareja(m.nombre), celular: m.celular || i.celular, email: m.email || i.email,
           fechaNacimiento: m.fechaNacimiento || i.fechaNacimiento, esMiembro: true,
           // datos que faltan en su ficha de Miembros (el líder puede completarlos)
           faltan: ['celular', 'email', 'fechaNacimiento'].filter(function (k) { return !m[k]; })
@@ -897,9 +903,17 @@ var TesoCore = (function () {
         if (!mb && actual && miembroId === actual.miembroId) miembroId = '';
         else if (!mb) throw TesoError('Ese miembro no está en el registro de la iglesia');
       }
-      if (mb) {
-        var dup = all('Integrantes').some(function (i) { return i.ministerioId === m.id && i.miembroId === miembroId && (!actual || i.id !== actual.id); });
-        if (dup) throw TesoError(mb.nombre + ' ya está en el listado');
+      var enLista = function (mid) { return all('Integrantes').some(function (i) { return i.ministerioId === m.id && (i.miembroId === mid || i.miembroId2 === mid) && (!actual || i.id !== actual.id); }); };
+      if (mb && enLista(miembroId)) throw TesoError(mb.nombre + ' ya está en el listado');
+      // cónyuge (solo en un ministerio por matrimonio)
+      var miembroId2 = '', nombre2 = '';
+      if (m.porMatrimonio === 'si') {
+        miembroId2 = admin ? String(p.miembroId2 || '') : (actual ? String(actual.miembroId2 || '') : '');
+        var mb2 = miembroId2 ? find('Miembros', miembroId2) : null;
+        if (miembroId2 && !mb2) { if (actual && miembroId2 === actual.miembroId2) miembroId2 = ''; else throw TesoError('El cónyuge no está en el registro de la iglesia'); }
+        if (mb2 && miembroId2 === miembroId) throw TesoError('Elige a dos personas distintas');
+        if (mb2 && enLista(miembroId2)) throw TesoError(mb2.nombre + ' ya está en el listado');
+        nombre2 = mb2 ? '' : String(p.nombre2 === undefined ? (actual ? actual.nombre2 || '' : '') : p.nombre2).replace(/\s+/g, ' ').trim().slice(0, 80);
       }
       var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim();
       if (!nombre && mb) nombre = mb.nombre;
@@ -921,7 +935,7 @@ var TesoCore = (function () {
       }
       var d = {
         ministerioId: m.id, nombre: nombre, celular: celular, email: email.slice(0, 120),
-        fechaNacimiento: fn, miembroId: miembroId, notas: String(p.notas || '').trim().slice(0, 300),
+        fechaNacimiento: fn, miembroId: miembroId, miembroId2: miembroId2, nombre2: nombre2, notas: String(p.notas || '').trim().slice(0, 300),
         activo: p.activo === undefined ? (actual ? actual.activo : true) : toBool(p.activo), actualizadoEn: now
       };
       if (mb && p.completar && typeof p.completar === 'object') {
@@ -952,13 +966,24 @@ var TesoCore = (function () {
       if (ids.length > 300) throw TesoError('Demasiados a la vez');
       var lista = all('Integrantes').filter(function (i) { return i.ministerioId === m.id; });
       var enlazado = {};
-      lista.forEach(function (i) { if (i.miembroId) enlazado[i.miembroId] = true; });
+      lista.forEach(function (i) { if (i.miembroId) enlazado[i.miembroId] = true; if (i.miembroId2) enlazado[i.miembroId2] = true; });
       var now = env.now(), agregados = 0, enlazados = 0, omitidos = 0, vistos = {};
+      var porMatrimonio = m.porMatrimonio === 'si';
       ids.forEach(function (mid) {
         if (vistos[mid]) return;
         vistos[mid] = true;
         var mb = find('Miembros', mid);
         if (!mb || enlazado[mid]) { omitidos++; return; }
+        // ministerio por matrimonio: el miembro y su cónyuge activo quedan como un solo integrante
+        if (porMatrimonio) {
+          var cy = mb.conyugeId && find('Miembros', mb.conyugeId);
+          var conCy = cy && cy.estado === 'activo' && cy.conyugeId === mb.id && !enlazado[cy.id];
+          insert('Integrantes', { id: uid(), ministerioId: m.id, nombre: mb.nombre, celular: '', email: '', fechaNacimiento: '', miembroId: mid, miembroId2: conCy ? cy.id : '', nombre2: '', notas: '', activo: true, creadoEn: now, actualizadoEn: now });
+          enlazado[mid] = true;
+          if (conCy) { enlazado[cy.id] = true; vistos[cy.id] = true; }
+          agregados++;
+          return;
+        }
         var clave = normalNombre(mb.nombre);
         var mismos = lista.filter(function (i) { return normalNombre(i.nombre) === clave && !(i.miembroId && find('Miembros', i.miembroId)); });
         if (mismos.length === 1) {
@@ -1622,6 +1647,7 @@ var TesoCore = (function () {
       });
       // listados de ministerios
       all('Integrantes').forEach(function (i) {
+        if (i.miembroId2 === sale.id) update('Integrantes', i.id, { miembroId2: i.miembroId === queda.id ? '' : queda.id, actualizadoEn: now });
         if (i.miembroId !== sale.id) return;
         var ya = all('Integrantes').some(function (j) { return j.ministerioId === i.ministerioId && j.miembroId === queda.id; });
         update('Integrantes', i.id, ya ? { miembroId: '', nombre: sale.nombre, actualizadoEn: now } : { miembroId: queda.id, actualizadoEn: now });
@@ -1645,6 +1671,7 @@ var TesoCore = (function () {
       if (conCultos.length) reemplazarPresente(conCultos, 'm:' + mb.id, 'i:' + integEnl.id);
       // Los integrantes de ministerios enlazados a esta ficha quedan como no miembros con sus datos
       all('Integrantes').forEach(function (i) {
+        if (i.miembroId2 === mb.id) update('Integrantes', i.id, { miembroId2: '', nombre2: mb.nombre, actualizadoEn: env.now() });
         if (i.miembroId === mb.id) update('Integrantes', i.id, { miembroId: '', nombre: mb.nombre, celular: mb.celular || i.celular, email: mb.email || i.email, fechaNacimiento: mb.fechaNacimiento || i.fechaNacimiento, actualizadoEn: env.now() });
       });
       all('PersonasHogar').forEach(function (x) {
@@ -1912,7 +1939,9 @@ var TesoCore = (function () {
         presupuestoMensual: monto(p.presupuestoMensual, actual && actual.presupuestoMensual),
         activo: p.activo === undefined ? (actual ? actual.activo : true) : toBool(p.activo),
         // Listado de integrantes y actividades con cuota: 'si' / 'no'
-        actividades: p.actividades === undefined ? (actual ? actual.actividades : '') : (p.actividades === 'si' || p.actividades === true ? 'si' : 'no')
+        actividades: p.actividades === undefined ? (actual ? actual.actividades : '') : (p.actividades === 'si' || p.actividades === true ? 'si' : 'no'),
+        // Integrantes por matrimonio: se cuentan (listado, asistencia, actividades) como matrimonios
+        porMatrimonio: p.porMatrimonio === undefined ? (actual ? actual.porMatrimonio || '' : '') : (p.porMatrimonio === 'si' || p.porMatrimonio === true ? 'si' : 'no')
       };
       if (p.id) return update('Ministerios', p.id, d);
       return insert('Ministerios', Object.assign(d, { id: uid(), creadoEn: env.now() }));

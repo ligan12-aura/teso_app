@@ -82,7 +82,7 @@ export function ambitoMinisterio(data, m, etiquetaLista = 'Integrantes') {
     acciones: { save: 'saveAsistenciaMinisterio', del: 'deleteAsistenciaMinisterio' },
     extra: { ministerioId: m.id },
     visitas: false,
-    nuevoLbl: jov ? 'joven' : 'integrante',
+    nuevoLbl: m.porMatrimonio === 'si' ? 'matrimonio' : jov ? 'joven' : 'integrante',
     notaNuevo: 'Quien agregues aquí queda en el listado del ministerio como no miembro.',
     grupos: [['miembro', 'Miembros'], ['integrante', 'No miembros']],
     filtroTipos: [['miembro', 'Miembros de la iglesia'], ['integrante', 'No miembros']],
@@ -204,7 +204,7 @@ export function render(root, ctx) {
   if (seccion === 'hogar') return renderHogar(root, ctx, sub, cabecera, redibujar);
   if (seccion === 'min') {
     const m = mins.find((x) => x.id === sub);
-    const cfg = ambitoMinisterio(data, m, /j[oó]ven/i.test(m.nombre) ? 'Jóvenes' : 'Integrantes');
+    const cfg = ambitoMinisterio(data, m, m.porMatrimonio === 'si' ? 'Matrimonios' : /j[oó]ven/i.test(m.nombre) ? 'Jóvenes' : 'Integrantes');
     // la secretaría solo ve; el líder la toma dentro de su ministerio
     if (ctx.user.rol === 'secretaria') cfg.soloLectura = true;
     return renderAmbito(root, ctx, cfg, cabecera('Asistencia', `<p class="muted small asist-ayuda">${icon('users', 13)} La asistencia de ${esc(m.nombre)} la toma su líder dentro del ministerio.${cfg.soloLectura ? ' Aquí puedes revisarla.' : ''}</p>`), redibujar);

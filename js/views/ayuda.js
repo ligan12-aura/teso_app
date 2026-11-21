@@ -187,6 +187,7 @@ const TEMAS = {
     {
       id: 'actividades', titulo: 'Integrantes y actividades', ico: 'users', html: `
       <p>Un ministerio puede tener su propio <b>listado de integrantes</b> (por ejemplo, Jóvenes) y <b>actividades con cuota</b>. Se activa en Configuración → Ministerios con la casilla “Listado de integrantes y actividades”. Ese ministerio muestra las pestañas <b>Finanzas · Jóvenes · Asistencia · Actividades</b>.</p>
+      <p><b>Ministerio por matrimonios</b> (por ejemplo Familia): en Configuración → Ministerios, marca también “Los integrantes son matrimonios”. Cada integrante es un matrimonio (“Ana y Benjamín”) y se cuenta como uno en el listado, la asistencia y las actividades (la cuota es por matrimonio). Al agregar miembros, los casados aparecen y entran juntos; un matrimonio que no es miembro se agrega con los dos nombres.</p>
       <ul class="hp-list">
         <li><b>Enlazar con Miembros:</b> solo tesorería puede indicar que un integrante es miembro de la iglesia (“¿Es miembro de la iglesia?”). El líder ve su nombre, pero no los datos de su ficha.</li>
         <li><b>Asistencia del ministerio:</b> el líder (o el pastor o el administrador) pasa lista en sus reuniones con los integrantes del listado, y la app avisa quién lleva varias reuniones seguidas sin venir. Es aparte de la asistencia de los cultos.</li>

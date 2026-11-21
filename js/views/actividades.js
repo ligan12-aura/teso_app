@@ -10,8 +10,8 @@ import { renderMinisterio as renderAsistencia } from './asistencia.js';
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const filtros = { q: '', tipo: 'activos' };
 
-export const etiquetaIntegrantes = (m) => (/j[oó]ven/i.test(m.nombre) ? 'Jóvenes' : 'Integrantes');
-const singular = (m) => (/j[oó]ven/i.test(m.nombre) ? 'joven' : 'integrante');
+export const etiquetaIntegrantes = (m) => (m.porMatrimonio === 'si' ? 'Matrimonios' : /j[oó]ven/i.test(m.nombre) ? 'Jóvenes' : 'Integrantes');
+const singular = (m) => (m.porMatrimonio === 'si' ? 'matrimonio' : /j[oó]ven/i.test(m.nombre) ? 'joven' : 'integrante');
 export const integrantesDe = (data, mid) => (data.integrantes || []).filter((i) => i.ministerioId === mid);
 export const actividadesDe = (data, mid) => (data.actividades || []).filter((a) => a.ministerioId === mid);
 
@@ -128,16 +128,27 @@ function renderIntegrantes(root, ctx, m, base, esTes) {
 // Elegir de una vez a varios miembros de la iglesia para el listado (solo tesorería, que ve el registro)
 function agregarVariosMiembros(ctx, m) {
   const { data } = ctx;
-  const ya = new Set(integrantesDe(data, m.id).filter((i) => i.esMiembro).map((i) => i.miembroId));
+  const porMat = m.porMatrimonio === 'si';
+  const ya = new Set(integrantesDe(data, m.id).flatMap((i) => [i.esMiembro ? i.miembroId : '', i.conyugeEsMiembro ? i.miembroId2 : '']).filter(Boolean));
   const fichas = Object.fromEntries((data.miembros || []).map((x) => [x.id, x]));
+  const enlace = Object.fromEntries((data.miembrosEnlace || []).map((x) => [x.id, x]));
+  const vistos = new Set();
   const lista = (data.miembrosEnlace || []).filter((x) => !ya.has(x.id))
-    .map((x) => ({ ...x, edad: edad(fichas[x.id]?.fechaNacimiento, data.hoy) }))
-    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    .filter((x) => {
+      if (!porMat) return true;
+      if (vistos.has(x.id)) return false;
+      vistos.add(x.id);
+      const c = enlace[x.conyugeId];
+      if (c && c.conyugeId === x.id && !ya.has(c.id)) { vistos.add(c.id); x.pareja = c.nombre; }
+      return true;
+    })
+    .map((x) => ({ ...x, nombre: x.pareja ? `${x.nombre} y ${x.pareja}` : x.nombre, edad: edad(fichas[x.id]?.fechaNacimiento, data.hoy) }));
   if (!lista.length) return toast('Todos los miembros activos ya están en el listado');
   return modal({
     title: `Agregar miembros · ${esc(etiquetaIntegrantes(m))}`,
     body: `
-      <p class="muted small">Marca a los miembros de la iglesia que participan en ${esc(m.nombre)}. Quedan enlazados a su ficha: sus datos se toman de Miembros.</p>
+      <p class="muted small">Marca a los miembros de la iglesia que participan en ${esc(m.nombre)}. Quedan enlazados a su ficha: sus datos se toman de Miembros.${porMat ? ' Los matrimonios aparecen en una sola línea y entran juntos.' : ''}</p>
       <div class="pick-tools"><div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar…" data-buscar></div>
         <select data-edad><option value="">Todas las edades</option><option value="25">Hasta 25 años</option><option value="30">Hasta 30 años</option><option value="35">Hasta 35 años</option></select>
         <button type="button" class="link-btn" data-todos>Marcar visibles</button><button type="button" class="link-btn" data-ninguno>Ninguno</button></div>
@@ -181,6 +192,11 @@ function editarIntegrante(ctx, m, it = null) {
   // si su ficha de miembro ya no está activa, igual se muestra la opción actual
   if (it?.esMiembro && it.miembroId && !opciones.some((x) => x.id === it.miembroId)) opciones.unshift({ id: it.miembroId, nombre: it.nombre });
   const enlazado = !!it?.esMiembro;
+  const porMat = m.porMatrimonio === 'si';
+  const enlace = Object.fromEntries((data.miembrosEnlace || []).map((x) => [x.id, x]));
+  const usados2 = new Set(integrantesDe(data, m.id).filter((i) => i.id !== it?.id).flatMap((i) => [i.miembroId, i.miembroId2]).filter(Boolean));
+  const opciones2 = (data.miembrosEnlace || []).filter((x) => !usados2.has(x.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  if (it?.conyugeEsMiembro && it.miembroId2 && !opciones2.some((x) => x.id === it.miembroId2)) opciones2.unshift({ id: it.miembroId2, nombre: it.nombre2 });
   return modal({
     title: it ? `Ficha · ${esc(it.nombre)}` : `Agregar ${singular(m)}`,
     body: `
@@ -198,7 +214,7 @@ function editarIntegrante(ctx, m, it = null) {
         ${it.faltan.includes('email') ? `<label class="field"><span>Correo</span><input type="email" name="cEmail" placeholder="nombre@correo.cl" value="${esc(it.email || '')}"></label>` : ''}
       </div>` : ''}
       <div data-propios>
-        <label class="field"><span>Nombre y apellidos</span><input name="nombre" maxlength="80" value="${esc(it && !it.esMiembro ? it.nombre : '')}"></label>
+        <label class="field"><span>${porMat ? 'Nombre y apellidos (esposo/a)' : 'Nombre y apellidos'}</span><input name="nombre" maxlength="80" value="${esc(it && !it.esMiembro ? (it.nombreBase ?? it.nombre) : '')}"></label>
         ${it && !it.esMiembro && it.miembroId ? '<p class="muted small">Su ficha de Miembros ya no existe: quedó como no miembro.</p>' : ''}
         <div class="form-row">
           <label class="field"><span>Celular</span><input name="celular" inputmode="tel" placeholder="+56 9 1234 5678" value="${esc(it && !it.esMiembro ? it.celular : '')}"></label>
@@ -206,6 +222,12 @@ function editarIntegrante(ctx, m, it = null) {
         </div>
         <label class="field"><span>Correo</span><input type="email" name="email" placeholder="nombre@correo.cl" value="${esc(it && !it.esMiembro ? it.email : '')}"></label>
       </div>
+      ${porMat ? `<div class="conyuge-integrante">
+        ${puedeEnlazar ? `<label class="field"><span>💍 Cónyuge</span><select name="miembroId2"><option value="">No es miembro / sin cónyuge (escribe su nombre abajo)</option>${opciones2.map((x) => `<option value="${x.id}" ${it?.conyugeEsMiembro && x.id === it.miembroId2 ? 'selected' : ''}>Sí · ${esc(x.nombre)}</option>`).join('')}</select></label>`
+          : `<input type="hidden" name="miembroId2" value="${it?.conyugeEsMiembro ? esc(it.miembroId2) : ''}">`}
+        <label class="field" data-nombre2><span>Nombre del cónyuge <small class="muted">(vacío si viene solo o sola)</small></span><input name="nombre2" maxlength="80" value="${esc(it && !it.conyugeEsMiembro ? it.nombre2 || '' : '')}"></label>
+        ${it?.conyugeEsMiembro && !puedeEnlazar ? `<p class="muted small">💍 Cónyuge: ${esc(it.nombre2)} (miembro de la iglesia)</p>` : ''}
+      </div>` : ''}
       <label class="field"><span>Notas</span><input name="notas" maxlength="300" placeholder="Ej: contacto de su apoderado" value="${esc(it?.notas || '')}"></label>
       ${it ? `<label class="check"><input type="checkbox" name="activo" ${it.activo ? 'checked' : ''}> Activo en el ministerio</label>
       <button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar del listado</button>` : ''}`,
@@ -221,6 +243,22 @@ function editarIntegrante(ctx, m, it = null) {
       };
       if (puedeEnlazar) f.miembroId.addEventListener('change', sync);
       sync();
+      // ministerio por matrimonio: al elegir a un miembro casado se propone su cónyuge
+      const sync2 = () => {
+        const n2 = f.querySelector('[data-nombre2]');
+        if (n2) n2.hidden = !!f.miembroId2?.value;
+      };
+      if (porMat) {
+        if (puedeEnlazar) {
+          f.miembroId.addEventListener('change', () => {
+            const c = enlace[enlace[f.miembroId.value]?.conyugeId];
+            if (c && !f.miembroId2.value && [...f.miembroId2.options].some((o) => o.value === c.id)) f.miembroId2.value = c.id;
+            sync2();
+          });
+          f.miembroId2.addEventListener('change', sync2);
+        }
+        sync2();
+      }
       f.querySelector('[data-borrar]')?.addEventListener('click', async () => {
         close(null);
         if (!(await confirmar(`¿Eliminar a <b>${esc(it.nombre)}</b> del listado? Si ya no participa, es mejor dejarlo inactivo.`, { boton: 'Eliminar', danger: true }))) return;
@@ -230,6 +268,8 @@ function editarIntegrante(ctx, m, it = null) {
     async onSubmit(f) {
       const d = formData(f);
       if (!d.miembroId && !d.nombre) throw new Error('Escribe el nombre');
+      if (porMat && d.miembroId2) d.nombre2 = '';
+      if (porMat && d.miembroId && d.miembroId === d.miembroId2) throw new Error('Elige a dos personas distintas');
       if (f.querySelector('[data-completar]') && d.miembroId === it?.miembroId) d.completar = { celular: d.cCelular || '', email: d.cEmail || '', fechaNacimiento: d.cFechaNacimiento || '' };
       delete d.cCelular; delete d.cEmail; delete d.cFechaNacimiento;
       d.ministerioId = m.id;

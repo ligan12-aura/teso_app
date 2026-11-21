@@ -209,14 +209,19 @@ function editMinisterio(ctx, m = null) {
       <div class="field"><span>Ícono</span><div class="picker">${ICONOS.map((i) => `<label><input type="radio" name="icono" value="${i}" ${i === ico ? 'checked' : ''}><span>${i}</span></label>`).join('')}</div></div>
       <div class="field"><span>Color</span><div class="picker colors">${COLORES.map((c) => `<label><input type="radio" name="color" value="${c}" ${c === color ? 'checked' : ''}><span style="background:${c}"></span></label>`).join('')}</div></div>
       <label class="check"><input type="checkbox" name="actividades" ${m?.actividades === 'si' ? 'checked' : ''}> Listado de integrantes y actividades con cuota <small class="muted">(p. ej. jóvenes)</small></label>
+      <label class="check" data-por-matrimonio ${m?.actividades === 'si' ? '' : 'hidden'} style="margin-left:26px"><input type="checkbox" name="porMatrimonio" ${m?.porMatrimonio === 'si' ? 'checked' : ''}> Los integrantes son <b>matrimonios</b> <small class="muted">(p. ej. Familia: se cuentan por matrimonio en el listado, la asistencia y las actividades)</small></label>
       ${m ? `<label class="check"><input type="checkbox" name="activo" ${m.activo ? 'checked' : ''}> Ministerio activo</label>` : ''}`,
-    onOpen(f) { formatoPesos(f.itemMensual); formatoPesos(f.presupuestoMensual); },
+    onOpen(f) {
+      formatoPesos(f.itemMensual); formatoPesos(f.presupuestoMensual);
+      f.actividades.addEventListener('change', () => { f.querySelector('[data-por-matrimonio]').hidden = !f.actividades.checked; });
+    },
     async onSubmit(f) {
       const d = formData(f);
       d.itemMensual = pesos(d.itemMensual);
       d.presupuestoMensual = pesos(d.presupuestoMensual);
       if (m) { d.id = m.id; d.activo = f.activo.checked; }
       d.actividades = f.actividades.checked ? 'si' : 'no';
+      d.porMatrimonio = f.actividades.checked && f.porMatrimonio.checked ? 'si' : 'no';
       await call('saveMinisterio', d);
       toast('Ministerio guardado');
       await ctx.refresh();
