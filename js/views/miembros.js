@@ -38,6 +38,7 @@ export function render(root, ctx) {
   const miembros = [...data.miembros].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const activos = miembros.filter((m) => m.estado === 'activo');
   const trasladados = miembros.filter((m) => m.estado === 'trasladado');
+  const fallecidos = miembros.filter((m) => m.estado === 'fallecido');
   const completas = miembros.filter(fichaCompleta).length;
   const nombreDe = Object.fromEntries(data.miembros.map((x) => [x.id, x.nombre]));
   const mesHoy = +hoy.slice(5, 7);
@@ -50,6 +51,7 @@ export function render(root, ctx) {
     if (filtros.estado === 'activos' && m.estado !== 'activo') return false;
     if (filtros.estado === 'inactivos' && m.estado !== 'inactivo') return false;
     if (filtros.estado === 'trasladados' && m.estado !== 'trasladado') return false;
+    if (filtros.estado === 'fallecidos' && m.estado !== 'fallecido') return false;
     if (filtros.estado === 'incompletas' && fichaCompleta(m)) return false;
     if (filtros.estado === 'nohab' && m.habilitadoDiezmo !== 'no') return false;
     return !q || sinTildes(`${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas} ${m.rut || ''} ${String(m.rut || '').replace(/\./g, '')}`).includes(q)
@@ -68,7 +70,7 @@ export function render(root, ctx) {
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label">${icon('users', 15)} Miembros</span><strong class="kpi-value">${miembros.length}</strong><span class="kpi-sub">en el registro</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--green)"></i> Activos</span><strong class="kpi-value">${activos.length}</strong><span class="kpi-sub">${miembros.length ? Math.round((activos.length / miembros.length) * 100) : 0}% del total</span></article>
-    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:#9aa3b2"></i> Inactivos</span><strong class="kpi-value">${miembros.length - activos.length - trasladados.length}</strong><span class="kpi-sub">alejados${trasladados.length ? ` · ${trasladados.length} trasladado${trasladados.length === 1 ? '' : 's'} a otra iglesia` : ''}</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:#9aa3b2"></i> Inactivos</span><strong class="kpi-value">${miembros.length - activos.length - trasladados.length - fallecidos.length}</strong><span class="kpi-sub">alejados${trasladados.length ? ` · ${trasladados.length} trasladado${trasladados.length === 1 ? '' : 's'} a otra iglesia` : ''}${fallecidos.length ? ` · ${fallecidos.length} fallecido${fallecidos.length === 1 ? '' : 's'}` : ''}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('checkCircle', 15)} Fichas completas</span><strong class="kpi-value">${miembros.length ? Math.round((completas / miembros.length) * 100) : 0}%</strong><span class="kpi-sub">${completas} de ${miembros.length} con nacimiento, celular, correo y domicilio</span></article>
   </section>
 
@@ -84,7 +86,7 @@ export function render(root, ctx) {
     <div class="filters">
       <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar por nombre, RUT, celular, correo…" value="${esc(filtros.q)}" data-q></div>
       <div class="seg seg-sm">
-        ${[['todos', 'Todos'], ['activos', 'Activos'], ['inactivos', 'Inactivos'], ...(trasladados.length || filtros.estado === 'trasladados' ? [['trasladados', 'Trasladados']] : []), ['incompletas', 'Ficha incompleta'], ['nohab', 'No habilitados']].map(([k, l]) => `<label><input type="radio" name="fest" value="${k}" ${filtros.estado === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+        ${[['todos', 'Todos'], ['activos', 'Activos'], ['inactivos', 'Inactivos'], ...(trasladados.length || filtros.estado === 'trasladados' ? [['trasladados', 'Trasladados']] : []), ...(fallecidos.length || filtros.estado === 'fallecidos' ? [['fallecidos', 'Fallecidos']] : []), ['incompletas', 'Ficha incompleta'], ['nohab', 'No habilitados']].map(([k, l]) => `<label><input type="radio" name="fest" value="${k}" ${filtros.estado === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
     </div>
     ${miembros.length ? (lista.length ? `<div class="table-wrap"><table class="table miembros-table">
@@ -93,7 +95,7 @@ export function render(root, ctx) {
         const e = edad(m.fechaNacimiento, hoy);
         return `<tr class="${m.estado !== 'activo' ? 'inactive' : ''}">
           <td><b>${esc(m.nombre)}</b>${m.estadoCivil ? ` <small class="muted">· ${estadoCivilTexto(m.estadoCivil)}</small>` : ''}${m.rut ? `<br><small class="muted">RUT ${esc(m.rut)}</small>` : ''}${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.habilitadoDiezmo === 'no' ? '<br><span class="tag tag-gris">No habilitado para diezmar</span>' : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
-          <td>${m.estado === 'activo' ? `<span class="badge st-ok">Activo</span>${m.fechaIngreso ? `<br><small class="muted">desde ${fecha(m.fechaIngreso)}</small>` : ''}` : m.estado === 'trasladado' ? `<span class="badge st-obs">Trasladado</span><br><small class="muted">${m.trasladoA ? `a ${esc(m.trasladoA)} · ` : ''}${fecha(m.fechaBaja)}</small>` : `<span class="badge st-open">Inactivo</span>${m.fechaBaja ? `<br><small class="muted">desde ${fecha(m.fechaBaja)}</small>` : ''}`}</td>
+          <td>${m.estado === 'activo' ? `<span class="badge st-ok">Activo</span>${m.fechaIngreso ? `<br><small class="muted">desde ${fecha(m.fechaIngreso)}</small>` : ''}` : m.estado === 'fallecido' ? `<span class="badge st-open">Fallecido</span><br><small class="muted">${fecha(m.fechaBaja)}</small>` : m.estado === 'trasladado' ? `<span class="badge st-obs">Trasladado</span><br><small class="muted">${m.trasladoA ? `a ${esc(m.trasladoA)} · ` : ''}${fecha(m.fechaBaja)}</small>` : `<span class="badge st-open">Inactivo</span>${m.fechaBaja ? `<br><small class="muted">desde ${fecha(m.fechaBaja)}</small>` : ''}`}</td>
           <td class="nowrap">${m.fechaNacimiento ? `${fecha(m.fechaNacimiento)}<br><small class="muted">${e} años</small>` : '<span class="falta">—</span>'}</td>
           <td class="nowrap">${m.celular ? `<a class="link" href="tel:${esc(m.celular.replace(/[^\d+]/g, ''))}">${esc(m.celular)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm">${m.email ? `<a class="link" href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="falta">—</span>'}</td>
@@ -132,9 +134,9 @@ export function editarMiembro(ctx, m = null) {
         <label class="field"><span>RUT <small class="muted">(opcional)</small></span><input name="rut" value="${esc(m?.rut || '')}" maxlength="12" placeholder="12.345.678-9" autocomplete="off"><small class="hint" data-rut-aviso></small></label>
       </div>
       <div class="form-row">
-        <label class="field"><span>Estado</span><select name="estado"><option value="activo" ${!m || m.estado === 'activo' ? 'selected' : ''}>Activo</option><option value="inactivo" ${m?.estado === 'inactivo' ? 'selected' : ''}>Inactivo (alejado)</option><option value="trasladado" ${m?.estado === 'trasladado' ? 'selected' : ''}>Trasladado a otra iglesia</option></select></label>
+        <label class="field"><span>Estado</span><select name="estado"><option value="activo" ${!m || m.estado === 'activo' ? 'selected' : ''}>Activo</option><option value="inactivo" ${m?.estado === 'inactivo' ? 'selected' : ''}>Inactivo (alejado)</option><option value="trasladado" ${m?.estado === 'trasladado' ? 'selected' : ''}>Trasladado a otra iglesia</option><option value="fallecido" ${m?.estado === 'fallecido' ? 'selected' : ''}>Fallecido</option></select></label>
         <label class="field"><span>Miembro desde <small class="muted">(opcional)</small></span><input type="date" name="fechaIngreso" value="${esc(m?.fechaIngreso || '')}" max="${ctx.data.hoy}"><small class="hint">Déjalo vacío si ya era miembro: sus diezmos anteriores siguen contando.</small></label>
-        <label class="field" data-baja ${m && m.estado !== 'activo' ? '' : 'hidden'}><span data-baja-lbl>${m?.estado === 'trasladado' ? 'Fecha del traslado' : 'Fecha de baja (desde cuándo no asiste)'}</span><input type="date" name="fechaBaja" value="${esc(m?.fechaBaja || '')}" max="${ctx.data.hoy}"></label>
+        <label class="field" data-baja ${m && m.estado !== 'activo' ? '' : 'hidden'}><span data-baja-lbl>${m?.estado === 'trasladado' ? 'Fecha del traslado' : m?.estado === 'fallecido' ? 'Fecha de fallecimiento' : 'Fecha de baja (desde cuándo no asiste)'}</span><input type="date" name="fechaBaja" value="${esc(m?.fechaBaja || '')}" max="${ctx.data.hoy}"></label>
         <label class="field" data-traslado ${m?.estado === 'trasladado' ? '' : 'hidden'}><span>Iglesia de destino</span><input name="trasladoA" maxlength="100" value="${esc(m?.trasladoA || '')}" placeholder="Ej.: Iglesia Bautista de Temuco"></label>
       </div>
       <label class="check" data-traslado-conyuge hidden><input type="checkbox" name="trasladarConyuge" checked> <span>Su cónyuge, <b data-conyuge-nombre></b>, también se traslada (misma fecha e iglesia)</span></label>
@@ -148,8 +150,9 @@ export function editarMiembro(ctx, m = null) {
         <label class="field"><span>Correo</span><input type="email" name="email" placeholder="nombre@correo.cl" value="${esc(m?.email || '')}"></label>
       </div>
       <label class="field"><span>Domicilio</span><input name="domicilio" placeholder="Calle, número, comuna" value="${esc(m?.domicilio || '')}"></label>
-      <label class="field"><span>💍 Cónyuge (diezman como matrimonio)</span><select name="conyugeId"><option value="">— Sin cónyuge registrado —</option>${[...ctx.data.miembros].filter((x) => x.id !== m?.id).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((x) => `<option value="${x.id}" ${x.id === m?.conyugeId ? 'selected' : ''}>${esc(x.nombre)}${x.conyugeId && x.conyugeId !== m?.id ? ' (ya tiene cónyuge)' : ''}${x.estado === 'inactivo' ? ' · inactivo' : x.estado === 'trasladado' ? ' · trasladado' : ''}</option>`).join('')}</select></label>
+      <label class="field"><span>💍 Cónyuge (diezman como matrimonio)</span><select name="conyugeId"><option value="">— Sin cónyuge registrado —</option>${[...ctx.data.miembros].filter((x) => x.id !== m?.id).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((x) => `<option value="${x.id}" ${x.id === m?.conyugeId ? 'selected' : ''}>${esc(x.nombre)}${x.conyugeId && x.conyugeId !== m?.id ? ' (ya tiene cónyuge)' : ''}${x.estado !== 'activo' ? ` · ${x.estado}` : ''}</option>`).join('')}</select></label>
       <label class="field"><span>Habilitado para diezmar</span><select name="habilitadoDiezmo"><option value="si" ${m?.habilitadoDiezmo !== 'no' ? 'selected' : ''}>Sí · trabaja o tiene ingresos</option><option value="no" ${m?.habilitadoDiezmo === 'no' ? 'selected' : ''}>No · estudiante o sin ingresos</option></select><small class="hint">Los no habilitados no se cuentan en la estadística de diezmos.</small></label>
+      <label class="field" data-hab-desde ${m && m.habilitadoDiezmo !== 'no' && m.habilitadoDesde ? '' : 'hidden'}><span>Habilitado desde</span><input type="date" name="habilitadoDesde" value="${esc(m?.habilitadoDesde || '')}" max="${ctx.data.hoy}"><small class="hint">En los diezmos cuenta desde esta fecha; antes, como no habilitado.</small></label>
       <label class="field"><span>Notas</span><input name="notas" maxlength="300" value="${esc(m?.notas || '')}"></label>
       ${m && esAdmin(ctx.user) ? `<p class="ficha-extra"><button type="button" class="link-btn" data-unir>${icon('users', 14)} Es la misma persona que otro miembro…</button></p>` : ''}
       ${m && ctx.user?.rol !== 'secretaria' ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar miembro</button>` : ''}`,
@@ -175,10 +178,10 @@ export function editarMiembro(ctx, m = null) {
       f.estado.addEventListener('change', () => {
         const e = f.estado.value;
         f.querySelector('[data-baja]').hidden = e === 'activo';
-        f.querySelector('[data-baja-lbl]').textContent = e === 'trasladado' ? 'Fecha del traslado' : 'Fecha de baja (desde cuándo no asiste)';
+        f.querySelector('[data-baja-lbl]').textContent = e === 'trasladado' ? 'Fecha del traslado' : e === 'fallecido' ? 'Fecha de fallecimiento' : 'Fecha de baja (desde cuándo no asiste)';
         f.querySelector('[data-traslado]').hidden = e !== 'trasladado';
         f.querySelector('[data-traslado-nota]').hidden = e !== 'trasladado';
-        f.fechaBaja.required = e === 'trasladado';
+        f.fechaBaja.required = e === 'trasladado' || e === 'fallecido';
         if (e !== 'activo' && !f.fechaBaja.value) f.fechaBaja.value = ctx.data.hoy;
         if (e === 'trasladado') f.trasladoA.focus();
         syncConyuge();
@@ -192,11 +195,18 @@ export function editarMiembro(ctx, m = null) {
       };
       f.conyugeId.addEventListener('change', syncConyuge);
       syncConyuge();
-      f.fechaBaja.required = f.estado.value === 'trasladado';
+      f.fechaBaja.required = f.estado.value === 'trasladado' || f.estado.value === 'fallecido';
+      // al habilitar para diezmar a alguien que no lo estaba, cuenta desde hoy (se puede cambiar la fecha)
+      f.habilitadoDiezmo.addEventListener('change', () => {
+        const caja = f.querySelector('[data-hab-desde]');
+        const recien = f.habilitadoDiezmo.value === 'si' && m?.habilitadoDiezmo === 'no';
+        caja.hidden = f.habilitadoDiezmo.value !== 'si' || (!recien && !f.habilitadoDesde.value);
+        if (recien && !f.habilitadoDesde.value) f.habilitadoDesde.value = ctx.data.hoy;
+      });
       f.querySelector('[data-unir]')?.addEventListener('click', () => { close(null); unirMiembro(ctx, m); });
       f.querySelector('[data-borrar]')?.addEventListener('click', async () => {
         close(null);
-        if (!(await confirmar(`¿Eliminar a <b>${esc(m.nombre)}</b> del registro?<br><span class="muted">Elimina solo si fue un error al ingresarlo: desaparece también de los análisis de meses pasados. Si dejó la iglesia, márcalo <b>inactivo</b> o <b>trasladado</b> con su fecha y su historial se conserva.</span>`, { boton: 'Eliminar', danger: true }))) return;
+        if (!(await confirmar(`¿Eliminar a <b>${esc(m.nombre)}</b> del registro?<br><span class="muted">Elimina solo si fue un error al ingresarlo: desaparece también de los análisis de meses pasados. Si dejó la iglesia o falleció, márcalo <b>inactivo</b>, <b>trasladado</b> o <b>fallecido</b> con su fecha y su historial se conserva.</span>`, { boton: 'Eliminar', danger: true }))) return;
         try { await call('deleteMiembro', { id: m.id }); toast('Miembro eliminado'); await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
       });
     },

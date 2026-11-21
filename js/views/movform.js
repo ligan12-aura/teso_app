@@ -18,11 +18,13 @@ export function abrirFormMovimiento(opts) {
 
   const opt = (c, sel) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`;
   const catOptions = (tipo, sel) => {
-    const list = cats[tipo].filter((c) => c !== reservada);
+    // en la tesorería general los diezmos se registran solo en el apartado Diezmos
+    const fuera = (c) => c === reservada || (esGeneral && tipo === 'ingreso' && c === 'Diezmos' && sel !== 'Diezmos');
+    const list = cats[tipo].filter((c) => !fuera(c));
     const custom = sel && !list.includes(sel);
     const gr = esGeneral && data.grupos ? data.grupos[tipo] : null;
     const body = gr
-      ? gr.map(([g, cs]) => { const v = cs.filter((c) => c !== reservada); return v.length ? `<optgroup label="${esc(g)}">${v.map((c) => opt(c, sel)).join('')}</optgroup>` : ''; }).join('')
+      ? gr.map(([g, cs]) => { const v = cs.filter((c) => !fuera(c)); return v.length ? `<optgroup label="${esc(g)}">${v.map((c) => opt(c, sel)).join('')}</optgroup>` : ''; }).join('')
       : list.map((c) => opt(c, sel)).join('');
     return body + (custom ? `<option selected>${esc(sel)}</option>` : '') + '<option value="__otra">Otra…</option>';
   };

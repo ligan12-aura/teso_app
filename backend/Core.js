@@ -23,7 +23,7 @@ var TesoCore = (function () {
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
-    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil', 'trasladoA', 'rut'],
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil', 'trasladoA', 'rut', 'habilitadoDesde'],
     Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId'],
     // Listado propio de un ministerio (p. ej. jóvenes): pueden o no ser miembros de la iglesia
     Integrantes: ['id', 'ministerioId', 'nombre', 'celular', 'email', 'fechaNacimiento', 'miembroId', 'notas', 'activo', 'creadoEn', 'actualizadoEn'],
@@ -1189,6 +1189,7 @@ var TesoCore = (function () {
     }
     function addMovGeneral(user, p) {
       var d = datosGeneral(p);
+      if (d.tipo === 'ingreso' && d.categoria === 'Diezmos') throw TesoError('Los diezmos se registran en el apartado Diezmos (así quedan por hermano y entran a la caja).');
       if (d.tipo === 'gasto') exigirPresupuestoGeneral(d.mes, d.monto);
       var now = env.now();
       d.archivoId = guardarArchivo(p.archivo, ['Comprobantes tesorería', d.mes]);
@@ -1197,6 +1198,7 @@ var TesoCore = (function () {
     function addMovGeneralLote(user, p) {
       if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
       var items = (p.items || []).filter(function (it) { return Number(it.monto) > 0; });
+      if (items.some(function (it) { return it.categoria === 'Diezmos'; })) throw TesoError('Los diezmos se registran en el apartado Diezmos, no en el culto.');
       if (!items.length) throw TesoError('Ingresa al menos un monto');
       // Validar el detalle por hermano antes de guardar nada
       items.forEach(function (it) {
@@ -1390,26 +1392,32 @@ var TesoCore = (function () {
       var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim();
       if (!nombre) throw TesoError('Escribe el nombre del miembro');
       if (nombre.length > 80) throw TesoError('El nombre es demasiado largo');
-      // trasladado = se fue a otra iglesia: deja de contar desde la fecha de traslado (fechaBaja)
-      var estado = p.estado === 'inactivo' || p.estado === 'trasladado' ? p.estado : 'activo';
+      // trasladado = se fue a otra iglesia; fallecido: dejan de contar desde su fecha (fechaBaja)
+      var estado = ['inactivo', 'trasladado', 'fallecido'].indexOf(p.estado) >= 0 ? p.estado : 'activo';
+      var nomFecha = estado === 'trasladado' ? 'traslado' : estado === 'fallecido' ? 'fallecimiento' : 'baja';
       var fn = String(p.fechaNacimiento || '').trim();
       if (fn && (!isDate(fn) || fn > env.today() || fn < '1900-01-01')) throw TesoError('Fecha de nacimiento inválida');
       var email = String(p.email || '').trim();
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw TesoError('El correo no parece válido');
       // Fecha de baja: desde cuándo dejó de asistir (solo para inactivos)
       var baja = estado !== 'activo' ? String(p.fechaBaja || '').trim() : '';
-      if (baja && (!isDate(baja) || baja > env.today() || baja < '1900-01-01')) throw TesoError(estado === 'trasladado' ? 'Fecha de traslado inválida' : 'Fecha de baja inválida');
-      if (estado === 'trasladado' && !baja) throw TesoError('Indica la fecha del traslado: sus diezmos cuentan hasta esa fecha');
+      if (baja && (!isDate(baja) || baja > env.today() || baja < '1900-01-01')) throw TesoError('Fecha de ' + nomFecha + ' inválida');
+      if ((estado === 'trasladado' || estado === 'fallecido') && !baja) throw TesoError('Indica la fecha de ' + nomFecha + ': sus diezmos cuentan hasta esa fecha');
       // Fecha de ingreso: desde cuándo es miembro (vacía = siempre contó). No cuenta en meses anteriores.
       var ingreso = String(p.fechaIngreso || '').trim();
       if (ingreso && (!isDate(ingreso) || ingreso > env.today() || ingreso < '1900-01-01')) throw TesoError('Fecha de ingreso inválida');
-      if (ingreso && baja && baja < ingreso) throw TesoError('La fecha de ' + (estado === 'trasladado' ? 'traslado' : 'baja') + ' no puede ser anterior a la de ingreso');
+      if (ingreso && baja && baja < ingreso) throw TesoError('La fecha de ' + nomFecha + ' no puede ser anterior a la de ingreso');
+      // Habilitado para diezmar desde: el análisis lo cuenta desde esa fecha (vacía = siempre)
+      var habilitado = p.habilitadoDiezmo === 'no' ? 'no' : 'si';
+      var habDesde = habilitado === 'si' ? String(p.habilitadoDesde || '').trim() : '';
+      if (habDesde && (!isDate(habDesde) || habDesde > env.today() || habDesde < '1900-01-01')) throw TesoError('Fecha de habilitación inválida');
       return {
         fechaBaja: baja,
         trasladoA: estado === 'trasladado' ? String(p.trasladoA || '').replace(/\s+/g, ' ').trim().slice(0, 100) : '',
         fechaIngreso: ingreso,
         // Habilitado para diezmar: 'no' = estudiante o sin ingresos (no cuenta en la estadística de diezmos)
-        habilitadoDiezmo: p.habilitadoDiezmo === 'no' ? 'no' : 'si',
+        habilitadoDiezmo: habilitado,
+        habilitadoDesde: habDesde,
         nombre: nombre, estado: estado, fechaNacimiento: fn,
         celular: String(p.celular || '').trim().slice(0, 30), email: email.slice(0, 120),
         domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300),
@@ -1480,6 +1488,9 @@ var TesoCore = (function () {
         if (!previo) throw TesoError('Miembro no encontrado');
         if (p.estadoCivil === undefined) d.estadoCivil = previo.estadoCivil || '';
         if (p.rut === undefined) d.rut = previo.rut || '';
+        // al pasar de "no habilitado" a habilitado, cuenta desde hoy si no se indicó otra fecha
+        if (p.habilitadoDesde === undefined && d.habilitadoDiezmo === 'si') d.habilitadoDesde = previo.habilitadoDiezmo === 'no' ? env.today() : (previo.habilitadoDesde || '');
+        else if (d.habilitadoDiezmo === 'si' && previo.habilitadoDiezmo === 'no' && !d.habilitadoDesde) d.habilitadoDesde = env.today();
         var otroRut = rutRepetido(d.rut, p.id);
         if (otroRut) throw TesoError('Ese RUT ya está registrado para ' + otroRut.nombre);
         r = update('Miembros', p.id, Object.assign(d, { actualizadoEn: now }));
@@ -1494,7 +1505,7 @@ var TesoCore = (function () {
         all('PersonasHogar').forEach(function (x) { if (x.miembroId === mid && toBool(x.activo)) update('PersonasHogar', x.id, { activo: false, actualizadoEn: now }); });
         all('Integrantes').forEach(function (i) { if (i.miembroId === mid && toBool(i.activo)) update('Integrantes', i.id, { activo: false, actualizadoEn: now }); });
       };
-      if (r.estado === 'trasladado' && (!p.id || previo.estado !== 'trasladado')) salirDeGrupos(r.id);
+      if ((r.estado === 'trasladado' || r.estado === 'fallecido') && (!p.id || previo.estado !== r.estado)) salirDeGrupos(r.id);
       // el cónyuge también se traslada (misma fecha e iglesia), si así se indicó
       var conyugeTrasladado = '';
       if (r.estado === 'trasladado' && toBool(p.trasladarConyuge) && r.conyugeId) {
@@ -1731,13 +1742,28 @@ var TesoCore = (function () {
         if (conyugeId === mb.id) throw TesoError('El cónyuge no puede ser el mismo hermano');
         if (!find('Miembros', conyugeId)) throw TesoError('El cónyuge no está en el registro de miembros');
       }
-      return { miembroId: mb.id, conyugeId: conyugeId, fecha: p.fecha, mes: p.fecha.slice(0, 7), monto: monto, medio: String(p.medio || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 200) };
+      // mes al que corresponde el diezmo (p. ej. se da el 11 de septiembre por julio); por defecto, el mes de la fecha
+      var mes = String(p.mes || '').trim() || p.fecha.slice(0, 7);
+      if (!isMonth(mes) || mes < '2000-01' || mes > sumarMeses(env.today().slice(0, 7), 12)) throw TesoError('Mes al que corresponde inválido');
+      return { miembroId: mb.id, conyugeId: conyugeId, fecha: p.fecha, mes: mes, monto: monto, medio: String(p.medio || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 200) };
     }
-    // Ingreso en la tesorería general vinculado a un diezmo registrado fuera del culto
+    function sumarMeses(m, n) {
+      var y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1 + n;
+      y += Math.floor(mo / 12); mo = ((mo % 12) + 12) % 12;
+      return y + '-' + ('0' + (mo + 1)).slice(-2);
+    }
+    // Un diezmo de varios meses se reparte en partes iguales (el resto, en el primero)
+    function repartirMeses(monto, n) {
+      var base = Math.floor(monto / n), resto = monto - base * n;
+      var out = [];
+      for (var i = 0; i < n; i++) out.push(base + (i === 0 ? resto : 0));
+      return out;
+    }
+    // Ingreso en la tesorería general vinculado a un diezmo: entra a la caja en la fecha en que se dio
     function ingresoDeDiezmo(user, d, diezmoId) {
       var now = env.now();
       return insert('MovimientosGenerales', {
-        id: uid(), fecha: d.fecha, mes: d.mes, tipo: 'ingreso', categoria: 'Diezmos', grupo: grupoDe('ingreso', 'Diezmos'),
+        id: uid(), fecha: d.fecha, mes: d.fecha.slice(0, 7), tipo: 'ingreso', categoria: 'Diezmos', grupo: grupoDe('ingreso', 'Diezmos'),
         descripcion: 'Diezmo' + (d.medio ? ' · ' + d.medio.toLowerCase() : ''), monto: d.monto, medio: d.medio, archivoId: '', ministerioId: '',
         origen: 'diezmo', refId: diezmoId, creadoPor: user.id, creadoEn: now, actualizadoEn: now
       });
@@ -1764,8 +1790,23 @@ var TesoCore = (function () {
         if (archivoNuevo) { borrarArchivo(actual.archivoId); d.archivoId = archivoNuevo; }
         else if (p.quitarArchivo) { borrarArchivo(actual.archivoId); d.archivoId = ''; }
         var g = movDeDiezmo(actual);
-        if (g) update('MovimientosGenerales', g.id, { fecha: d.fecha, mes: d.mes, monto: d.monto, medio: d.medio, descripcion: 'Diezmo' + (d.medio ? ' · ' + d.medio.toLowerCase() : ''), actualizadoEn: now });
+        if (g) update('MovimientosGenerales', g.id, { fecha: d.fecha, mes: d.fecha.slice(0, 7), monto: d.monto, medio: d.medio, descripcion: 'Diezmo' + (d.medio ? ' · ' + d.medio.toLowerCase() : ''), actualizadoEn: now });
         return update('Diezmos', p.id, Object.assign(d, { actualizadoEn: now }));
+      }
+      // diezmo de varios meses: un registro por mes, con el monto repartido
+      var n = Math.max(1, Math.min(12, Math.round(Number(p.meses) || 1)));
+      if (n > 1) {
+        if (d.monto < n) throw TesoError('El monto es muy bajo para repartirlo en ' + n + ' meses');
+        var partes = repartirMeses(d.monto, n);
+        var ultimoMes = sumarMeses(d.mes, n - 1);
+        if (ultimoMes > sumarMeses(env.today().slice(0, 7), 12)) throw TesoError('Los meses del diezmo no pueden ir más allá de un año desde hoy');
+        var nota = 'Diezmo de ' + n + ' meses (' + labelMes(d.mes) + ' a ' + labelMes(ultimoMes) + ')';
+        var creados = partes.map(function (monto, i) {
+          var x = Object.assign({}, d, { mes: sumarMeses(d.mes, i), monto: monto, notas: (d.notas ? d.notas + ' · ' : '') + nota, id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, archivoId: i === 0 ? archivoNuevo : '' });
+          x.movGeneralId = p.sumarACaja ? ingresoDeDiezmo(user, x, x.id).id : '';
+          return insert('Diezmos', x);
+        });
+        return Object.assign({}, creados[0], { creados: creados.length });
       }
       var id = uid();
       var movId = p.sumarACaja ? ingresoDeDiezmo(user, d, id).id : '';
@@ -1777,12 +1818,12 @@ var TesoCore = (function () {
       var now = env.now();
       var filas = items.map(function (it, i) {
         try {
-          return Object.assign(datosDiezmo({ miembroId: it.miembroId, conyugeId: it.conyugeId, fecha: p.fecha, monto: it.monto, medio: p.medio, notas: it.notas }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: '' });
+          return Object.assign(datosDiezmo({ miembroId: it.miembroId, conyugeId: it.conyugeId, fecha: p.fecha, mes: it.mes || p.mes, monto: it.monto, medio: p.medio, notas: it.notas }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: '' });
         } catch (e) { throw TesoError('Fila ' + (i + 1) + ': ' + e.message); }
       });
       if (p.sumarACaja) {
         var movs = filas.map(function (f) {
-          var g = { id: uid(), fecha: f.fecha, mes: f.mes, tipo: 'ingreso', categoria: 'Diezmos', grupo: grupoDe('ingreso', 'Diezmos'), descripcion: 'Diezmo' + (f.medio ? ' · ' + f.medio.toLowerCase() : ''), monto: f.monto, medio: f.medio, archivoId: '', ministerioId: '', origen: 'diezmo', refId: f.id, creadoPor: user.id, creadoEn: now, actualizadoEn: now };
+          var g = { id: uid(), fecha: f.fecha, mes: f.fecha.slice(0, 7), tipo: 'ingreso', categoria: 'Diezmos', grupo: grupoDe('ingreso', 'Diezmos'), descripcion: 'Diezmo' + (f.medio ? ' · ' + f.medio.toLowerCase() : ''), monto: f.monto, medio: f.medio, archivoId: '', ministerioId: '', origen: 'diezmo', refId: f.id, creadoPor: user.id, creadoEn: now, actualizadoEn: now };
           f.movGeneralId = g.id;
           return g;
         });

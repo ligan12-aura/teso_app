@@ -3,7 +3,6 @@ import { call } from '../api.js';
 import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe, presupuestoGeneralMensual } from '../calc.js';
 import { PALETA } from '../ui.js';
 import { abrirFormMovimiento } from './movform.js';
-import { filasDiezmantes } from './diezmos.js';
 
 const filtros = { periodo: 'mes', tipo: '', categoria: '', grupo: '', q: '' };
 
@@ -11,12 +10,13 @@ export const nuevoMovGeneral = (ctx, tipo = 'ingreso', mov = null) =>
   abrirFormMovimiento({ ctx, ambito: 'general', tipo, mov, action: mov ? 'updateMovGeneral' : 'addMovGeneral', titulo: mov ? 'Editar movimiento' : 'Nuevo movimiento · Tesorería general' });
 
 export function registrarCulto(ctx) {
-  const cats = ['Diezmos', 'Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo'];
-  const activos = filasDiezmantes(ctx.data.miembros || []);
+  // Los diezmos se registran solo en su apartado (Diezmos), por hermano
+  const cats = ['Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo'];
   return modal({
     title: 'Registrar culto',
     wide: true,
-    body: `<p class="muted">Ingresa lo recaudado en un culto. Se crea un ingreso por cada monto.</p>
+    body: `<p class="muted">Ingresa las ofrendas recaudadas en un culto. Se crea un ingreso por cada monto.</p>
+      <div class="note">${icon('heart', 16)}<span>Los <b>diezmos</b> se registran en el apartado <a class="link" href="#/diezmos">Diezmos</a>, por hermano: ahí entran a la caja.</span></div>
       <div class="form-row">
         <label class="field"><span>Fecha del culto</span><input type="date" name="fecha" value="${ctx.data.hoy}" max="${ctx.data.hoy}" required></label>
         <label class="field"><span>Medio</span><select name="medio">${ctx.data.medios.map((m) => `<option>${m}</option>`).join('')}</select></label>
@@ -24,68 +24,25 @@ export function registrarCulto(ctx) {
       <div class="culto-grid">
         ${cats.map((c, i) => `<label class="field"><span>${c}</span><input name="m${i}" inputmode="numeric" class="input-money culto-monto" placeholder="0"></label>`).join('')}
       </div>
-      ${activos.length ? `
-      <div class="det-diezmo">
-        <button type="button" class="btn btn-ghost btn-sm" data-detallar>${icon('users', 15)} Detallar diezmos por hermano</button>
-        <div class="det-panel" hidden>
-          <p class="muted small">Escribe cuánto diezmó cada hermano. El total de <b>Diezmos</b> se calcula solo (hermanos + sin identificar) y cada diezmo queda registrado en el apartado Diezmos.</p>
-          <div class="search lote-buscar">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
-          <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(sinTildes(m.nombre))}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><input class="lote-monto det-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
-          <div class="det-sin"><span>Sin identificar <small class="muted">(sobres sin nombre)</small></span><input class="lote-monto" data-sin inputmode="numeric" placeholder="$0"></div>
-          <div class="det-resumen" data-det-resumen></div>
-        </div>
-      </div>` : ''}
       <label class="field"><span>Descripción</span><input name="descripcion" value="Culto dominical"></label>
       <div class="culto-total">Total: <strong data-total>$0</strong></div>`,
     submitLabel: 'Registrar ingresos',
     onOpen(form) {
       const inputs = [...form.querySelectorAll('.culto-monto')];
-      const diezmo = form.m0;
-      const panel = form.querySelector('.det-panel');
-      const dets = [...form.querySelectorAll('.det-monto')];
-      const sin = form.querySelector('[data-sin]');
-      const detalleActivo = () => panel && !panel.hidden;
       const upd = () => {
-        if (detalleActivo()) {
-          const ident = dets.reduce((a, i) => a + pesos(i.value), 0);
-          const total = ident + pesos(sin.value);
-          diezmo.value = total ? total.toLocaleString('es-CL') : '';
-          const n = dets.filter((i) => pesos(i.value) > 0).length;
-          form.querySelector('[data-det-resumen]').innerHTML = `${n} hermano${n === 1 ? '' : 's'} · identificado <b>${money(ident)}</b> · sin identificar <b>${money(pesos(sin.value))}</b>`;
-        }
         let t = 0;
         inputs.forEach((i) => { const n = pesos(i.value); i.value = n ? n.toLocaleString('es-CL') : ''; t += n; });
         form.querySelector('[data-total]').textContent = money(t);
       };
       inputs.forEach((i) => i.addEventListener('input', upd));
-      [...dets, sin].filter(Boolean).forEach((i) => { formatoPesos(i); i.addEventListener('input', upd); });
-      form.querySelector('[data-detallar]')?.addEventListener('click', (e) => {
-        const abrir = panel.hidden;
-        panel.hidden = !abrir;
-        diezmo.readOnly = abrir;
-        diezmo.classList.toggle('calculado', abrir);
-        e.currentTarget.innerHTML = abrir ? `${icon('x', 15)} Quitar el detalle por hermano` : `${icon('users', 15)} Detallar diezmos por hermano`;
-        if (abrir && !dets.some((i) => pesos(i.value)) && !pesos(sin.value) && pesos(diezmo.value)) sin.value = pesos(diezmo.value).toLocaleString('es-CL');
-        upd();
-        if (abrir) form.querySelector('[data-buscar]').focus();
-      });
-      form.querySelector('[data-buscar]')?.addEventListener('input', (e) => {
-        const t = sinTildes(e.target.value);
-        form.querySelectorAll('.lote-lista li').forEach((li) => { li.hidden = t && !li.dataset.nombre.includes(t); });
-      });
-      form._detalle = () => (detalleActivo() ? dets.map((i) => ({ miembroId: i.dataset.id, conyugeId: i.dataset.conyuge || '', monto: pesos(i.value) })).filter((x) => x.monto > 0) : null);
+      form.querySelector('.note a')?.addEventListener('click', () => form.closest('.modal-wrap')?.querySelector('[data-close]')?.click());
     },
     async onSubmit(form) {
       const d = formData(form);
       const items = cats.map((c, i) => ({ categoria: c, monto: pesos(d['m' + i]) })).filter((x) => x.monto > 0);
-      const detalle = form._detalle?.();
-      if (detalle && detalle.length) {
-        const it = items.find((x) => x.categoria === 'Diezmos');
-        if (it) it.detalle = detalle;
-      }
       if (!items.length) throw new Error('Ingresa al menos un monto');
       const r = await call('addMovGeneralLote', { fecha: d.fecha, medio: d.medio, descripcion: d.descripcion, items });
-      toast(`${r.creados} ingreso${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}${r.diezmosIdentificados ? ` · ${r.diezmosIdentificados} diezmo${r.diezmosIdentificados > 1 ? 's' : ''} por hermano` : ''}`);
+      toast(`${r.creados} ingreso${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}`);
       await ctx.refresh();
     }
   });
