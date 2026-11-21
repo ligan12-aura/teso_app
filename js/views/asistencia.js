@@ -462,10 +462,16 @@ function tomarAsistencia(ctx, cfg, vista, sesion = null) {
       };
       f.querySelector('[data-add-visita]').addEventListener('click', agregar);
       f.nuevaVisita.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); agregar(); } });
+      f._agregar = agregar;
     },
     async onSubmit(f) {
       const actividad = f.actividad.value === '__otra' ? f.otra.value.trim() : f.actividad.value;
       if (!actividad) throw new Error('Escribe el nombre de la actividad');
+      // un nombre escrito en "¿Vino alguien nuevo?" sin presionar Agregar: se agrega y queda marcado
+      if (f.nuevaVisita.value.trim()) {
+        await f._agregar();
+        if (f.nuevaVisita.value.trim()) throw new Error(`No se pudo agregar a ${f.nuevaVisita.value.trim()}: revisa el nombre o bórralo`);
+      }
       const presentes = [...f.querySelectorAll('[name=p]')].filter((x) => x.checked).map((x) => x.value);
       if (!presentes.length) throw new Error('Marca al menos a una persona presente');
       await call(cfg.acciones.save, { ...cfg.extra, id: sesion?.id, fecha: f.fecha.value, actividad, notas: f.notas.value, presentes });

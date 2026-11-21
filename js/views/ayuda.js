@@ -110,7 +110,7 @@ const TEMAS = {
     },
     {
       id: 'diezmos', titulo: 'Diezmos', ico: 'heart', html: `
-      <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ven el tesorero y el pastor.</p>
+      <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ven el administrador, el tesorero y el pastor.</p>
       <h4>Registrar</h4>
       ${pasos(`Todos los diezmos se registran aquí, nunca en el culto: toca la celda del hermano en el mes, o usa ${btn('plus', 'Registrar diezmos')} para varios a la vez (por ejemplo, los sobres del domingo).`, `<b>Fecha de entrega y mes al que corresponde:</b> la fecha es el día en que lo dio (así entra a la caja); el mes es al que corresponde. Por ejemplo, lo da el 11 de septiembre pero es el diezmo de julio: se ve en la columna de julio.`, `<b>Diezmo de varios meses:</b> al tocar la celda, elige en “¿Cuántos meses cubre?” (por ejemplo 3). El monto se reparte en partes iguales entre esos meses.`, `Con <b>Sumar a la caja</b> marcado se crea también el ingreso en la tesorería general. Puedes adjuntar la <b>foto o captura del comprobante</b>; se ve con el botón “Comprobante”. Si corriges o eliminas un diezmo sumado a la caja, su ingreso en la tesorería se actualiza o se elimina solo.`)}
       <h4>Categorías (solo hermanos activos y habilitados para diezmar)</h4>

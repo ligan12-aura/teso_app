@@ -105,7 +105,7 @@ var TesoCore = (function () {
     var dt = new Date(Date.UTC(y, m - 1, d));
     return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
   }
-  function isMonth(s) { return /^\d{4}-\d{2}$/.test(String(s)); }
+  function isMonth(s) { return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(s)); }
   function prevMonth(m) {
     var y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1;
     if (mo === 0) { y--; mo = 12; }
@@ -1245,6 +1245,7 @@ var TesoCore = (function () {
     function updateMovGeneral(user, p) {
       var mov = movGeneralManual(p.id);
       var d = datosGeneral(p, mov.origen === 'importado');
+      if (d.tipo === 'ingreso' && d.categoria === 'Diezmos' && mov.categoria !== 'Diezmos') throw TesoError('Los diezmos se registran en el apartado Diezmos (así quedan por hermano y entran a la caja).');
       // Un culto con diezmos por hermano: sigue siendo un ingreso de la misma categoría
       // y no puede quedar por debajo de lo identificado; si cambia la fecha, los diezmos la siguen
       var vinculados = diezmosDeMov(mov.id);
@@ -1257,7 +1258,8 @@ var TesoCore = (function () {
           throw TesoError('El monto no puede ser menor que lo identificado por hermano (' + pesos(identificado) + '). Corrige primero los diezmos en el apartado Diezmos.');
         }
         if (d.fecha !== mov.fecha) {
-          vinculados.forEach(function (x) { update('Diezmos', x.id, { fecha: d.fecha, mes: d.mes, actualizadoEn: env.now() }); });
+          // el diezmo sigue la fecha de entrega; el mes al que corresponde no cambia
+          vinculados.forEach(function (x) { update('Diezmos', x.id, { fecha: d.fecha, actualizadoEn: env.now() }); });
         }
       }
       if (mov.origen !== 'importado' && aumentaGasto(mov, d, d.mes)) exigirPresupuestoGeneral(d.mes, d.monto, mov.id);
@@ -1510,7 +1512,7 @@ var TesoCore = (function () {
       var conyugeTrasladado = '';
       if (r.estado === 'trasladado' && toBool(p.trasladarConyuge) && r.conyugeId) {
         var c = find('Miembros', r.conyugeId);
-        if (c && c.estado !== 'trasladado') {
+        if (c && c.estado === 'activo') {
           if (c.fechaIngreso && c.fechaIngreso > r.fechaBaja) throw TesoError('La fecha del traslado es anterior a la fecha en que ' + c.nombre + ' se hizo miembro');
           update('Miembros', c.id, { estado: 'trasladado', fechaBaja: r.fechaBaja, trasladoA: r.trasladoA, actualizadoEn: now });
           salirDeGrupos(c.id);
@@ -1570,7 +1572,8 @@ var TesoCore = (function () {
         if (nombre !== sale.nombre) throw TesoError('Elige uno de los dos nombres');
         patch.nombre = nombre;
       }
-      ['fechaNacimiento', 'celular', 'email', 'domicilio', 'estadoCivil', 'rut', 'trasladoA'].forEach(function (k) { if (!queda[k] && sale[k]) patch[k] = sale[k]; });
+      ['fechaNacimiento', 'celular', 'email', 'domicilio', 'estadoCivil', 'rut'].forEach(function (k) { if (!queda[k] && sale[k]) patch[k] = sale[k]; });
+      if (queda.estado === 'trasladado' && !queda.trasladoA && sale.trasladoA) patch.trasladoA = sale.trasladoA;
       if (sale.notas && normalNombre(queda.notas).indexOf(normalNombre(sale.notas)) < 0) patch.notas = ((queda.notas ? queda.notas + ' · ' : '') + sale.notas).slice(0, 300);
       // miembro desde: la fecha más antigua (vacía = siempre fue miembro)
       if (!queda.fechaIngreso || !sale.fechaIngreso) patch.fechaIngreso = '';

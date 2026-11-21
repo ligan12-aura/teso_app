@@ -189,7 +189,7 @@ export function editarMiembro(ctx, m = null) {
       // casilla "su cónyuge también se traslada": solo al pasar a trasladado y si el cónyuge no lo está ya
       const syncConyuge = () => {
         const c = ctx.data.miembros.find((x) => x.id === f.conyugeId.value);
-        const ver = f.estado.value === 'trasladado' && m?.estado !== 'trasladado' && c && c.estado !== 'trasladado';
+        const ver = f.estado.value === 'trasladado' && m?.estado !== 'trasladado' && c && c.estado === 'activo';
         f.querySelector('[data-traslado-conyuge]').hidden = !ver;
         if (ver) f.querySelector('[data-conyuge-nombre]').textContent = c.nombre;
       };
