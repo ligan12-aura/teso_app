@@ -151,8 +151,9 @@ function agregarVariosMiembros(ctx, m) {
       <p class="muted small">Marca a los miembros de la iglesia que participan en ${esc(m.nombre)}. Quedan enlazados a su ficha: sus datos se toman de Miembros.${porMat ? ' Los matrimonios aparecen en una sola línea y entran juntos.' : ''}</p>
       <div class="pick-tools"><div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar…" data-buscar></div>
         <select data-edad><option value="">Todas las edades</option><option value="25">Hasta 25 años</option><option value="30">Hasta 30 años</option><option value="35">Hasta 35 años</option></select>
+        ${porMat ? '<label class="check"><input type="checkbox" data-solo-mat checked> Solo matrimonios</label>' : ''}
         <button type="button" class="link-btn" data-todos>Marcar visibles</button><button type="button" class="link-btn" data-ninguno>Ninguno</button></div>
-      <ul class="pick-list">${lista.map((x) => `<li data-nombre="${esc(sinTildes(x.nombre))}" data-edad="${x.edad ?? ''}"><label class="check"><input type="checkbox" name="mb" value="${x.id}"> ${esc(x.nombre)}${x.edad != null ? ` <small class="muted">· ${x.edad} años</small>` : ''}</label></li>`).join('')}</ul>
+      <ul class="pick-list">${lista.map((x) => `<li data-nombre="${esc(sinTildes(x.nombre))}" data-edad="${x.edad ?? ''}" data-mat="${x.pareja ? 1 : 0}"><label class="check"><input type="checkbox" name="mb" value="${x.id}"> ${esc(x.nombre)}${x.edad != null ? ` <small class="muted">· ${x.edad} años</small>` : ''}</label></li>`).join('')}</ul>
       <p class="muted small" data-cuenta></p>`,
     submitLabel: 'Agregar al listado',
     onOpen(f) {
@@ -163,10 +164,13 @@ function agregarVariosMiembros(ctx, m) {
         const max = +f.querySelector('[data-edad]').value || 0;
         f.querySelectorAll('.pick-list li').forEach((li) => {
           const e = li.dataset.edad === '' ? null : +li.dataset.edad;
-          li.hidden = (q && !li.dataset.nombre.includes(q)) || (max && (e == null || e > max));
+          const soloMat = f.querySelector('[data-solo-mat]')?.checked;
+          li.hidden = (q && !li.dataset.nombre.includes(q)) || (max && (e == null || e > max)) || (soloMat && li.dataset.mat !== '1');
         });
       };
       cajas.forEach((c) => c.addEventListener('change', contar)); contar();
+      f.querySelector('[data-solo-mat]')?.addEventListener('change', filtrar);
+      filtrar();
       f.querySelector('[data-buscar]').addEventListener('input', filtrar);
       f.querySelector('[data-edad]').addEventListener('change', filtrar);
       f.querySelector('[data-todos]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.closest('li').hidden) c.checked = true; }); contar(); });

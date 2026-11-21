@@ -197,6 +197,10 @@ export function render(root, ctx) {
 function editMinisterio(ctx, m = null) {
   const color = m?.color || COLORES[ctx.data.ministerios.length % COLORES.length];
   const ico = m?.icono || ICONOS[ctx.data.ministerios.length % ICONOS.length];
+  // saldo inicial actual del ministerio (un solo movimiento "Saldo inicial")
+  const saldos = m ? ctx.data.movMinisterios.filter((x) => x.ministerioId === m.id && x.categoria === 'Saldo inicial') : [];
+  const variosSaldos = saldos.length > 1;
+  const saldoMin = saldos.length === 1 ? saldos[0] : variosSaldos ? { monto: saldos.reduce((a, x) => a + Number(x.monto), 0), fecha: '' } : null;
   return modal({
     title: m ? `Editar ${esc(m.nombre)}` : 'Nuevo ministerio',
     body: `
@@ -206,19 +210,30 @@ function editMinisterio(ctx, m = null) {
         <label class="field"><span>Presupuesto mensual ($)</span><input name="presupuestoMensual" inputmode="numeric" value="${m && m.presupuestoMensual ? m.presupuestoMensual.toLocaleString('es-CL') : ''}" placeholder="Sin límite"></label>
       </div>
       <p class="muted small">El ítem es lo que se transfiere cada mes; el presupuesto es el máximo que el ministerio puede gastar en el mes.</p>
+      <div class="form-row">
+        <label class="field"><span>Saldo inicial ($)</span><input name="saldoInicial" inputmode="numeric" value="${saldoMin ? Number(saldoMin.monto).toLocaleString('es-CL') : ''}" placeholder="0" ${variosSaldos ? 'readonly' : ''}></label>
+        <label class="field"><span>Saldo al día</span><input type="date" name="fechaSaldo" value="${esc(saldoMin?.fecha || '')}" max="${ctx.data.hoy}" ${variosSaldos ? 'readonly' : ''}></label>
+      </div>
+      <p class="muted small">${variosSaldos ? 'Este ministerio tiene saldos iniciales del historial importado: se corrigen desde sus movimientos.' : 'El dinero que tenía el ministerio al empezar a usar la app. Déjalo vacío o en 0 si no tenía.'}</p>
       <div class="field"><span>Ícono</span><div class="picker">${ICONOS.map((i) => `<label><input type="radio" name="icono" value="${i}" ${i === ico ? 'checked' : ''}><span>${i}</span></label>`).join('')}</div></div>
       <div class="field"><span>Color</span><div class="picker colors">${COLORES.map((c) => `<label><input type="radio" name="color" value="${c}" ${c === color ? 'checked' : ''}><span style="background:${c}"></span></label>`).join('')}</div></div>
       <label class="check"><input type="checkbox" name="actividades" ${m?.actividades === 'si' ? 'checked' : ''}> Listado de integrantes y actividades con cuota <small class="muted">(p. ej. jóvenes)</small></label>
       <label class="check" data-por-matrimonio ${m?.actividades === 'si' ? '' : 'hidden'} style="margin-left:26px"><input type="checkbox" name="porMatrimonio" ${m?.porMatrimonio === 'si' ? 'checked' : ''}> Los integrantes son <b>matrimonios</b> <small class="muted">(p. ej. Familia: se cuentan por matrimonio en el listado, la asistencia y las actividades)</small></label>
       ${m ? `<label class="check"><input type="checkbox" name="activo" ${m.activo ? 'checked' : ''}> Ministerio activo</label>` : ''}`,
     onOpen(f) {
-      formatoPesos(f.itemMensual); formatoPesos(f.presupuestoMensual);
+      formatoPesos(f.itemMensual); formatoPesos(f.presupuestoMensual); formatoPesos(f.saldoInicial);
+      // por defecto, el último día del mes anterior (así cuenta como saldo con que parte el mes actual)
+      const finMesAnterior = (() => { const d = new Date(ctx.data.hoy.slice(0, 7) + '-01T12:00:00'); d.setDate(0); return d.toISOString().slice(0, 10); })();
+      f.saldoInicial.addEventListener('input', () => { if (pesos(f.saldoInicial.value) && !f.fechaSaldo.value) f.fechaSaldo.value = finMesAnterior; });
       f.actividades.addEventListener('change', () => { f.querySelector('[data-por-matrimonio]').hidden = !f.actividades.checked; });
     },
     async onSubmit(f) {
       const d = formData(f);
       d.itemMensual = pesos(d.itemMensual);
       d.presupuestoMensual = pesos(d.presupuestoMensual);
+      d.saldoInicial = pesos(d.saldoInicial);
+      if (d.saldoInicial && !d.fechaSaldo) throw new Error('Indica a qué día corresponde el saldo inicial');
+      if (variosSaldos) { delete d.saldoInicial; delete d.fechaSaldo; }
       if (m) { d.id = m.id; d.activo = f.activo.checked; }
       d.actividades = f.actividades.checked ? 'si' : 'no';
       d.porMatrimonio = f.actividades.checked && f.porMatrimonio.checked ? 'si' : 'no';

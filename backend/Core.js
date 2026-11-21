@@ -1959,8 +1959,28 @@ var TesoCore = (function () {
         // Integrantes por matrimonio: se cuentan (listado, asistencia, actividades) como matrimonios
         porMatrimonio: p.porMatrimonio === undefined ? (actual ? actual.porMatrimonio || '' : '') : (p.porMatrimonio === 'si' || p.porMatrimonio === true ? 'si' : 'no')
       };
-      if (p.id) return update('Ministerios', p.id, d);
-      return insert('Ministerios', Object.assign(d, { id: uid(), creadoEn: env.now() }));
+      var r = p.id ? update('Ministerios', p.id, d) : insert('Ministerios', Object.assign(d, { id: uid(), creadoEn: env.now() }));
+      if (p.saldoInicial !== undefined) saldoInicialMinisterio(user, r.id, p.saldoInicial, p.fechaSaldo);
+      return r;
+    }
+    // Saldo inicial de un ministerio: un ingreso "Saldo inicial" en la fecha indicada (0 = sin saldo).
+    // Si el ministerio ya trae varios saldos del historial importado, se corrigen desde sus movimientos.
+    function saldoInicialMinisterio(user, mid, monto, fecha) {
+      monto = Math.round(Number(monto) || 0);
+      if (monto < 0 || monto > MAX_MONTO) throw TesoError('Saldo inicial inválido');
+      var saldos = all('MovimientosMinisterios').filter(function (x) { return x.ministerioId === mid && x.categoria === SALDO_INICIAL; });
+      if (saldos.length > 1) {
+        if (monto !== saldos.reduce(function (a, x) { return a + Number(x.monto); }, 0)) throw TesoError('Este ministerio tiene varios saldos iniciales del historial importado: corrígelos desde sus movimientos.');
+        return;
+      }
+      var actual = saldos[0];
+      if (!monto) { if (actual) remove('MovimientosMinisterios', actual.id); return; }
+      fecha = String(fecha || '').trim() || (actual ? actual.fecha : env.today());
+      if (!isDate(fecha) || fecha > env.today() || fecha < '2000-01-01') throw TesoError('Fecha del saldo inicial inválida');
+      var now = env.now();
+      var d = { fecha: fecha, mes: fecha.slice(0, 7), monto: monto, descripcion: 'Saldo al ' + fecha.split('-').reverse().join('-'), actualizadoEn: now };
+      if (actual) update('MovimientosMinisterios', actual.id, d);
+      else insert('MovimientosMinisterios', Object.assign(d, { id: uid(), ministerioId: mid, tipo: 'ingreso', categoria: SALDO_INICIAL, archivoId: '', origen: 'importado', refId: 'saldo:' + mid + ':manual', creadoPor: user.id, creadoEn: now, actividadId: '' }));
     }
     // Solo el administrador agrega, modifica o desactiva usuarios. Mientras no exista ningún administrador
     // activo, tesorero y pastor pueden hacerlo (para crear el primero).
