@@ -83,6 +83,17 @@ export const icon = (name, size = 18) =>
 
 // ---------------- Roles ----------------
 export const ROL_LABEL = { admin: 'Administrador', tesorero: 'Tesorero', pastor: 'Pastor', secretaria: 'Secretaría', lider: 'Líder de ministerio', discipulado: 'Líder de discipulado' };
+// Ministerios que lidera un usuario (puede ser más de uno) y el que tiene abierto en "Mi ministerio"
+export const ministeriosDeUsuario = (u) => (u?.ministerioIds?.length ? u.ministerioIds : u?.ministerioId ? [u.ministerioId] : []);
+export function ministerioActivoId(u, ministerios = []) {
+  const ids = ministeriosDeUsuario(u).filter((id) => ministerios.some((m) => m.id === id));
+  let guardado = '';
+  try { guardado = localStorage.getItem('teso_mi_ministerio_' + (u?.id || '')) || ''; } catch { /* sin almacenamiento */ }
+  return ids.includes(guardado) ? guardado : ids[0] || '';
+}
+export function elegirMinisterioActivo(u, id) {
+  try { localStorage.setItem('teso_mi_ministerio_' + (u?.id || ''), id); } catch { /* sin almacenamiento */ }
+}
 export const esAdmin = (u) => !!u && ['admin', 'tesorero', 'pastor'].includes(u.rol);
 
 // ---------------- Estados de rendición ----------------

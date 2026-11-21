@@ -3,7 +3,7 @@ import { call, auth } from '../api.js';
 
 export function render(root, ctx) {
   const u = ctx.user;
-  const min = ctx.data.ministerios.find((m) => m.id === u.ministerioId);
+  const mins = u.rol === 'lider' ? ctx.data.ministerios : ctx.data.ministerios.filter((m) => m.id === u.ministerioId);
   root.innerHTML = `
   <section class="page-head"><div><span class="eyebrow">Cuenta</span><h1>Mi cuenta</h1></div></section>
   <div class="grid-1-1">
@@ -11,7 +11,7 @@ export function render(root, ctx) {
       <div class="avatar xl">${esc(u.nombre.split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase())}</div>
       <h3>${esc(u.nombre)}</h3>
       <p class="muted">@${esc(u.usuario)} · ${ROL_LABEL[u.rol] || ''}</p>
-      ${min ? `<span class="badge" style="background:${min.color}22;color:${min.color}">${esc(min.icono)} ${esc(min.nombre)}</span>` : ''}
+      ${mins.map((min) => `<span class="badge" style="background:${min.color}22;color:${min.color}">${esc(min.icono)} ${esc(min.nombre)}</span>`).join(' ')}
       <div class="note" style="margin-top:18px;text-align:left">${icon('lock', 16)} ${{ admin: 'Eres administrador: tienes permiso para todo, incluidos usuarios, configuración, diezmos, miembros y las actividades de los ministerios.', tesorero: 'Tienes acceso completo a la tesorería y a todos los ministerios.', pastor: 'Tienes acceso completo a la tesorería, los ministerios, los diezmos y los miembros.', secretaria: 'Puedes agregar y editar los datos de los miembros de la iglesia y llevar la asistencia. La información financiera es visible solo para tesorería.', discipulado: 'Puedes ver y tomar la asistencia de tu grupo de discipulado. El resto de la información de la iglesia no está disponible para tu usuario.' }[u.rol] || 'Solo puedes ver y registrar movimientos de tu ministerio. La información general de la iglesia es visible solo para tesorería.'}</div>
     </article>
     <article class="card">

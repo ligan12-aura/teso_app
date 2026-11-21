@@ -997,6 +997,8 @@ a.tag { text-decoration: none; }
 /* Asistencia */
 .asist-tabs { margin-bottom: 18px; }
 .asist-secciones { margin-bottom: 4px; }
+.mis-ministerios { align-items: center; margin: 0 0 14px; }
+.min-checks { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 4px 0; }
 .hogar-grupos { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-2); align-items: center; }
 .hogar-grupos a { font-size: 13px; padding: 6px 12px; }
 .hogar-grupos a small { opacity: .75; font-weight: 500; }

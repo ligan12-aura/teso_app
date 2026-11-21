@@ -111,6 +111,10 @@ export const estadoDe = (data, mid, mes) => rendicionDe(data, mid, mes)?.estado 
 export function transferenciaDe(data, mid, mes) {
   return data.transferencias.find((t) => t.ministerioId === mid && t.mes === mes) || null;
 }
+export const lideraMinisterio = (u, mid) => u.rol === 'lider' && (u.ministerioIds?.length ? u.ministerioIds : [u.ministerioId]).includes(mid);
+// Líder(es) de un ministerio: si son dos (p. ej. un matrimonio) se muestran los dos nombres
 export function liderDe(data, mid) {
-  return data.usuarios.find((u) => u.rol === 'lider' && u.ministerioId === mid && u.activo) || null;
+  const ls = data.usuarios.filter((u) => lideraMinisterio(u, mid) && u.activo);
+  if (!ls.length) return null;
+  return ls.length === 1 ? ls[0] : { ...ls[0], nombre: ls.map((u) => u.nombre).join(' y '), lideres: ls };
 }

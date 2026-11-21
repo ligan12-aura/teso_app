@@ -249,6 +249,7 @@ const TEMAS = {
     },
     {
       id: 'actividades', titulo: 'Jóvenes y actividades', ico: 'users', html: `
+      <p>Si lideras <b>más de un ministerio</b> (por ejemplo Infantil y Familia), arriba aparece “Mis ministerios”: toca el que quieras ver; todo lo que registres queda en ese ministerio.</p>
       <p>Si tu ministerio tiene activado el <b>listado de integrantes y actividades</b> (por ejemplo, Jóvenes), verás las pestañas <b>Finanzas · Jóvenes · Asistencia · Actividades</b>.</p>
       <h4>Listado de jóvenes</h4>
       <ul class="hp-list">

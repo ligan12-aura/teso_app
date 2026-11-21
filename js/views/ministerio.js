@@ -1,4 +1,4 @@
-import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesNombre, mesCorto, fecha, fechaCorta, chart, PALETA, COLOR, monthPicker, bindMonthPicker, badgeEstado, ESTADOS, modal, formData, toast, confirmar, verArchivo, emptyState, nextMonth, prevMonth, esAdmin } from '../ui.js';
+import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesNombre, mesCorto, fecha, fechaCorta, chart, PALETA, COLOR, monthPicker, bindMonthPicker, badgeEstado, ESTADOS, modal, formData, toast, confirmar, verArchivo, emptyState, nextMonth, prevMonth, esAdmin, ministerioActivoId, elegirMinisterioActivo } from '../ui.js';
 import { call } from '../api.js';
 import { presupuestoMinisterio, resumenMinisterio, rendicionDe, transferenciaDe, liderDe, monthsBack, movsMinisterio, split, porCategoria, saldoMinisterio } from '../calc.js';
 import { abrirFormMovimiento } from './movform.js';
@@ -6,9 +6,27 @@ import { descargarPlanillaMinisterio } from '../planillaDescarga.js';
 import { renderSeccion, tabsMinisterio, actividadesDe, resumenActividad } from './actividades.js';
 
 export function render(root, ctx) {
+  renderInterno(root, ctx);
+  // líder de varios ministerios (p. ej. Infantil y Familia): botones para cambiar de ministerio
+  const { data, user } = ctx;
+  if (esAdmin(user) || data.ministerios.length < 2) return;
+  const actual = ministerioActivoId(user, data.ministerios);
+  root.insertAdjacentHTML('afterbegin', `<nav class="min-tabs mis-ministerios" aria-label="Mis ministerios"><span class="muted small">Mis ministerios:</span>${data.ministerios.map((m) => `<a href="#/mi-ministerio" data-mi-min="${m.id}" class="${m.id === actual ? 'active' : ''}">${esc(m.icono)} ${esc(m.nombre)}</a>`).join('')}</nav>`);
+  root.querySelectorAll('[data-mi-min]').forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    elegirMinisterioActivo(user, a.dataset.miMin);
+    const m = data.ministerios.find((x) => x.id === a.dataset.miMin);
+    const lbl = document.querySelector('.me-txt span');
+    if (lbl && m) lbl.textContent = `Líder · ${m.nombre}`;
+    if (location.hash === '#/mi-ministerio') render(root, ctx);
+    else location.hash = '#/mi-ministerio';
+  }));
+}
+
+function renderInterno(root, ctx) {
   const { data, mes, user } = ctx;
   const esTes = esAdmin(user);
-  const mid = esTes ? ctx.params[0] : user.ministerioId;
+  const mid = esTes ? ctx.params[0] : ministerioActivoId(user, data.ministerios);
   const m = data.ministerios.find((x) => x.id === mid);
   if (!m) {
     root.innerHTML = emptyState(esTes ? 'Ministerio no encontrado.' : 'Tu usuario aún no tiene un ministerio asignado. Habla con el tesorero.', 'alert');
@@ -219,7 +237,7 @@ export function render(root, ctx) {
   root.querySelectorAll('[data-mes]').forEach((b) => b.addEventListener('click', () => ctx.setMes(b.dataset.mes)));
   const byId = (id) => data.movMinisterios.find((x) => x.id === id);
   const form = (tipo, mov) => abrirFormMovimiento({
-    ctx, ambito: 'ministerio', tipo, mov, ministerioId: esTes ? m.id : undefined,
+    ctx, ambito: 'ministerio', tipo, mov, ministerioId: m.id,
     action: mov ? 'updateMovMinisterio' : 'addMovMinisterio',
     titulo: mov ? 'Editar movimiento' : tipo === 'gasto' ? `Rendir gasto · ${m.nombre}` : `Registrar ingreso · ${m.nombre}`
   });
@@ -249,14 +267,14 @@ export function render(root, ctx) {
         <label class="field"><span>Comentario para tesorería (opcional)</span><textarea name="comentario" rows="3" maxlength="500"></textarea></label>`,
       submitLabel: 'Confirmar y enviar',
       async onSubmit(f) {
-        await call('enviarRendicion', { mes, comentario: formData(f).comentario });
+        await call('enviarRendicion', { ministerioId: m.id, mes, comentario: formData(f).comentario });
         toast('Rendición enviada a tesorería');
         await ctx.refresh();
       }
     });
   });
   root.querySelector('[data-retirar]')?.addEventListener('click', async () => {
-    if (await confirmar('La rendición volverá a estado abierto para que puedas corregirla.', { boton: 'Retirar' })) accion('retirarRendicion', { mes }, 'Rendición retirada');
+    if (await confirmar('La rendición volverá a estado abierto para que puedas corregirla.', { boton: 'Retirar' })) accion('retirarRendicion', { ministerioId: m.id, mes }, 'Rendición retirada');
   });
   root.querySelector('[data-aprobar]')?.addEventListener('click', async () => {
     if (await confirmar(`¿Aprobar la rendición de <b>${esc(m.nombre)}</b> de ${mesLargo(mes)}?<br><span class="muted">Gastos ${money(r.gastos)} · ${r.boletas} boletas${r.sinBoleta ? ` · ${r.sinBoleta} sin boleta` : ''}</span>`, { boton: 'Aprobar' })) {

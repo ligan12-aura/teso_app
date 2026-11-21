@@ -31,7 +31,7 @@ export function render(root, ctx) {
       ${data.ministerios.length ? `<div class="table-wrap"><table class="table">
         <thead><tr><th>Ministerio</th><th>Líder</th><th class="num">Ítem mensual</th><th class="num">Presupuesto</th><th>Estado</th><th></th></tr></thead>
         <tbody>${data.ministerios.map((m) => {
-          const lid = data.usuarios.filter((u) => u.ministerioId === m.id && u.rol === 'lider');
+          const lid = data.usuarios.filter((u) => u.rol === 'lider' && (u.ministerioIds?.length ? u.ministerioIds : [u.ministerioId]).includes(m.id));
           return `<tr class="${m.activo ? '' : 'inactive'}">
             <td><span class="min-dot" style="background:${m.color}">${esc(m.icono)}</span> <b>${esc(m.nombre)}</b>${m.actividades === 'si' ? ' <span class="tag tag-verde">Integrantes y actividades</span>' : ''}</td>
             <td>${lid.length ? lid.map((u) => esc(u.nombre)).join(', ') : '<span class="muted">—</span>'}</td>
@@ -62,7 +62,7 @@ export function render(root, ctx) {
             <td><b>${esc(u.nombre)}</b>${u.email ? `<br><small class="muted">${esc(u.email)}</small>` : ''}</td>
             <td><code>${esc(u.usuario)}</code></td>
             <td>${{ admin: '<span class="badge st-sent">Administrador</span>', tesorero: '<span class="badge st-sent">Tesorero</span>', pastor: '<span class="badge st-sent">Pastor</span>', secretaria: '<span class="badge st-obs">Secretaría</span>', discipulado: '<span class="badge st-open">Líder de discipulado</span>' }[u.rol] || '<span class="badge st-open">Líder</span>'}</td>
-            <td>${minName[u.ministerioId] ? `${esc(minName[u.ministerioId].icono)} ${esc(minName[u.ministerioId].nombre)}` : u.rol === 'discipulado' && (data.gruposHogar || []).find((g) => g.id === u.grupoId) ? `${icon('users', 13)} ${esc(data.gruposHogar.find((g) => g.id === u.grupoId).nombre)}` : '<span class="muted">—</span>'}</td>
+            <td>${u.rol === 'lider' && (u.ministerioIds || []).filter((id) => minName[id]).length ? (u.ministerioIds || []).filter((id) => minName[id]).map((id) => `${esc(minName[id].icono)} ${esc(minName[id].nombre)}`).join('<br>') : minName[u.ministerioId] ? `${esc(minName[u.ministerioId].icono)} ${esc(minName[u.ministerioId].nombre)}` : u.rol === 'discipulado' && (data.gruposHogar || []).find((g) => g.id === u.grupoId) ? `${icon('users', 13)} ${esc(data.gruposHogar.find((g) => g.id === u.grupoId).nombre)}` : '<span class="muted">—</span>'}</td>
             <td>${u.activo ? (u.debeCambiarPass ? '<span class="badge st-obs">Clave temporal</span>' : '<span class="badge st-ok">Activo</span>') : '<span class="badge st-open">Inactivo</span>'}</td>
             <td class="row-actions">${puede ? `<button class="icon-btn sm" data-edit="${u.id}" title="Editar">${icon('edit', 16)}</button>${u.id !== ctx.user?.id ? `<button class="icon-btn sm danger" data-del="${u.id}" title="Eliminar usuario">${icon('trash', 16)}</button>` : ''}` : ''}</td>
           </tr>`).join('')}</tbody></table></div>
@@ -246,7 +246,9 @@ function editUsuario(ctx, u = null) {
         <label class="field"><span>Rol</span><select name="rol">${[['lider', 'Líder de ministerio'], ['tesorero', 'Tesorero'], ['pastor', 'Pastor'], ['admin', 'Administrador (todo)'], ['secretaria', 'Secretaría (miembros y asistencia)'], ['discipulado', 'Líder de discipulado (asistencia de su grupo)']].map(([v, l]) => `<option value="${v}" ${(u?.rol || 'lider') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
       <p class="muted small" data-rol-ayuda style="margin-top:-6px"></p>
-      <label class="field" data-min><span>Ministerio</span><select name="ministerioId"><option value="">— Selecciona —</option>${mins.map((m) => `<option value="${m.id}" ${u?.ministerioId === m.id ? 'selected' : ''}>${esc(m.icono)} ${esc(m.nombre)}</option>`).join('')}</select></label>
+      <div class="field" data-min><span>Ministerio(s) que lidera</span>
+        <div class="min-checks">${mins.map((m) => `<label class="check"><input type="checkbox" name="minLider" value="${m.id}" ${(u?.ministerioIds?.length ? u.ministerioIds : [u?.ministerioId]).includes(m.id) ? 'checked' : ''}> ${esc(m.icono)} ${esc(m.nombre)}</label>`).join('')}</div>
+        <small class="hint">Puede liderar más de uno (por ejemplo, Infantil y, junto a su cónyuge, Familia). Si un ministerio lo lidera un matrimonio, crea un usuario para cada uno con el mismo ministerio.</small></div>
       <label class="field" data-grupo><span>Grupo de discipulado</span><select name="grupoId"><option value="">— Selecciona —</option>${(ctx.data.gruposHogar || []).filter((g) => g.activo || g.id === u?.grupoId).map((g) => `<option value="${g.id}" ${u?.grupoId === g.id ? 'selected' : ''}>${esc(g.nombre)}${g.sector ? ` · ${esc(g.sector)}` : ''}</option>`).join('')}</select>${(ctx.data.gruposHogar || []).length ? '' : '<small class="hint">Aún no hay grupos: créalos en Asistencia → Discipulados.</small>'}</label>
       <label class="field"><span>Correo (opcional)</span><input type="email" name="email" value="${esc(u?.email || '')}"></label>
       <label class="field"><span>${u ? 'Nueva contraseña temporal (dejar vacío para no cambiar)' : 'Contraseña temporal'}</span><input name="password" type="text" autocomplete="off" ${u ? '' : 'required'} minlength="8" placeholder="mín. 8 caracteres"></label>
@@ -266,6 +268,10 @@ function editUsuario(ctx, u = null) {
     async onSubmit(f) {
       const d = formData(f);
       if (u) { d.id = u.id; d.activo = f.activo.checked; }
+      delete d.minLider;
+      d.ministerioIds = d.rol === 'lider' ? [...f.querySelectorAll('[name=minLider]:checked')].map((c) => c.value) : [];
+      if (d.rol === 'lider' && !d.ministerioIds.length) throw new Error('Marca al menos un ministerio para el líder');
+      d.ministerioId = d.ministerioIds[0] || '';
       if (d.rol === 'discipulado' && !d.grupoId) throw new Error('Elige el grupo de discipulado de este líder');
       await call('saveUsuario', d);
       toast(d.password ? `Usuario guardado. Comparte la contraseña temporal con ${d.nombre.split(' ')[0]}.` : 'Usuario guardado');

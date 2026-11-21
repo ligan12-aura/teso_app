@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { call, auth, isDemo, setAuthErrorHandler } from './api.js';
 import { resetDemo } from './demo.js';
-import { icon, esc, toast, destroyCharts, setupChartDefaults, modal, formData, esAdmin, ROL_LABEL } from './ui.js';
+import { icon, esc, toast, destroyCharts, setupChartDefaults, modal, formData, esAdmin, ROL_LABEL, ministerioActivoId } from './ui.js';
 import { botonTema, alternarTema, aplicarTema, temaActual, seguirSistema } from './theme.js';
 import * as Dashboard from './views/dashboard.js';
 import * as General from './views/general.js';
@@ -203,7 +203,7 @@ function logout() {
 function shell(active) {
   const u = state.user;
   const nav = NAV[u.rol] || NAV.lider;
-  const min = u.rol === 'lider' ? state.data.ministerios[0] : null;
+  const min = u.rol === 'lider' ? state.data.ministerios.find((m) => m.id === ministerioActivoId(u, state.data.ministerios)) || state.data.ministerios[0] : null;
   const initials = u.nombre.split(/\s+/).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
   const links = nav.map((n) => `<a href="#/${n.path}" class="nav-link ${active === n.path ? 'active' : ''}">${icon(n.icon, 20)}<span>${n.short ? `<span class="lbl-long">${n.label}</span><span class="lbl-short">${n.short}</span>` : n.label}</span></a>`).join('');
   // En el celular caben 5 pestañas: las marcadas con "mas" van dentro de "Más"

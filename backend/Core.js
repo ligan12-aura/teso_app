@@ -16,7 +16,7 @@ var TesoCore = (function () {
   // Esquema de datos (cada tabla = una hoja del Excel/Google Sheet)
   // ---------------------------------------------------------------
   var TABLES = {
-    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde', 'grupoId'],
+    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde', 'grupoId', 'ministerioIds'],
     Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn', 'presupuestoMensual', 'actividades', 'porMatrimonio'],
     MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo'],
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'actividadId'],
@@ -181,8 +181,14 @@ var TesoCore = (function () {
   // Asistencia de un grupo de discipulado: además, el líder de ese grupo
   var ASIST_HOGAR = ['admin', 'pastor', 'secretaria', 'discipulado'];
   function esAdmin(u) { return !!u && ADMIN.indexOf(u.rol) >= 0; }
+  // Ministerios que lidera un usuario: ministerioIds (varios, separados por coma) o, si no, ministerioId
+  function idsMinisterios(u) {
+    var ids = String((u && u.ministerioIds) || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    if (!ids.length && u && u.ministerioId) ids = [String(u.ministerioId)];
+    return ids;
+  }
   function publicUser(u) {
-    return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, grupoId: u.grupoId || '', email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
+    return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, ministerioIds: idsMinisterios(u), grupoId: u.grupoId || '', email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
   }
 
   // ---------------------------------------------------------------
@@ -367,9 +373,9 @@ var TesoCore = (function () {
           base.gruposHogar = []; base.personasHogar = []; base.asistenciasHogar = [];
         }
       } else {
-        var mid = user.ministerioId;
-        var own = function (r) { return r.ministerioId === mid; };
-        base.ministerios = all('Ministerios').filter(function (m) { return m.id === mid; });
+        var mids = idsMinisterios(user);
+        var own = function (r) { return mids.indexOf(r.ministerioId) >= 0; };
+        base.ministerios = all('Ministerios').filter(function (m) { return mids.indexOf(m.id) >= 0; });
         base.usuarios = [publicUser(user)];
         base.movMinisterios = all('MovimientosMinisterios').filter(own);
         base.movGenerales = [];
@@ -378,17 +384,20 @@ var TesoCore = (function () {
         base.miembros = [];
         base.diezmos = [];
         // Listado propio y actividades: solo si el ministerio lo tiene habilitado
-        var conAct = base.ministerios.some(function (m) { return m.actividades === 'si'; });
+        var conActIds = {};
+        base.ministerios.forEach(function (m) { if (m.actividades === 'si') conActIds[m.id] = true; });
+        var conAct = Object.keys(conActIds).length > 0;
+        var ownAct = function (r) { return !!conActIds[r.ministerioId]; };
         // El líder no recibe datos de las fichas de Miembros: solo el nombre del enlazado
-        base.integrantes = conAct ? vistaIntegrantes(all('Integrantes').filter(own)) : [];
-        base.actividades = conAct ? all('Actividades').filter(own) : [];
+        base.integrantes = conAct ? vistaIntegrantes(all('Integrantes').filter(ownAct)) : [];
+        base.actividades = conAct ? all('Actividades').filter(ownAct) : [];
         var actIds = {};
         base.actividades.forEach(function (a) { actIds[a.id] = 1; });
         base.inscripciones = conAct ? all('Inscripciones').filter(function (x) { return actIds[x.actividadId]; }) : [];
         // El enlace con la ficha de Miembros lo hace tesorería: el líder no recibe el registro de miembros
         base.miembrosEnlace = [];
         base.asistencias = []; base.personasAsistencia = [];
-        base.asistenciasMin = conAct ? all('AsistenciasMinisterios').filter(own) : [];
+        base.asistenciasMin = conAct ? all('AsistenciasMinisterios').filter(ownAct) : [];
         base.gruposHogar = []; base.personasHogar = []; base.asistenciasHogar = [];
         base.extra = {};
         // El líder no recibe saldo de caja ni presupuesto de la tesorería general
@@ -679,10 +688,20 @@ var TesoCore = (function () {
       if (!m) throw TesoError('Ministerio no encontrado');
       return m;
     }
+    function ministerioDelLider(user, mid) {
+      var ids = idsMinisterios(user);
+      if (!ids.length) throw TesoError('Tu usuario no tiene un ministerio asignado. Habla con el tesorero.');
+      mid = String(mid || '');
+      if (mid && ids.indexOf(mid) < 0) throw TesoError('No tienes permiso', 'FORBIDDEN');
+      if (!mid) {
+        if (ids.length > 1) throw TesoError('Indica en cuál de tus ministerios');
+        mid = ids[0];
+      }
+      return mid;
+    }
     function ministerioDe(user, p) {
       if (esAdmin(user)) return getMinisterio(p.ministerioId);
-      if (!user.ministerioId) throw TesoError('Tu usuario no tiene un ministerio asignado. Habla con el tesorero.');
-      return getMinisterio(user.ministerioId);
+      return getMinisterio(ministerioDelLider(user, p.ministerioId));
     }
     function rendicion(mid, mes) {
       return all('Rendiciones').filter(function (r) { return r.ministerioId === mid && r.mes === mes; })[0] || null;
@@ -780,7 +799,7 @@ var TesoCore = (function () {
     function movMinisterioPropio(user, id, paraBorrar) {
       var mov = find('MovimientosMinisterios', id);
       if (!mov) throw TesoError('Movimiento no encontrado');
-      if (!esAdmin(user) && mov.ministerioId !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
+      if (!esAdmin(user) && idsMinisterios(user).indexOf(mov.ministerioId) < 0) throw TesoError('No tienes permiso', 'FORBIDDEN');
       // Si el ministerio ya no usa actividades, una cuota se puede quitar desde Finanzas (no editar)
       if (mov.origen === 'cuota' && paraBorrar && getMinisterio(mov.ministerioId).actividades !== 'si') return mov;
       if (mov.origen === 'cuota') throw TesoError('Esta cuota se administra desde su actividad: ahí puedes anular el pago.');
@@ -872,11 +891,7 @@ var TesoCore = (function () {
     function nombreIntegrante(it) { return vistaIntegrantes([it])[0].nombre; }
     // aunqueDesactivado: para deshacer pagos de un ministerio al que se le quitó el listado (no se crean cosas nuevas)
     function ministerioConActividades(user, mid, aunqueDesactivado) {
-      if (!esAdmin(user)) {
-        if (!user.ministerioId) throw TesoError('Tu usuario no tiene un ministerio asignado. Habla con el tesorero.');
-        if (mid && mid !== user.ministerioId) throw TesoError('No tienes permiso', 'FORBIDDEN');
-        mid = user.ministerioId;
-      }
+      if (!esAdmin(user)) mid = ministerioDelLider(user, mid);
       var m = getMinisterio(mid);
       if (m.actividades !== 'si' && !aunqueDesactivado) throw TesoError('Este ministerio no tiene habilitado el listado de integrantes y actividades. Se activa en Configuración → Ministerios.');
       return m;
@@ -1916,7 +1931,8 @@ var TesoCore = (function () {
           return all(t).some(function (r) { return r.archivoId === id; });
         });
       } else {
-        ok = all('MovimientosMinisterios').some(function (m) { return m.archivoId === id && m.ministerioId === user.ministerioId; });
+        var misMin = idsMinisterios(user);
+        ok = all('MovimientosMinisterios').some(function (m) { return m.archivoId === id && misMin.indexOf(m.ministerioId) >= 0; });
       }
       if (!ok) throw TesoError('No tienes permiso para ver este archivo', 'FORBIDDEN');
       return files.get(id);
@@ -1957,13 +1973,17 @@ var TesoCore = (function () {
       var nombre = String(p.nombre || '').trim();
       if (!nombre) throw TesoError('Ingresa el nombre');
       var rol = ROLES.indexOf(p.rol) >= 0 ? p.rol : 'lider';
-      var ministerioId = rol === 'lider' ? String(p.ministerioId || '') : '';
-      if (rol === 'lider' && !ministerioId) throw TesoError('Asigna un ministerio al líder');
+      // un líder puede liderar varios ministerios (p. ej. Infantil y, junto a su cónyuge, Familia)
+      var listaMin = rol === 'lider' ? (Array.isArray(p.ministerioIds) ? p.ministerioIds : String(p.ministerioIds || p.ministerioId || '').split(',')).map(function (x) { return String(x).trim(); }).filter(Boolean) : [];
+      listaMin = listaMin.filter(function (x, k) { return listaMin.indexOf(x) === k; });
+      listaMin.forEach(function (x) { if (!find('Ministerios', x)) throw TesoError('Uno de los ministerios ya no existe'); });
+      if (rol === 'lider' && !listaMin.length) throw TesoError('Asigna al menos un ministerio al líder');
+      var ministerioId = listaMin[0] || '';
       var grupoId = rol === 'discipulado' ? String(p.grupoId || '') : '';
       if (rol === 'discipulado' && !find('GruposHogar', grupoId)) throw TesoError('Elige el grupo de discipulado de este líder');
       var dup = all('Usuarios').some(function (u) { return u.usuario === usuario && u.id !== p.id; });
       if (dup) throw TesoError('Ese nombre de usuario ya existe');
-      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, grupoId: grupoId, email: String(p.email || '').trim(), activo: p.activo === undefined ? true : toBool(p.activo) };
+      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, ministerioIds: listaMin.join(','), grupoId: grupoId, email: String(p.email || '').trim(), activo: p.activo === undefined ? true : toBool(p.activo) };
       if (p.id === user.id && (!d.activo || ADMIN.indexOf(d.rol) < 0)) throw TesoError('No puedes quitarte a ti mismo el acceso completo ni desactivarte');
       if (p.id === user.id && user.rol === 'admin' && d.rol !== 'admin') throw TesoError('No puedes quitarte a ti mismo el rol de administrador: pídeselo a otro administrador');
       var pass = String(p.password || '');
