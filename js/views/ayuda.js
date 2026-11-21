@@ -54,7 +54,7 @@ const TEMAS = {
       id: 'general', titulo: 'Tesorería general', ico: 'wallet', html: `
       <p>Aquí está el <b>libro de ingresos y gastos de la iglesia</b>.</p>
       <h4>Registrar los ingresos de un culto</h4>
-      ${pasos(`Presiona ${btn('church', 'Registrar culto')}.`, 'Elige la fecha y el medio (efectivo, transferencia…).', 'Escribe lo recaudado en diezmos, ofrendas, ofrenda misionera, etc. Los que queden vacíos no se registran.', 'Presiona <b>Registrar ingresos</b>. Se crea un ingreso por cada monto.')}
+      ${pasos(`Presiona ${btn('church', 'Registrar culto')}.`, 'Elige la fecha y el medio (efectivo, transferencia…).', 'Escribe lo recaudado en ofrendas, ofrenda misionera y pro-templo (los diezmos se registran en el apartado Diezmos). Los que queden vacíos no se registran.', 'Presiona <b>Registrar ingresos</b>. Se crea un ingreso por cada monto.')}
       <h4>Registrar otro ingreso o un gasto</h4>
       ${pasos(`Presiona ${btn('plus', 'Ingreso')} o ${btn('plus', 'Gasto')}.`, 'Completa monto, fecha, categoría y descripción. Si la categoría no está en la lista, elige <b>Otra…</b> y escríbela.', 'Opcional: adjunta la foto del comprobante.')}
       <h4>Buscar y revisar</h4>
@@ -112,16 +112,17 @@ const TEMAS = {
       id: 'diezmos', titulo: 'Diezmos', ico: 'heart', html: `
       <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ven el tesorero y el pastor.</p>
       <h4>Registrar</h4>
-      ${pasos(`<b>En el culto:</b> en Tesorería → ${btn('church', 'Registrar culto')} presiona <b>Detallar diezmos por hermano</b> y escribe cuánto dio cada uno (y lo que venga sin nombre). Se guarda el ingreso del culto en la caja y, a la vez, el diezmo de cada hermano.`, `<b>Fuera del culto</b> (transferencia, depósito): toca la celda del hermano en el mes, o usa ${btn('plus', 'Registrar diezmos')} para varios a la vez. Con <b>Sumar a la caja</b> marcado se crea también el ingreso en la tesorería general, con la misma fecha. Puedes adjuntar la <b>foto o captura del comprobante</b> de la transferencia como respaldo; se ve con el botón “Comprobante”.`, 'Si corriges o eliminas un diezmo sumado a la caja, su ingreso en la tesorería se actualiza o se elimina solo. Eliminar el diezmo de un hermano registrado en un culto no cambia el total del culto (ese dinero ya se recibió): solo pasa a “sin identificar”.')}
+      ${pasos(`Todos los diezmos se registran aquí, nunca en el culto: toca la celda del hermano en el mes, o usa ${btn('plus', 'Registrar diezmos')} para varios a la vez (por ejemplo, los sobres del domingo).`, `<b>Fecha de entrega y mes al que corresponde:</b> la fecha es el día en que lo dio (así entra a la caja); el mes es al que corresponde. Por ejemplo, lo da el 11 de septiembre pero es el diezmo de julio: se ve en la columna de julio.`, `<b>Diezmo de varios meses:</b> al tocar la celda, elige en “¿Cuántos meses cubre?” (por ejemplo 3). El monto se reparte en partes iguales entre esos meses.`, `Con <b>Sumar a la caja</b> marcado se crea también el ingreso en la tesorería general. Puedes adjuntar la <b>foto o captura del comprobante</b>; se ve con el botón “Comprobante”. Si corriges o eliminas un diezmo sumado a la caja, su ingreso en la tesorería se actualiza o se elimina solo.`)}
       <h4>Categorías (solo hermanos activos y habilitados para diezmar)</h4>
-      <p>En la ficha de cada miembro se indica si está <b>habilitado para diezmar</b>. Los no habilitados (por ejemplo, estudiantes o quienes no tienen ingresos) no se cuentan en la estadística; si igual dan un diezmo, se registra y suma al total del mes.</p>
+      <p>En la ficha de cada miembro se indica si está <b>habilitado para diezmar</b>. Los no habilitados (por ejemplo, estudiantes o quienes no tienen ingresos) no se cuentan en la estadística ni aparecen en la tabla por hermano; si igual dan un diezmo, se registra y suma al total del mes. Al habilitar a alguien se guarda la fecha (<b>Habilitado desde</b>): cuenta en el análisis desde ese mes; antes, como no habilitado.</p>
+      <p><b>💍 Matrimonios:</b> en la tabla por hermano aparecen en una sola fila. En el gráfico de categorías y en el promedio cuentan como 2 hermanos.</p>
       <ul class="hp-list">
         <li><span class="badge st-ok">Constante</span> diezmó en al menos el 80% de los meses transcurridos del año.</li>
         <li><span class="badge st-obs">Irregular</span> diezmó algunos meses. Si lleva 2 o más meses sin diezmar se indica bajo su nombre.</li>
         <li><span class="badge st-sin">No diezma</span> no tiene diezmos en el año.</li>
       </ul>
       <h4>Estadística del mes</h4>
-      <p>Elige el <b>mes y el año</b> arriba (con las flechas o las listas). Verás el total diezmado y su variación frente al mes anterior, cuántos hermanos activos diezmaron y cuántos no, el promedio por diezmo y las listas de <b>quiénes diezmaron</b> y <b>quiénes no</b> ese mes. El gráfico <b>Mes a mes</b> muestra el total de cada mes del año y el % de hermanos que diezmó; toca una barra para ir a ese mes.</p>`
+      <p>Elige el <b>mes y el año</b> arriba (con las flechas o las listas). Verás el total diezmado y su variación frente al mes anterior, cuántos hermanos activos diezmaron y cuántos no, el promedio por hermano (un matrimonio cuenta como 2) y las listas de <b>quiénes diezmaron</b> y <b>quiénes no</b> ese mes. El gráfico <b>Mes a mes</b> muestra el total de cada mes del año y el % de hermanos que diezmó; toca una barra para ir a ese mes.</p>`
     },
     {
       id: 'miembros', titulo: 'Miembros', ico: 'users', html: `
@@ -129,6 +130,7 @@ const TEMAS = {
       <ul class="hp-list">
         <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b>. En el resumen de diezmos cuenta como activo hasta el mes anterior a la baja, y desde ahí deja de contar; su historial se conserva. Un miembro con diezmos no se puede eliminar: se marca inactivo.</li>
         <li><b>Trasladado a otra iglesia:</b> en la ficha elige el estado “Trasladado a otra iglesia”, la <b>fecha del traslado</b> (obligatoria) y la iglesia de destino. Sus diezmos cuentan en la estadística mientras fue miembro (hasta el mes anterior al traslado) y desde ahí deja de contarse, sin aparecer como que dejó de diezmar. También sale de la asistencia, los discipulados y los listados de ministerios. Filtra a los trasladados con “Trasladados”.</li>
+        <li><b>Fallecido:</b> elige ese estado con la <b>fecha de fallecimiento</b>. Como en un traslado, sus diezmos cuentan hasta esa fecha, sale de la asistencia y los grupos, y su ficha se conserva.</li>
         <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
         <li><b>💍 Matrimonio:</b> al elegir el cónyuge, ambos quedan unidos. Al registrar diezmos, el matrimonio aparece en una sola fila y su diezmo cuenta para los dos hermanos.</li>
         <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>
