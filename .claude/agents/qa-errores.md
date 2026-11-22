@@ -177,6 +177,9 @@ En cada pantalla revisa: **errores de consola**, **peticiones fallidas**, textos
 - Descargar planilla (general y por ministerio): que se descargue sin errores y, si puedes, abre el archivo con Python (`openpyxl`) para revisar las hojas y los totales.
 - Modo claro y oscuro: cambiar con el botón; contraste legible y gráficos con los colores nuevos.
 - Ayuda: se abre sola solo en el primer ingreso de cada usuario y muestra el tema de la pantalla actual, según el rol.
+- **Guía paso a paso** (`js/guia.js`, botón flotante «Guía»): en cada pantalla y con cada rol, que el recorrido destaque zonas que existen (sin pasos vacíos ni globos fuera de la pantalla), omita lo que no aplica al rol, funcione con Anterior/Siguiente, flechas y Esc, en claro, oscuro y celular, y no aparezca en el ingreso.
+- **Ministerio Familia (por matrimonios):** crearlo en Configuración con "Los integrantes son matrimonios" y saldo inicial; "Agregar miembros" con "Solo matrimonios"; matrimonios no miembros; asistencia y una actividad con cuota por matrimonio; editar y quitar el saldo inicial.
+- **Líder de varios ministerios:** en Configuración → Usuarios, asignar a un líder dos ministerios (y a otro usuario el mismo ministerio, como matrimonio); como ese líder, cambiar con "Mis ministerios", registrar gastos, rendición, integrantes y asistencia en cada uno y verificar que todo quede en el ministerio correcto; por la consola, una acción sin `ministerioId` (debe pedir elegir) y con uno ajeno (rechazo).
 
 - Miembros: "Miembro desde" (futura, anterior a la baja) y su efecto en la estadística de diezmos.
 - Ministerio Jóvenes (en `#/ministerio/<id>/…`): ver integrantes y actividades; "Agregar miembros" (varios a la vez, con filtro por edad); activar y desactivar las actividades de otro ministerio en Configuración y comprobar que las pestañas aparecen y desaparecen.
