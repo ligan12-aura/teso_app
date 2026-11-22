@@ -210,6 +210,17 @@ input, select, textarea { font: inherit; color: inherit; }
   position: fixed; inset: 0 auto 0 0; width: var(--sidebar); display: flex; flex-direction: column;
   background: var(--navy-2);
   color: #fff; padding: 22px 16px; z-index: 20;
+  /* en pantallas bajas el menú se desplaza, para que "Cerrar sesión" (abajo) siempre se alcance */
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .25) transparent;
+}
+@media (max-height: 860px) {
+  .sidebar { padding: 14px 14px; }
+  .brand { padding: 2px 8px 14px; }
+  .nav { gap: 2px; }
+  .nav-link { padding: 8px 14px; }
+  .side-foot { gap: 2px; padding-top: 10px; }
+  .side-action { padding: 7px 14px; }
+  .me { margin-top: 6px; padding: 8px 10px; }
 }
 .brand { display: flex; align-items: center; gap: 12px; padding: 4px 8px 26px; }
 .brand strong { display: block; font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: .01em; }
