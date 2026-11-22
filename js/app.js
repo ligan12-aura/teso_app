@@ -3,6 +3,7 @@ import { call, auth, isDemo, setAuthErrorHandler } from './api.js';
 import { resetDemo } from './demo.js';
 import { icon, esc, toast, destroyCharts, setupChartDefaults, modal, formData, esAdmin, ROL_LABEL, ministerioActivoId } from './ui.js';
 import { botonTema, alternarTema, aplicarTema, temaActual, seguirSistema } from './theme.js';
+import './guia.js'; // botón «Guía»: recorrido paso a paso de cada pantalla
 import * as Dashboard from './views/dashboard.js';
 import * as General from './views/general.js';
 import * as Ministerios from './views/ministerios.js';
