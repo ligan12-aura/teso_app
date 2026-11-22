@@ -191,7 +191,7 @@ function editarIntegrante(ctx, m, it = null) {
   const { data } = ctx;
   // Solo tesorería (quien ve el registro de Miembros) enlaza a un integrante con su ficha
   const puedeEnlazar = esAdmin(ctx.user);
-  const enlazados = new Set(integrantesDe(data, m.id).filter((i) => i.miembroId && i.id !== it?.id).map((i) => i.miembroId));
+  const enlazados = new Set(integrantesDe(data, m.id).filter((i) => i.id !== it?.id).flatMap((i) => [i.miembroId, i.miembroId2]).filter(Boolean));
   const opciones = (data.miembrosEnlace || []).filter((x) => !enlazados.has(x.id)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   // si su ficha de miembro ya no está activa, igual se muestra la opción actual
   if (it?.esMiembro && it.miembroId && !opciones.some((x) => x.id === it.miembroId)) opciones.unshift({ id: it.miembroId, nombre: it.nombre });

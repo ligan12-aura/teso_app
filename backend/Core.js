@@ -536,7 +536,7 @@ var TesoCore = (function () {
       var del = {};
       all('PersonasHogar').forEach(function (x) { if (x.grupoId === grupoId) del[x.id] = true; });
       var vistos = {}, presentes = [];
-      (p.presentes || []).map(String).forEach(function (id) { if (del[id] && !vistos[id]) { vistos[id] = true; presentes.push(id); } });
+      (Array.isArray(p.presentes) ? p.presentes : []).map(String).forEach(function (id) { if (del[id] && !vistos[id]) { vistos[id] = true; presentes.push(id); } });
       if (actual) String(actual.presentes || '').split(',').forEach(function (id) { if (id && !del[id] && !vistos[id]) { vistos[id] = true; presentes.push(id); } });
       if (!presentes.length) throw TesoError('Marca al menos a una persona presente');
       var now = env.now();
@@ -580,8 +580,18 @@ var TesoCore = (function () {
           if (toBool(i.activo)) ya.activo = true;
           return;
         }
-        var r = { id: 'i:' + i.id, tipo: 'integrante', nombre: i.nombre2 ? i.nombre + ' y ' + i.nombre2 : i.nombre, activo: toBool(i.activo), desde: String(i.creadoEn || '').slice(0, 10), celular: sinContactoIntegrantes ? '' : (i.celular || ''), ministerios: mins[i.ministerioId] ? [mins[i.ministerioId]] : [] };
+        var r = { id: 'i:' + i.id, tipo: 'integrante', nombre: i.nombre, activo: toBool(i.activo), desde: String(i.creadoEn || '').slice(0, 10), celular: sinContactoIntegrantes ? '' : (i.celular || ''), ministerios: mins[i.ministerioId] ? [mins[i.ministerioId]] : [] };
         porNombre[k] = r; out.push(r);
+      });
+      // cónyuge escrito (no miembro) de un integrante-matrimonio: es otra persona en la asistencia de cultos
+      integ.forEach(function (i) {
+        var n2 = String(i.nombre2 || '').trim();
+        if (!n2 || (i.miembroId2 && miembros[i.miembroId2])) return;
+        var k2 = normalNombre(n2);
+        var ya2 = porNombre[k2];
+        if (ya2) { if (toBool(i.activo)) ya2.activo = true; return; }
+        var r2 = { id: 'i2:' + i.id, tipo: 'integrante', nombre: n2, activo: toBool(i.activo), desde: String(i.creadoEn || '').slice(0, 10), celular: '', ministerios: mins[i.ministerioId] ? [mins[i.ministerioId]] : [] };
+        porNombre[k2] = r2; out.push(r2);
       });
       all('Visitas').forEach(function (v) {
         out.push({ id: 'v:' + v.id, tipo: 'visita', nombre: v.nombre, activo: toBool(v.activo), desde: String(v.creadoEn || '').slice(0, 10), celular: v.celular || '', ministerios: [], notas: v.notas || '' });
@@ -603,7 +613,7 @@ var TesoCore = (function () {
       personasAsistencia().forEach(function (x) { canon[x.id] = x.id; (x.alias || []).forEach(function (a) { canon[a] = x.id; }); });
       var vistos = {};
       var presentes = [];
-      (p.presentes || []).map(String).forEach(function (id) {
+      (Array.isArray(p.presentes) ? p.presentes : []).map(String).forEach(function (id) {
         var c = canon[id];
         if (!c || vistos[c]) return;
         vistos[c] = true; presentes.push(c);
@@ -661,7 +671,7 @@ var TesoCore = (function () {
       all('Integrantes').forEach(function (i) { if (i.ministerioId === m.id) integ[i.id] = true; });
       var vistos = {};
       var presentes = [];
-      (p.presentes || []).map(String).forEach(function (id) {
+      (Array.isArray(p.presentes) ? p.presentes : []).map(String).forEach(function (id) {
         if (!integ[id] || vistos[id]) return;
         vistos[id] = true; presentes.push(id);
       });
@@ -993,10 +1003,20 @@ var TesoCore = (function () {
         if (porMatrimonio) {
           var cy = mb.conyugeId && find('Miembros', mb.conyugeId);
           var conCy = cy && cy.estado === 'activo' && cy.conyugeId === mb.id && !enlazado[cy.id];
-          insert('Integrantes', { id: uid(), ministerioId: m.id, nombre: mb.nombre, celular: '', email: '', fechaNacimiento: '', miembroId: mid, miembroId2: conCy ? cy.id : '', nombre2: '', notas: '', activo: true, creadoEn: now, actualizadoEn: now });
+          var mismoN = lista.filter(function (i) { return !(i.miembroId && find('Miembros', i.miembroId)) && (normalNombre(i.nombre) === normalNombre(mb.nombre) || (conCy && normalNombre(i.nombre) === normalNombre(cy.nombre))); });
+          if (mismoN.length === 1) {
+            var ex = mismoN[0];
+            var patchE = { miembroId: mid, activo: true, actualizadoEn: now };
+            if (conCy && !ex.miembroId2) { patchE.miembroId2 = cy.id; patchE.nombre2 = ''; }
+            update('Integrantes', ex.id, patchE);
+            Object.assign(ex, patchE);
+            enlazados++;
+          } else {
+            lista.push(insert('Integrantes', { id: uid(), ministerioId: m.id, nombre: mb.nombre, celular: '', email: '', fechaNacimiento: '', miembroId: mid, miembroId2: conCy ? cy.id : '', nombre2: '', notas: '', activo: true, creadoEn: now, actualizadoEn: now }));
+            agregados++;
+          }
           enlazado[mid] = true;
           if (conCy) { enlazado[cy.id] = true; vistos[cy.id] = true; }
-          agregados++;
           return;
         }
         var clave = normalNombre(mb.nombre);
@@ -1038,6 +1058,7 @@ var TesoCore = (function () {
       var mbEnl = it.miembroId && find('Miembros', it.miembroId);
       var conCultos = asistenciasCon('i:' + it.id);
       if (conCultos.length && !mbEnl) throw TesoError('Tiene asistencias registradas en los cultos: márcalo como inactivo en vez de eliminarlo.');
+      if (asistenciasCon('i2:' + it.id).length) throw TesoError('Su cónyuge tiene asistencias registradas en los cultos: márcalo como inactivo en vez de eliminarlo.');
       if (conCultos.length) reemplazarPresente(conCultos, 'i:' + it.id, 'm:' + mbEnl.id);
       ins.forEach(function (x) { remove('Inscripciones', x.id); });
       remove('Integrantes', it.id);
@@ -1662,9 +1683,13 @@ var TesoCore = (function () {
       });
       // listados de ministerios
       all('Integrantes').forEach(function (i) {
-        if (i.miembroId2 === sale.id) update('Integrantes', i.id, { miembroId2: i.miembroId === queda.id ? '' : queda.id, actualizadoEn: now });
+        var yaEnLista = function () { return all('Integrantes').some(function (j) { return j.id !== i.id && j.ministerioId === i.ministerioId && (j.miembroId === queda.id || j.miembroId2 === queda.id); }); };
+        if (i.miembroId2 === sale.id) {
+          // si quien queda ya está en ese listado (o es el mismo titular), aquí queda solo el nombre escrito
+          update('Integrantes', i.id, i.miembroId === queda.id || yaEnLista() ? { miembroId2: '', nombre2: i.miembroId === queda.id ? '' : sale.nombre, actualizadoEn: now } : { miembroId2: queda.id, actualizadoEn: now });
+        }
         if (i.miembroId !== sale.id) return;
-        var ya = all('Integrantes').some(function (j) { return j.ministerioId === i.ministerioId && j.miembroId === queda.id; });
+        var ya = yaEnLista();
         update('Integrantes', i.id, ya ? { miembroId: '', nombre: sale.nombre, actualizadoEn: now } : { miembroId: queda.id, actualizadoEn: now });
       });
       remove('Miembros', sale.id);
@@ -1959,28 +1984,45 @@ var TesoCore = (function () {
         // Integrantes por matrimonio: se cuentan (listado, asistencia, actividades) como matrimonios
         porMatrimonio: p.porMatrimonio === undefined ? (actual ? actual.porMatrimonio || '' : '') : (p.porMatrimonio === 'si' || p.porMatrimonio === true ? 'si' : 'no')
       };
+      var dupNombre = all('Ministerios').some(function (x) { return normalNombre(x.nombre) === normalNombre(nombre) && x.id !== p.id; });
+      if (dupNombre) throw TesoError('Ya existe un ministerio llamado ' + nombre);
+      // el saldo inicial se valida antes de guardar nada (si falla, no queda el ministerio a medias)
+      var plan = p.saldoInicial !== undefined ? planSaldoInicial(actual ? actual.id : '', p.saldoInicial, p.fechaSaldo) : null;
       var r = p.id ? update('Ministerios', p.id, d) : insert('Ministerios', Object.assign(d, { id: uid(), creadoEn: env.now() }));
-      if (p.saldoInicial !== undefined) saldoInicialMinisterio(user, r.id, p.saldoInicial, p.fechaSaldo);
+      if (plan) aplicarSaldoInicial(user, r.id, plan);
       return r;
     }
     // Saldo inicial de un ministerio: un ingreso "Saldo inicial" en la fecha indicada (0 = sin saldo).
     // Si el ministerio ya trae varios saldos del historial importado, se corrigen desde sus movimientos.
-    function saldoInicialMinisterio(user, mid, monto, fecha) {
-      monto = Math.round(Number(monto) || 0);
+    function planSaldoInicial(mid, montoP, fechaP) {
+      var txt = String(montoP === null || montoP === undefined ? '' : montoP).trim();
+      if (txt !== '' && !isFinite(Number(txt))) throw TesoError('Saldo inicial inválido');
+      var monto = Math.round(Number(txt) || 0);
       if (monto < 0 || monto > MAX_MONTO) throw TesoError('Saldo inicial inválido');
-      var saldos = all('MovimientosMinisterios').filter(function (x) { return x.ministerioId === mid && x.categoria === SALDO_INICIAL; });
+      var saldos = mid ? all('MovimientosMinisterios').filter(function (x) { return x.ministerioId === mid && x.categoria === SALDO_INICIAL; }) : [];
       if (saldos.length > 1) {
         if (monto !== saldos.reduce(function (a, x) { return a + Number(x.monto); }, 0)) throw TesoError('Este ministerio tiene varios saldos iniciales del historial importado: corrígelos desde sus movimientos.');
-        return;
+        return { nada: true };
       }
-      var actual = saldos[0];
-      if (!monto) { if (actual) remove('MovimientosMinisterios', actual.id); return; }
-      fecha = String(fecha || '').trim() || (actual ? actual.fecha : env.today());
-      if (!isDate(fecha) || fecha > env.today() || fecha < '2000-01-01') throw TesoError('Fecha del saldo inicial inválida');
-      var now = env.now();
-      var d = { fecha: fecha, mes: fecha.slice(0, 7), monto: monto, descripcion: 'Saldo al ' + fecha.split('-').reverse().join('-'), actualizadoEn: now };
-      if (actual) update('MovimientosMinisterios', actual.id, d);
+      var actual = saldos[0] || null;
+      if (!monto) return { quitar: actual };
+      var fecha = String(fechaP || '').trim() || (actual ? actual.fecha : env.today());
+      if (!isDate(fecha) || fecha > env.today() || fecha < '2000-01-01') throw TesoError('Fecha del saldo inicial inválida (no futura ni anterior a 2000)');
+      return { actual: actual, monto: monto, fecha: fecha };
+    }
+    function aplicarSaldoInicial(user, mid, plan) {
+      if (plan.nada) return;
+      if (plan.quitar !== undefined) { if (plan.quitar) remove('MovimientosMinisterios', plan.quitar.id); return; }
+      var now = env.now(), fecha = plan.fecha, mes = fecha.slice(0, 7);
+      var d = { fecha: fecha, mes: mes, monto: plan.monto, descripcion: 'Saldo al ' + fecha.split('-').reverse().join('-'), actualizadoEn: now };
+      if (plan.actual) update('MovimientosMinisterios', plan.actual.id, d);
       else insert('MovimientosMinisterios', Object.assign(d, { id: uid(), ministerioId: mid, tipo: 'ingreso', categoria: SALDO_INICIAL, archivoId: '', origen: 'importado', refId: 'saldo:' + mid + ':manual', creadoPor: user.id, creadoEn: now, actividadId: '' }));
+      // el mes del saldo (anterior al actual) queda con la rendición aprobada, como al importar el historial,
+      // para que se pueda transferir el ítem del mes siguiente sin forzar
+      if (mes < env.today().slice(0, 7) && !rendicion(mid, mes)) {
+        var soloSaldo = !all('MovimientosMinisterios').some(function (x) { return x.ministerioId === mid && x.mes === mes && x.categoria !== SALDO_INICIAL; });
+        if (soloSaldo) insert('Rendiciones', { id: uid(), ministerioId: mid, mes: mes, estado: 'aprobada', comentarioLider: '', fechaEnvio: now, comentarioTesorero: 'Mes del saldo inicial', fechaRevision: now, revisadoPor: user.id });
+      }
     }
     // Solo el administrador agrega, modifica o desactiva usuarios. Mientras no exista ningún administrador
     // activo, tesorero y pastor pueden hacerlo (para crear el primero).

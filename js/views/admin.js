@@ -212,7 +212,7 @@ function editMinisterio(ctx, m = null) {
       <p class="muted small">El ítem es lo que se transfiere cada mes; el presupuesto es el máximo que el ministerio puede gastar en el mes.</p>
       <div class="form-row">
         <label class="field"><span>Saldo inicial ($)</span><input name="saldoInicial" inputmode="numeric" value="${saldoMin ? Number(saldoMin.monto).toLocaleString('es-CL') : ''}" placeholder="0" ${variosSaldos ? 'readonly' : ''}></label>
-        <label class="field"><span>Saldo al día</span><input type="date" name="fechaSaldo" value="${esc(saldoMin?.fecha || '')}" max="${ctx.data.hoy}" ${variosSaldos ? 'readonly' : ''}></label>
+        <label class="field"><span>Saldo al día</span><input type="date" name="fechaSaldo" value="${esc(saldoMin?.fecha || '')}" min="2000-01-01" max="${ctx.data.hoy}" ${variosSaldos ? 'readonly' : ''}></label>
       </div>
       <p class="muted small">${variosSaldos ? 'Este ministerio tiene saldos iniciales del historial importado: se corrigen desde sus movimientos.' : 'El dinero que tenía el ministerio al empezar a usar la app. Déjalo vacío o en 0 si no tenía.'}</p>
       <div class="field"><span>Ícono</span><div class="picker">${ICONOS.map((i) => `<label><input type="radio" name="icono" value="${i}" ${i === ico ? 'checked' : ''}><span>${i}</span></label>`).join('')}</div></div>

@@ -16,7 +16,7 @@ const COMUN_MOVIL = { en: '.bottom-nav', titulo: 'Menú', texto: 'Cambia de secc
 const PAGINAS = {
   inicio: [
     { en: '.page-head', titulo: 'Resumen del mes', texto: 'Es la foto de la tesorería del mes. Con las flechas del selector cambias el mes que se muestra.' },
-    { en: 'b:Movimiento', titulo: 'Registrar', texto: '«Movimiento» anota un ingreso o un gasto de la tesorería general. «Registrar culto» anota de una vez lo recaudado en un culto (diezmos, ofrendas y otros).' },
+    { en: 'b:Movimiento', titulo: 'Registrar', texto: '«Movimiento» anota un ingreso o un gasto de la tesorería general. «Registrar culto» anota de una vez las ofrendas de un culto. Los diezmos se registran en el apartado Diezmos.' },
     { en: '.alert-strip', titulo: 'Avisos', texto: 'Si hay rendiciones esperando tu revisión, aparece este aviso. Tócalo para ir directo a revisarlas.' },
     { en: '.kpis', titulo: 'Cifras del mes', texto: 'Saldo en caja, ingresos, gastos (con el uso del presupuesto) y el resultado del mes, comparados con el mes anterior.' },
     { en: 't:Flujo de los últimos', titulo: 'Flujo de 12 meses', texto: 'Barras verdes = ingresos, rojas = gastos; la línea dorada es el saldo acumulado. Toca una barra para ver el detalle.' },
@@ -38,7 +38,7 @@ const PAGINAS = {
   ],
   ministerio: [
     { en: '.min-hero', titulo: 'El ministerio', texto: 'Saldo disponible, líder, ítem y presupuesto. Cambia el mes con las flechas y descarga su planilla.' },
-    { en: '.min-tabs', titulo: 'Secciones', texto: 'Finanzas, integrantes, asistencia y actividades del ministerio (las dos últimas solo si están habilitadas).' },
+    { en: '.min-tabs:not(.mis-ministerios)', titulo: 'Secciones', texto: 'Finanzas, integrantes, asistencia y actividades del ministerio (las dos últimas solo si están habilitadas).' },
     { en: 't:Rendición de', titulo: 'Rendición del mes', texto: 'Los pasos de la rendición: el líder registra y confirma; tesorería revisa, aprueba u observa y luego transfiere el ítem.' },
     { en: '.pres-strip', titulo: 'Presupuesto', texto: 'Lo gastado en el mes frente al presupuesto que fijó tesorería.' },
     { en: '.kpis', titulo: 'Cifras del mes', texto: 'Saldo inicial, ingresos, gastos (y cuántas boletas tienen) y saldo al cierre.' },
@@ -68,8 +68,8 @@ const PAGINAS = {
     { en: 't:Rendiciones de', titulo: 'Cada ministerio', texto: 'Revisa los gastos y boletas con «Revisar»; aprueba u observa con un comentario; luego transfiere el ítem del mes siguiente.' },
   ],
   diezmos: [
-    { en: '.page-head', titulo: 'Diezmos', texto: 'Elige el mes y el año. «Registrar diezmos» anota los recibidos fuera del culto (transferencias, depósitos); los del culto se detallan al registrar el culto.' },
-    { en: '.kpis', titulo: 'Cifras del mes', texto: 'Total diezmado, cuántos diezmaron y cuántos no, y el promedio por diezmo.' },
+    { en: '.page-head', titulo: 'Diezmos', texto: 'Elige el mes y el año. Todos los diezmos se registran aquí: «Registrar diezmos» para varios a la vez (por ejemplo los sobres del domingo), o tocando la celda de un hermano.' },
+    { en: '.kpis', titulo: 'Cifras del mes', texto: 'Total diezmado, cuántos diezmaron y cuántos no, y el promedio por hermano (un matrimonio cuenta como 2).' },
     { en: 't:Mes a mes', titulo: 'Mes a mes', texto: 'Barras = total de cada mes; la línea verde = porcentaje de hermanos habilitados que diezmó.' },
     { en: 't:Hermanos en', titulo: 'Constancia', texto: 'Cuántos diezman de forma constante, irregular o no diezman en el año.' },
     { en: 't:Diezmos por hermano', titulo: 'Diezmos por hermano', texto: 'Una fila por hermano y una columna por mes. Toca una celda para registrar o corregir su diezmo de ese mes.' },
@@ -81,7 +81,7 @@ const PAGINAS = {
     { en: 't:Listado', titulo: 'Listado', texto: 'Busca por nombre, celular, correo o RUT y filtra. Toca el lápiz para abrir la ficha y completar o corregir los datos.' },
   ],
   asistencia: [
-    { en: '.min-tabs', titulo: 'Secciones', texto: 'Cultos, discipulados en hogares y las reuniones de cada ministerio que lleva asistencia.' },
+    { en: '.min-tabs.asist-secciones', titulo: 'Secciones', texto: 'Cultos, discipulados en hogares y las reuniones de cada ministerio que lleva asistencia.' },
     { en: 'b:Tomar asistencia', titulo: 'Tomar asistencia', texto: 'Marca quiénes vinieron a la reunión. Si llegó alguien nuevo, agrégalo como visita desde la misma ventana.' },
     { en: '.kpis', titulo: 'Resumen', texto: 'Asistentes de la última reunión, el promedio y cuántos requieren atención.' },
     { en: 't:Faltaron', titulo: 'Para llamar', texto: 'Quienes llevan varias reuniones seguidas sin venir, para llamarlos o visitarlos. Puedes cambiar desde cuántas faltas avisar.' },
