@@ -305,7 +305,10 @@ var TesoCore = (function () {
       var correo = normalCorreo(idg.email);
       var clave = 'google:' + correo;
       exigirNoBloqueado(clave);
-      var u = all('Usuarios').filter(function (x) { return normalCorreo(x.email) === correo && x.activo; })[0];
+      var coinciden = all('Usuarios').filter(function (x) { return normalCorreo(x.email) === correo && x.activo; });
+      // un correo identifica a una sola persona: si está en varios usuarios, no se adivina con qué rol entra
+      if (coinciden.length > 1) throw TesoError('La cuenta ' + correo + ' está registrada en más de un usuario (' + coinciden.map(function (x) { return x.usuario; }).join(', ') + '). El administrador debe dejarla en uno solo (Configuración → Usuarios).');
+      var u = coinciden[0];
       if (!u) {
         registrarFallo(clave);
         throw TesoError('La cuenta ' + correo + ' no tiene acceso a la página. Pide al administrador que registre ese correo en Configuración → Usuarios.');
