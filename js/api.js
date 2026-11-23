@@ -31,15 +31,22 @@ export async function call(action, payload = {}) {
     r = core.handle(action, payload, auth.token);
   } else {
     let res;
+    // máximo 45 s de espera: si el servidor o la red no responden, se avisa en vez de quedar cargando
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const reloj = ctl ? setTimeout(() => ctl.abort(), 45000) : null;
     try {
       res = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action, payload, token: auth.token })
+        body: JSON.stringify({ action, payload, token: auth.token }),
+        signal: ctl?.signal
       });
-    } catch {
+    } catch (e) {
+      clearTimeout(reloj);
+      if (e?.name === 'AbortError') throw new ApiError('El servidor tardó demasiado en responder. Revisa si el cambio quedó guardado antes de volver a intentarlo.', 'NET');
       throw new ApiError('No hay conexión con el servidor. Revisa tu internet.', 'NET');
     }
+    clearTimeout(reloj);
     try { r = await res.json(); } catch { throw new ApiError('Respuesta inválida del servidor', 'NET'); }
   }
   if (!r.ok) {
