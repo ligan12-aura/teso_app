@@ -63,7 +63,7 @@ export function render(root, ctx) {
           <div><small>Boletas</small><b class="${r.sinBoleta ? 'warn-txt' : ''}">${r.boletas}${r.sinBoleta ? ` <span title="sin boleta">(${r.sinBoleta} ${icon('alert', 12)})</span>` : ''}</b></div>
         </div>
         <div class="rr-actions">
-          ${estado === 'enviada' ? ((ctx.user?.ministerioIds || []).includes(m.id) ? '<small class="muted" title="Lideras este ministerio: la aprueba el pastor o el administrador">La aprueba el pastor o el administrador</small>' : `<button class="btn btn-ok btn-sm" data-aprobar="${m.id}">${icon('check', 15)} Aprobar</button>`) : ''}
+          ${estado === 'enviada' ? ((ctx.user?.ministerioIds || []).includes(m.id) ? '<small class="muted" title="Lideras este ministerio: la aprueba otro tesorero, el pastor o el administrador">La aprueba otra persona de tesorería</small>' : `<button class="btn btn-ok btn-sm" data-aprobar="${m.id}">${icon('check', 15)} Aprobar</button>`) : ''}
           <a class="btn btn-ghost btn-sm" href="#/ministerio/${m.id}" data-goto="${m.id}">${icon('eye', 15)} Revisar</a>
           ${t ? `<span class="badge st-ok" title="Transferido el ${fecha(t.fecha)}">${icon('transfer', 13)} ${money(t.monto)}</span>`
             : `<button class="btn ${estado === 'aprobada' ? 'btn-primary' : 'btn-ghost'} btn-sm" data-transf="${m.id}" ${estado === 'aprobada' ? '' : 'title="La rendición aún no está aprobada"'}>${icon('transfer', 15)} Ítem ${mesNombre(mesSig)}</button>`}

@@ -1276,7 +1276,7 @@ var TesoCore = (function () {
     }
     function revisarRendicion(user, p) {
       var m = getMinisterio(p.ministerioId);
-      if (lideraMin(user, m.id)) throw TesoError('No puedes aprobar ni observar la rendición de un ministerio que lideras: la revisa el pastor o el administrador.');
+      if (lideraMin(user, m.id)) throw TesoError('No puedes aprobar ni observar la rendición de un ministerio que lideras: la revisa otro tesorero, el pastor o el administrador.');
       if (!isMonth(p.mes)) throw TesoError('Mes inválido');
       if (p.decision !== 'aprobada' && p.decision !== 'observada') throw TesoError('Decisión inválida');
       var e = estadoRendicion(m.id, p.mes);

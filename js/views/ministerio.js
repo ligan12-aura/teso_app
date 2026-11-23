@@ -45,7 +45,7 @@ function renderInterno(root, ctx) {
   const editable = esTes || estado === 'abierta' || estado === 'observada';
   const lider = esTes ? liderDe(data, m.id) : user;
   // tesorero (o pastor / administrador) que también lidera este ministerio: confirma la rendición como líder,
-  // y la aprueba otra persona (el pastor o el administrador)
+  // y la aprueba otra persona (otro tesorero, el pastor o el administrador)
   const lideraEste = esTes && (user.ministerioIds || []).includes(m.id);
   const saldoTotal = saldoMinisterio(data, m.id);
   const itemMes = transferenciaDe(data, m.id, mes);
@@ -194,7 +194,7 @@ function renderInterno(root, ctx) {
         msg = `Tesorería pidió correcciones. Ajusta lo necesario y vuelve a confirmar.`;
         acciones = `<button class="btn btn-gold" data-enviar>${icon('send', 16)} Reenviar rendición</button>`;
       } else if (estado === 'enviada') {
-        msg = lideraEste ? `Enviada el ${fecha(rend.fechaEnvio)}. Como lideras este ministerio, la revisa el pastor o el administrador.` : `Enviada el ${fecha(rend.fechaEnvio)}. Tesorería la está revisando.`;
+        msg = lideraEste ? `Enviada el ${fecha(rend.fechaEnvio)}. Como lideras este ministerio, la revisa otro tesorero, el pastor o el administrador.` : `Enviada el ${fecha(rend.fechaEnvio)}. Tesorería la está revisando.`;
         acciones = `<button class="btn btn-ghost" data-retirar>${icon('undo', 16)} Retirar para corregir</button>`;
       } else {
         msg = `Aprobada el ${fecha(rend.fechaRevision)}. ¡Gracias por tu fidelidad en la administración! 🙌`;
