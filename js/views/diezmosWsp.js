@@ -154,7 +154,13 @@ export function abrirReportesWsp(ctx, anioInicial) {
         const vis = filas.filter((x) => !qq || sinTildes(x.nombre).includes(qq));
         const conNum = filas.filter((x) => x.personas.some((p) => p.numero));
         const listos = filas.filter((x) => x.personas.some((p) => env[x.id + ':' + p.id]));
-        f.querySelector('[data-resumen]').innerHTML = `<span><b>${filas.length}</b> ${filas.length === 1 ? 'resumen' : 'resúmenes'} ${periodoTexto(anio, mesesPeriodo, data.hoy)}</span><span><b>${conNum.length}</b> con celular</span>${filas.length - conNum.length ? `<span class="falta"><b>${filas.length - conNum.length}</b> sin celular</span>` : ''}<span><b>${listos.length}</b> enviado${listos.length === 1 ? '' : 's'}</span>`;
+        f.querySelector('[data-resumen]').innerHTML = `<span><b>${filas.length}</b> ${filas.length === 1 ? 'resumen' : 'resúmenes'} ${periodoTexto(anio, mesesPeriodo, data.hoy)}</span><span><b>${conNum.length}</b> con celular</span>${filas.length - conNum.length ? `<span class="falta"><b>${filas.length - conNum.length}</b> sin celular</span>` : ''}<span><b>${listos.length}</b> enviado${listos.length === 1 ? '' : 's'}</span>${Object.keys(env).length ? `<button type="button" class="link-btn" data-reiniciar>${icon('undo', 13)} Reiniciar envíos</button>` : ''}`;
+        f.querySelector('[data-reiniciar]')?.addEventListener('click', () => {
+          if (!confirm(`¿Reiniciar los envíos de ${anio}? Todos los botones vuelven a decir “Enviar”. No borra ningún mensaje ya enviado por WhatsApp.`)) return;
+          try { localStorage.removeItem(claveEnviados()); } catch { /* sin almacenamiento */ }
+          toast('Envíos reiniciados');
+          pintar();
+        });
         lista.innerHTML = vis.length ? vis.map((x) => `<li>
           <div class="wsp-quien"><b>${x.matrimonio ? '💍 ' : ''}${esc(x.nombre)}</b><small class="muted">${money(x.total)}${x.especiales ? ` · especiales ${money(x.especiales)}` : ''} · ${x.meses.filter(Boolean).length} mes${x.meses.filter(Boolean).length === 1 ? '' : 'es'} con diezmo</small></div>
           <div class="wsp-acciones">
