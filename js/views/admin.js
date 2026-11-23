@@ -177,7 +177,7 @@ export function render(root, ctx) {
       </article>
       <article class="card">
         <header class="card-head"><div><h3>Base de datos</h3></div></header>
-        ${isDemo ? `<div class="note">${icon('sparkle', 16)} Estás en <b>modo demo</b>: los datos viven solo en este navegador. Para usar la app en serio, configura Google Sheets siguiendo el README del repositorio.</div>` : `
+        ${isDemo ? `<div class="note">${icon('sparkle', 16)} Estás en <b>modo demo</b>: los datos son de ejemplo y viven solo en este navegador. La página real guarda los datos en el servidor de la iglesia.</div>` : `
         <p>Los datos y las boletas se guardan en el servidor de la iglesia (Supabase). Cada noche se copian a una planilla de Google (compatible con Excel) como respaldo, solo para mirar.</p>
         ${data.extra?.sheetUrl ? `<a class="btn btn-ghost" href="${esc(data.extra.sheetUrl)}" target="_blank" rel="noopener">${icon('sheet', 16)} Abrir planilla</a>` : ''}`}
         <p class="muted small" style="margin-top:14px">La planilla con resumen, flujo de caja y movimientos se descarga con el botón “Descargar planilla” del menú (tesorería general) o dentro de cada ministerio.</p>

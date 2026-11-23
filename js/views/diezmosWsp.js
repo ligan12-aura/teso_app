@@ -29,6 +29,15 @@ Te compartimos el resumen de tus diezmos {periodo} en la Iglesia Bautista El Red
 Tesorería · Iglesia Bautista El Redentor
 (Mensaje confidencial, solo para ti)`;
 
+// emojis (incluidos ⭐ ⬆ 🇨🇱, tonos de piel y combinaciones) y los espacios que dejan al quitarlos
+export function quitarEmojis(t) {
+  return String(t)
+    .replace(/(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1F3FB}-\u{1F3FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}])/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([,.!?;:])/g, '$1')
+    .replace(/^[ \t]+/gm, '')
+    .replace(/[ \t]+$/gm, '');
+}
 const leer = (k, def) => { try { return localStorage.getItem(k) ?? def; } catch { return def; } };
 // Mensaje editado con la versión anterior: se conserva, sin emojis y con la frase de ánimo antes del agradecimiento
 function plantillaGuardada() {
@@ -36,7 +45,7 @@ function plantillaGuardada() {
   if (actual !== null) return actual;
   const vieja = leer('teso_wsp_plantilla_v2', null);
   if (vieja === null) return PLANTILLA;
-  let t = vieja.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').replace(/[ \t]+([,.!?])/g, '$1').replace(/[ \t]+\n/g, '\n');
+  let t = quitarEmojis(vieja);
   if (!t.includes('{animo}')) t = /¡Gracias/.test(t) ? t.replace(/¡Gracias/, '{animo}\n\n¡Gracias') : t + '\n\n{animo}';
   return t;
 }
@@ -100,31 +109,44 @@ function ingresosIglesia(data, anio, n) {
   return (data.movGenerales || []).filter((m) => m.tipo === 'ingreso' && m.mes >= `${anio}-01` && m.mes <= hasta).reduce((a, m) => a + m.monto, 0);
 }
 
-export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
-  // el mes en curso solo cuenta si ya tiene diezmo (mientras no termina, no es una falta)
+// Período de una fila: meses evaluados del año (el mes en curso solo si ya tiene diezmo), desde que cuenta
+// (miembro desde / habilitado desde), total y meses con diezmo del período, y lo adelantado aparte
+export function periodoFila(f, anio, mesesPeriodo, hoy) {
   let evaluados = Math.max(1, Math.min(12, mesesPeriodo));
   if (anio === +hoy.slice(0, 4) && evaluados > 1 && !f.meses[evaluados - 1]) evaluados--;
-  mesesPeriodo = evaluados;
+  const desde = Math.max(0, Math.min(f.desde || 0, evaluados));
   const enPeriodo = f.meses.slice(0, evaluados);
-  const totalPeriodo = enPeriodo.reduce((a, v) => a + v, 0);
-  const adelantados = f.meses.map((v, i) => (v && i >= evaluados ? i : -1)).filter((i) => i >= 0);
+  return {
+    evaluados, desde, evalFila: evaluados - desde,
+    total: enPeriodo.reduce((a, v) => a + v, 0),
+    conDiezmo: enPeriodo.map((v, i) => (v ? i : -1)).filter((i) => i >= 0),
+    conEnFila: f.meses.slice(desde, evaluados).filter(Boolean).length,
+    adelantados: f.meses.map((v, i) => (v && i >= evaluados ? i : -1)).filter((i) => i >= 0)
+  };
+}
+
+export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
+  const pf = periodoFila(f, anio, mesesPeriodo, hoy);
+  const evaluados = pf.evaluados;
+  mesesPeriodo = evaluados;
+  const totalPeriodo = pf.total;
+  const adelantados = pf.adelantados;
   // aporte: lo que dio en el período (diezmo regular y especial) sobre todos los ingresos de la iglesia en esos meses
   const ing = data ? ingresosIglesia(data, anio, evaluados) : 0;
-  const conDiezmo = enPeriodo.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);
+  const conDiezmo = pf.conDiezmo;
   const dio = totalPeriodo + f.especiales;
   const pct = ing ? (dio * 100) / ing : 0;
   const aporte = ing ? `${pct < 0.1 && dio ? 'menos de 0,1' : pct.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%` : '';
   // constante = diezmó en al menos el 80 % de los meses evaluados (desde que cuenta); si no, frase de ánimo
-  const desde = Math.max(0, Math.min(f.desde || 0, evaluados));
-  const evalFila = evaluados - desde;
-  const conEnFila = f.meses.slice(desde, evaluados).filter(Boolean).length;
+  const { evalFila, conEnFila } = pf;
   const animo = evalFila > 0 && conEnFila / evalFila < 0.8 ? FRASE_ANIMO : '';
   const reemplazos = {
     nombre: f.saludo,
     anio: String(anio),
     periodo: periodoTexto(anio, mesesPeriodo, hoy),
     total: money(totalPeriodo),
-    meses: conDiezmo.length ? `${conDiezmo.length} de ${evaluados}` : `aún no registramos diezmos en ${evaluados === 1 ? 'el mes' : `los ${evaluados} meses`}`,
+    // se cuentan desde que es miembro o está habilitado para diezmar (como en Diezmos)
+    meses: conEnFila ? `${conEnFila} de ${evalFila}` : evalFila ? `aún no registramos diezmos en ${evalFila === 1 ? 'el mes' : `los ${evalFila} meses`}` : 'aún sin meses por evaluar',
     especiales: f.especiales ? `• Diezmos especiales (aparte): *${money(f.especiales)}*` : '',
     detalle: (conDiezmo.length ? 'Detalle por mes:\n' + conDiezmo.map((i) => `   ${MESES_C[i]}: ${money(f.meses[i])}`).join('\n') : '') +
       (adelantados.length ? `${conDiezmo.length ? '\n' : ''}Además, adelantado: ${adelantados.map((i) => `${MESES_C[i]} ${money(f.meses[i])}`).join(', ')}` : ''),
@@ -187,7 +209,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
           pintar();
         });
         lista.innerHTML = vis.length ? vis.map((x) => `<li>
-          <div class="wsp-quien"><b>${x.matrimonio ? '💍 ' : ''}${esc(x.nombre)}</b><small class="muted">${money(x.total)}${x.especiales ? ` · especiales ${money(x.especiales)}` : ''} · ${x.meses.filter(Boolean).length} mes${x.meses.filter(Boolean).length === 1 ? '' : 'es'} con diezmo</small></div>
+          <div class="wsp-quien"><b>${x.matrimonio ? '💍 ' : ''}${esc(x.nombre)}</b><small class="muted">${(() => { const pf = periodoFila(x, anio, mesesPeriodo, data.hoy); return `${money(pf.total)}${x.especiales ? ` · especiales ${money(x.especiales)}` : ''} · ${pf.conEnFila} de ${pf.evalFila} mes${pf.evalFila === 1 ? '' : 'es'} con diezmo${pf.adelantados.length ? ' · más adelantado' : ''}`; })()}</small></div>
           <div class="wsp-acciones">
             <button type="button" class="link-btn" data-ver="${esc(x.id)}">${icon('eye', 14)} Ver</button>
             ${x.personas.map((p) => p.numero

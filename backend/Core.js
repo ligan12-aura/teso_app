@@ -776,8 +776,10 @@ var TesoCore = (function () {
       return all('Rendiciones').filter(function (r) { return r.ministerioId === mid && r.mes === mes; })[0] || null;
     }
     function estadoRendicion(mid, mes) { var r = rendicion(mid, mes); return r ? r.estado : 'abierta'; }
+    function tesoreriaSobre(user, mid) { return esAdmin(user) && !lideraMin(user, mid); }
     function puedeEditarMes(user, mid, mes) {
-      if (esAdmin(user)) return true;
+      // quien lidera el ministerio (aunque sea tesorero) no puede cambiar un mes ya confirmado o aprobado
+      if (tesoreriaSobre(user, mid)) return true;
       var e = estadoRendicion(mid, mes);
       return e === 'abierta' || e === 'observada';
     }
@@ -873,7 +875,7 @@ var TesoCore = (function () {
       if (mov.origen === 'cuota' && paraBorrar && getMinisterio(mov.ministerioId).actividades !== 'si') return mov;
       if (mov.origen === 'cuota') throw TesoError('Esta cuota se administra desde su actividad: ahí puedes anular el pago.');
       if (mov.origen === 'transferencia') throw TesoError('El ítem mensual se registra al transferirlo; si hubo un error, anúlalo desde el panel de rendición del ministerio (botón Anular).');
-      if (!esAdmin(user) && (mov.categoria === SALDO_INICIAL || transferenciaDeMov(mov.id))) {
+      if (!tesoreriaSobre(user, mov.ministerioId) && (mov.categoria === SALDO_INICIAL || transferenciaDeMov(mov.id))) {
         throw TesoError('El saldo inicial y los ítems recibidos solo los puede corregir el tesorero.', 'FORBIDDEN');
       }
       return mov;
@@ -889,7 +891,7 @@ var TesoCore = (function () {
     function updateMovMinisterio(user, p) {
       var mov = movMinisterioPropio(user, p.id);
       // El tesorero puede corregir el saldo inicial o un ítem importado sin cambiarles la categoría
-      var reservadaPropia = esAdmin(user) && String(p.categoria || '').trim() === mov.categoria;
+      var reservadaPropia = tesoreriaSobre(user, mov.ministerioId) && String(p.categoria || '').trim() === mov.categoria;
       var d = validarMov(p, 'ministerio', reservadaPropia);
       var mes = d.fecha.slice(0, 7);
       exigirEditable(user, mov.ministerioId, mov.mes);
@@ -1304,6 +1306,7 @@ var TesoCore = (function () {
       if (!(m.itemMensual > 0)) throw TesoError('Primero define el ítem mensual de ' + m.nombre + ' en Configuración → Ministerios.');
       if (monto > m.itemMensual) throw TesoError('La transferencia no puede superar el ítem mensual de ' + m.nombre + ': ' + pesos(m.itemMensual) + '.', 'PRESUPUESTO');
       var prev = prevMonth(mes);
+      if (p.forzar && lideraMin(user, m.id)) throw TesoError('Lideras ' + m.nombre + ': para transferir su ítem, la rendición de ' + labelMes(prev) + ' debe estar aprobada por otra persona de tesorería (otro tesorero, el pastor o el administrador).');
       if (!p.forzar) {
         var tieneHistoria = transf.some(function (t) { return t.ministerioId === m.id && t.mes < mes; }) ||
           all('MovimientosMinisterios').some(function (x) { return x.ministerioId === m.id && x.mes < mes; });
@@ -1487,6 +1490,7 @@ var TesoCore = (function () {
     // - Los meses importados anteriores al actual quedan con la rendición aprobada.
     function importarMovimientosMinisterio(user, p) {
       var m = getMinisterio(p.ministerioId);
+      if (lideraMin(user, m.id)) throw TesoError('Lideras ' + m.nombre + ': su historial lo importa otra persona de tesorería (otro tesorero, el pastor o el administrador).');
       var items = p.items || [];
       if (!items.length && !p.saldoInicial) throw TesoError('No hay movimientos para importar');
       if (items.length > 1500) throw TesoError('Importa como máximo 1500 movimientos por vez');
@@ -2148,6 +2152,10 @@ var TesoCore = (function () {
         // Integrantes por matrimonio: se cuentan (listado, asistencia, actividades) como matrimonios
         porMatrimonio: p.porMatrimonio === undefined ? (actual ? actual.porMatrimonio || '' : '') : (p.porMatrimonio === 'si' || p.porMatrimonio === true ? 'si' : 'no')
       };
+      if (actual && lideraMin(user, actual.id)) {
+        var cambiaDinero = d.itemMensual !== (Number(actual.itemMensual) || 0) || d.presupuestoMensual !== (Number(actual.presupuestoMensual) || 0) || (p.saldoInicial !== undefined && Math.round(Number(p.saldoInicial) || 0) !== all('MovimientosMinisterios').filter(function (x) { return x.ministerioId === actual.id && x.categoria === SALDO_INICIAL; }).reduce(function (t, x) { return t + Number(x.monto); }, 0));
+        if (cambiaDinero) throw TesoError('Lideras ' + actual.nombre + ': su ítem, presupuesto y saldo inicial los cambia otra persona de tesorería (otro tesorero, el pastor o el administrador).');
+      }
       var dupNombre = all('Ministerios').some(function (x) { return normalNombre(x.nombre) === normalNombre(nombre) && x.id !== p.id; });
       if (dupNombre) throw TesoError('Ya existe un ministerio llamado ' + nombre);
       // el saldo inicial se valida antes de guardar nada (si falla, no queda el ministerio a medias)
@@ -2207,6 +2215,7 @@ var TesoCore = (function () {
       var usuario = String(p.usuario || '').trim().toLowerCase();
       // Con el ingreso con Google, quien no es administrador no necesita nombre de usuario para entrar:
       // si no viene, se genera desde su correo (juan.perez@gmail.com → juan.perez, juan.perez2…)
+      if (!usuario && p.id) { var previoU = find('Usuarios', p.id); if (previoU) usuario = previoU.usuario; }
       if (!usuario && env.soloGoogle && p.rol !== 'admin') usuario = usuarioDesdeCorreo(p.email, p.id);
       if (!/^[a-z0-9._-]{3,30}$/.test(usuario)) throw TesoError('El usuario debe tener 3-30 caracteres (letras, números, punto o guion)');
       var nombre = String(p.nombre || '').trim();

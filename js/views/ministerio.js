@@ -42,11 +42,11 @@ function renderInterno(root, ctx) {
   const r = resumenMinisterio(data, m.id, mes);
   const rend = rendicionDe(data, m.id, mes);
   const estado = rend?.estado || 'abierta';
-  const editable = esTes || estado === 'abierta' || estado === 'observada';
-  const lider = esTes ? liderDe(data, m.id) : user;
   // tesorero (o pastor / administrador) que también lidera este ministerio: confirma la rendición como líder,
-  // y la aprueba otra persona (otro tesorero, el pastor o el administrador)
+  // y la aprueba otra persona (otro tesorero, el pastor o el administrador); un mes confirmado no lo puede cambiar
   const lideraEste = esTes && (user.ministerioIds || []).includes(m.id);
+  const editable = (esTes && !lideraEste) || estado === 'abierta' || estado === 'observada';
+  const lider = esTes ? liderDe(data, m.id) : user;
   const saldoTotal = saldoMinisterio(data, m.id);
   const itemMes = transferenciaDe(data, m.id, mes);
   const mesSig = nextMonth(mes);
@@ -335,7 +335,7 @@ function renderInterno(root, ctx) {
 
 export function transferirItem(ctx, m, mes, forzar = false) {
   return modal({
-    title: `Transferir ítem · ${m.nombre}`,
+    title: `Transferir ítem · ${esc(m.nombre)}`,
     body: `<p class="muted">Registra que transferiste el ítem de <b>${mesLargo(mes)}</b> al líder. Se crea un egreso en tesorería general y un ingreso en el ministerio.</p>
       ${forzar ? `<div class="note warn">${icon('alert', 16)} La rendición del mes anterior no está aprobada. Se transferirá igualmente.</div>` : ''}
       <div class="note">${icon('wallet', 16)}<span>El ítem mensual de ${esc(m.nombre)} es <b>${money(m.itemMensual)}</b>. La transferencia no puede superarlo.</span></div>

@@ -60,10 +60,11 @@ async function leer() {
   if (error) throw new Error('No se pudieron leer los datos: ' + error.message);
   return data;
 }
-// version: la leída (se rechaza si alguien guardó después); null = guardar igual (contador de intentos de ingreso)
-async function guardarCambios(version, { guardar, borrar }) {
+// versiones leídas: la de los datos y la del contador de intentos de ingreso. Si alguien guardó después en
+// ese grupo, se rechaza (TESO_CONFLICTO) y se repite con los datos nuevos.
+async function guardarCambios(version, versionLimites, { guardar, borrar }) {
   if (!guardar.length && !borrar.length) return;
-  const { error } = await supa.rpc('teso_guardar', { version_leida: version, guardar, borrar });
+  const { error } = await supa.rpc('teso_guardar', { version_leida: version, version_limites_leida: versionLimites, guardar, borrar });
   if (!error) return;
   if (/TESO_CONFLICTO/.test(error.message || '')) throw CONFLICTO;
   if (/lock timeout|canceling statement/i.test(error.message || '')) { const e = new Error('ocupado'); e.ocupado = true; throw e; }
@@ -82,6 +83,10 @@ Deno.serve(async (req) => {
   let body;
   try { body = JSON.parse(await req.text()); } catch { return json({ ok: false, error: 'Solicitud inválida' }); }
   const action = String(body.action || '');
+  // identificador de la solicitud (lo manda la página): si una escritura se repite con el mismo id
+  // (p. ej. tras un corte por demora), no se vuelve a aplicar
+  const escribe = coreInfo.isWrite(action);
+  const idSol = escribe && /^[A-Za-z0-9-]{8,64}$/.test(String(body.idSolicitud || '')) ? String(body.idSolicitud) : '';
   const idg = action === 'loginGoogle' ? await identidadGoogle(body.payload && body.payload.credential) : null;
   if (action === 'loginGoogle' && !idg) return json({ ok: false, error: 'No se pudo verificar tu cuenta de Google. Intenta de nuevo.', code: 'ERR' });
 
@@ -92,9 +97,13 @@ Deno.serve(async (req) => {
 
   try {
     for (let intento = 1; intento <= INTENTOS; intento++) {
-      const { version, filas } = await leer();
+      const { version, version_limites: versionLimites, filas } = await leer();
       marca('lectura' + intento);
       const alm = crearAlmacen(filas);
+      if (idSol) {
+        const previa = alm.store.read('_solicitudes').find((x) => x.id === idSol);
+        if (previa) return json({ ok: true, data: previa.resultado ?? {}, repetida: true }, 200, cabeceras());
+      }
       const arch = crearArchivos(alm.store, () => crypto.randomUUID());
       const core = TesoCore.create({
         store: alm.store,
@@ -115,9 +124,18 @@ Deno.serve(async (req) => {
       let r = core.handle(action, body.payload || {}, body.token);
       marca('logica');
       if (!r.ok) {
-        // un error no guarda nada, salvo el contador de intentos fallidos de ingreso
-        await guardarCambios(null, alm.cambios(['_limites'])).catch(() => {});
+        // un error no guarda nada, salvo el contador de intentos fallidos de ingreso (con su versión:
+        // intentos en paralelo se repiten con el contador al día, así el bloqueo no se salta)
+        try { await guardarCambios(version, versionLimites, alm.cambios(['_limites'])); }
+        catch (e) { if (e === CONFLICTO && intento < INTENTOS) { marca('reintento'); continue; } throw e; }
         return json(r, 200, cabeceras());
+      }
+      if (idSol) {
+        // se recuerda la solicitud 2 días (con su respuesta, si es breve) y se olvidan las más antiguas
+        const ahora = Date.now();
+        alm.store.read('_solicitudes').filter((x) => !(x.t > ahora - 2 * 864e5)).forEach((x) => alm.store.remove('_solicitudes', x.id));
+        const txt = JSON.stringify(r.data ?? null);
+        alm.store.insert('_solicitudes', { id: idSol, t: ahora, resultado: txt.length < 20000 ? r.data ?? null : null });
       }
       const subidos = [];
       try {
@@ -126,9 +144,12 @@ Deno.serve(async (req) => {
           if (error) throw new Error('No se pudo guardar el comprobante: ' + error.message);
           subidos.push(s.ruta);
         }
-        await guardarCambios(version, alm.cambios());
+        await guardarCambios(version, versionLimites, alm.cambios());
       } catch (e) {
-        if (subidos.length) await supa.storage.from(BUCKET).remove(subidos).catch(() => {});
+        // solo si con seguridad no se guardó (conflicto o falla al subir) se borran los comprobantes subidos:
+        // ante otro error el guardado pudo haber ocurrido y esos comprobantes ya estarían enlazados
+        const noSeGuardo = e === CONFLICTO || /comprobante/.test(String(e && e.message));
+        if (subidos.length && noSeGuardo) await supa.storage.from(BUCKET).remove(subidos).catch(() => {});
         if (e === CONFLICTO && intento < INTENTOS) { marca('reintento'); continue; } // alguien guardó antes: se repite con los datos nuevos
         throw e;
       }
