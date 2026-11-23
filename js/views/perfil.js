@@ -1,5 +1,5 @@
 import { icon, esc, formData, toast, ROL_LABEL } from '../ui.js';
-import { call, auth, conGoogle } from '../api.js';
+import { call, auth, conExterno as conGoogle } from '../api.js';
 
 export function render(root, ctx) {
   const u = ctx.user;
@@ -16,7 +16,7 @@ export function render(root, ctx) {
     </article>
     ${conGoogle && u.rol !== 'admin' ? `<article class="card">
       <header class="card-head"><div><h3>Ingreso</h3></div></header>
-      <p class="muted">Entras con tu cuenta de Google${u.email ? ` (<b>${esc(u.email)}</b>)` : ''}. No necesitas contraseña: si cambias de correo, pídele al administrador que lo actualice.</p>
+      <p class="muted">Entras con tu cuenta de Google o Microsoft${u.email ? ` (<b>${esc(u.email)}</b>)` : ''}. No necesitas contraseña: si cambias de correo, pídele al administrador que lo actualice.</p>
     </article>` : `<article class="card">
       <header class="card-head"><div><h3>${conGoogle ? 'Contraseña de respaldo' : 'Cambiar contraseña'}</h3></div></header>
       <form class="form-stack" data-pass>

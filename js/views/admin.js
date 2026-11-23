@@ -1,6 +1,6 @@
 import { lideraMinisterio } from '../calc.js';
 import { icon, esc, money, modal, formData, toast, fecha, emptyState, pesos, formatoPesos, confirmar } from '../ui.js';
-import { call, isDemo, conGoogle } from '../api.js';
+import { call, isDemo, conExterno as conGoogle } from '../api.js';
 import { renderImportar } from './importar.js';
 import { exportarExcel } from '../export.js';
 import { gastoGeneralPromedio, totalItems, presupuestoGeneralMensual } from '../calc.js';
@@ -266,10 +266,10 @@ function editUsuario(ctx, u = null) {
         <div class="min-checks">${mins.map((m) => `<label class="check"><input type="checkbox" name="minLider" value="${m.id}" ${(u?.ministerioIds?.length ? u.ministerioIds : [u?.ministerioId]).includes(m.id) ? 'checked' : ''}> ${esc(m.icono)} ${esc(m.nombre)}</label>`).join('')}</div>
         <small class="hint">Puede liderar más de uno (por ejemplo, Infantil y, junto a su cónyuge, Familia). Si un ministerio lo lidera un matrimonio, crea un usuario para cada uno con el mismo ministerio.</small></div>
       <label class="field" data-grupo><span>Grupo de discipulado</span><select name="grupoId"><option value="">— Selecciona —</option>${(ctx.data.gruposHogar || []).filter((g) => g.activo || g.id === u?.grupoId).map((g) => `<option value="${g.id}" ${u?.grupoId === g.id ? 'selected' : ''}>${esc(g.nombre)}${g.sector ? ` · ${esc(g.sector)}` : ''}</option>`).join('')}</select>${(ctx.data.gruposHogar || []).length ? '' : '<small class="hint">Aún no hay grupos: créalos en Asistencia → Discipulados.</small>'}</label>
-      <label class="field"><span>${conGoogle ? 'Correo de Google (con esta cuenta ingresa)' : 'Correo (opcional)'}</span><input type="email" name="email" value="${esc(u?.email || '')}" placeholder="nombre@gmail.com" ${conGoogle ? 'data-req-google' : ''}>${conGoogle ? '<small class="hint">Entra con el botón “Continuar con Google” usando esta cuenta, y tiene el rol que elijas arriba.</small>' : ''}</label>
+      <label class="field"><span>${conGoogle ? 'Correo de Google o Microsoft (con esta cuenta ingresa)' : 'Correo (opcional)'}</span><input type="email" name="email" value="${esc(u?.email || '')}" placeholder="nombre@gmail.com" ${conGoogle ? 'data-req-google' : ''}>${conGoogle ? '<small class="hint">Entra con “Continuar con Google” (Gmail) o “Continuar con Microsoft” (Hotmail, Outlook) usando esta cuenta, y tiene el rol que elijas arriba.</small>' : ''}</label>
       <div data-pass-wrap>
         <label class="field"><span>${conGoogle ? (u?.rol === 'admin' ? 'Nueva contraseña de respaldo (dejar vacío para no cambiar)' : 'Contraseña de respaldo') : u ? 'Nueva contraseña temporal (dejar vacío para no cambiar)' : 'Contraseña temporal'}</span><input name="password" type="text" autocomplete="off" minlength="8" placeholder="mín. 8 caracteres"></label>
-        <p class="muted small">${conGoogle ? 'Solo el administrador tiene contraseña, como respaldo por si falla el ingreso con Google.' : 'Al primer ingreso se le pedirá crear su propia contraseña.'}</p>
+        <p class="muted small">${conGoogle ? 'Solo el administrador tiene contraseña, como respaldo por si falla el ingreso con Google o Microsoft.' : 'Al primer ingreso se le pedirá crear su propia contraseña.'}</p>
       </div>
       ${u ? `<label class="check"><input type="checkbox" name="activo" ${u.activo ? 'checked' : ''}> Usuario activo</label>` : ''}
       ${u && u.id !== ctx.user?.id ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar usuario</button>` : ''}`,
@@ -306,7 +306,7 @@ function editUsuario(ctx, u = null) {
       d.ministerioId = d.ministerioIds[0] || '';
       if (d.rol === 'discipulado' && !d.grupoId) throw new Error('Elige el grupo de discipulado de este líder');
       await call('saveUsuario', d);
-      toast(conGoogle && d.rol !== 'admin' ? `Usuario guardado. ${d.nombre.split(' ')[0]} ya puede entrar con su cuenta de Google.` : d.password ? `Usuario guardado. Comparte la contraseña temporal con ${d.nombre.split(' ')[0]}.` : 'Usuario guardado');
+      toast(conGoogle && d.rol !== 'admin' ? `Usuario guardado. ${d.nombre.split(' ')[0]} ya puede entrar con su cuenta de Google o Microsoft.` : d.password ? `Usuario guardado. Comparte la contraseña temporal con ${d.nombre.split(' ')[0]}.` : 'Usuario guardado');
       await ctx.refresh();
     }
   });

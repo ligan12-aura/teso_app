@@ -1,5 +1,6 @@
 import { CONFIG } from './config.js';
-import { call, auth, isDemo, conGoogle, setAuthErrorHandler } from './api.js';
+import { call, auth, isDemo, conGoogle, conMicrosoft, conExterno, setAuthErrorHandler } from './api.js';
+import { iniciarMicrosoft, completarMicrosoft } from './microsoft.js';
 import { resetDemo } from './demo.js';
 import { icon, esc, toast, destroyCharts, setupChartDefaults, modal, formData, esAdmin, ROL_LABEL, ministerioActivoId } from './ui.js';
 import { botonTema, alternarTema, aplicarTema, temaActual, seguirSistema } from './theme.js';
@@ -110,21 +111,22 @@ function renderLogin(msg = '') {
         <div class="login-head">
           <span class="eyebrow">Equipo de administración</span>
           <h2>Ingresar</h2>
-          <p class="muted">${conGoogle ? 'Con tu cuenta de Google.' : 'Usa el usuario que te entregó el administrador.'}</p>
+          <p class="muted">${conExterno ? `Con tu cuenta de ${conGoogle && conMicrosoft ? 'Google o Microsoft' : conGoogle ? 'Google' : 'Microsoft'}.` : 'Usa el usuario que te entregó el administrador.'}</p>
         </div>
-        ${conGoogle ? `
+        ${conExterno ? `
         <div class="google-login">
-          <div class="google-btn" data-google><div class="spinner sm"></div></div>
-          <p class="muted small">Entra con la cuenta de Google que el administrador registró para ti.</p>
+          ${conGoogle ? '<div class="google-btn" data-google><div class="spinner sm"></div></div>' : ''}
+          ${conMicrosoft ? `<button type="button" class="ms-btn" data-microsoft><svg viewBox="0 0 21 21" width="18" height="18" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg><span>Continuar con Microsoft</span></button>` : ''}
+          <p class="muted small">Entra con la cuenta ${conGoogle && conMicrosoft ? 'de Google, o de Microsoft (Hotmail, Outlook),' : conGoogle ? 'de Google' : 'de Microsoft (Hotmail, Outlook)'} que el administrador registró para ti.</p>
         </div>
         <div class="form-error" ${msg ? '' : 'hidden'}>${esc(msg)}</div>
         <details class="admin-login">
           <summary>Ingreso de administrador (usuario y contraseña)</summary>` : ''}
         <label class="field"><span>Usuario</span><input name="usuario" autocomplete="username" autocapitalize="none" required></label>
         <label class="field"><span>Contraseña</span><input name="password" type="password" autocomplete="current-password" required></label>
-        ${conGoogle ? '' : `<div class="form-error" ${msg ? '' : 'hidden'}>${esc(msg)}</div>`}
-        <button class="btn ${conGoogle ? 'btn-ghost' : 'btn-primary'} btn-block" type="submit">Entrar</button>
-        ${conGoogle ? '</details>' : ''}
+        ${conExterno ? '' : `<div class="form-error" ${msg ? '' : 'hidden'}>${esc(msg)}</div>`}
+        <button class="btn ${conExterno ? 'btn-ghost' : 'btn-primary'} btn-block" type="submit">Entrar</button>
+        ${conExterno ? '</details>' : ''}
         ${isDemo ? `
         <div class="demo-box">
           <strong>${icon('sparkle', 15)} Modo demostración</strong>
@@ -160,6 +162,10 @@ function renderLogin(msg = '') {
     } finally { btn.disabled = false; btn.classList.remove('loading'); }
   });
   if (conGoogle) botonGoogle(form);
+  form.querySelector('[data-microsoft]')?.addEventListener('click', async (e) => {
+    e.currentTarget.classList.add('loading');
+    try { await iniciarMicrosoft(); } catch { e.currentTarget.classList.remove('loading'); }
+  });
   form.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', () => {
     form.usuario.value = b.dataset.u; form.password.value = 'demo'; form.requestSubmit();
   }));
@@ -381,6 +387,18 @@ seguirSistema(alCambiarTema);
   aplicarTema(temaActual());
   setupChartDefaults();
   document.title = `Administración · ${CONFIG.NOMBRE_IGLESIA}`;
+  // vuelta desde el ingreso con Microsoft (?code=…): se completa aquí
+  if (conMicrosoft && /[?&](code|error)=/.test(location.search)) {
+    app.innerHTML = '<div class="boot"><div class="spinner"></div></div>';
+    try {
+      const credencial = await completarMicrosoft();
+      if (credencial) {
+        const r = await call('loginMicrosoft', { credential: credencial });
+        auth.token = r.token; state.user = r.user;
+        return afterLogin();
+      }
+    } catch (e) { return renderLogin(e.message); }
+  }
   if (!auth.token) return renderLogin();
   app.innerHTML = '<div class="boot"><div class="spinner"></div></div>';
   try {

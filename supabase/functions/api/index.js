@@ -22,6 +22,22 @@ const INTENTOS = 4;
 // Ingreso con Google: ID de cliente OAuth (público). Con él configurado, la contraseña queda solo para el administrador.
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
 const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
+// Ingreso con Microsoft (cuentas personales: Hotmail, Outlook, Live): ID de la aplicación registrada en Microsoft Entra
+const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID') || '';
+const MS_TENANT_PERSONAL = '9188040d-6c67-4c5b-b112-36a304b66dad'; // inquilino de las cuentas personales de Microsoft
+const MS_JWKS = createRemoteJWKSet(new URL('https://login.microsoftonline.com/consumers/discovery/v2.0/keys'));
+// Verifica la credencial de Microsoft (firma, emisor de cuentas personales, destinatario y vigencia)
+async function identidadMicrosoft(credential) {
+  if (!MS_CLIENT_ID || !credential) return null;
+  try {
+    const { payload } = await jwtVerify(String(credential), MS_JWKS, { issuer: `https://login.microsoftonline.com/${MS_TENANT_PERSONAL}/v2.0`, audience: MS_CLIENT_ID });
+    if (payload.tid !== MS_TENANT_PERSONAL) return null;
+    // en una cuenta personal, el correo de la cuenta (verificado por Microsoft) viene en email o preferred_username
+    const correo = String(payload.email || payload.preferred_username || '').toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return null;
+    return { email: correo, nombre: String(payload.name || '') };
+  } catch { return null; }
+}
 
 // Verifica la credencial que entrega el botón de Google (firma, emisor, destinatario, vigencia y correo verificado)
 async function identidadGoogle(credential) {
@@ -87,8 +103,10 @@ Deno.serve(async (req) => {
   // (p. ej. tras un corte por demora), no se vuelve a aplicar
   const escribe = coreInfo.isWrite(action);
   const idSol = escribe && /^[A-Za-z0-9-]{8,64}$/.test(String(body.idSolicitud || '')) ? String(body.idSolicitud) : '';
-  const idg = action === 'loginGoogle' ? await identidadGoogle(body.payload && body.payload.credential) : null;
+  const cred = body.payload && body.payload.credential;
+  const idg = action === 'loginGoogle' ? await identidadGoogle(cred) : action === 'loginMicrosoft' ? await identidadMicrosoft(cred) : null;
   if (action === 'loginGoogle' && !idg) return json({ ok: false, error: 'No se pudo verificar tu cuenta de Google. Intenta de nuevo.', code: 'ERR' });
+  if (action === 'loginMicrosoft' && !idg) return json({ ok: false, error: 'No se pudo verificar tu cuenta de Microsoft. Intenta de nuevo.', code: 'ERR' });
 
   const t0 = Date.now(), marcas = [];
   const marca = (k) => marcas.push(`${k};dur=${Date.now() - t0}`);
@@ -117,7 +135,8 @@ Deno.serve(async (req) => {
         today: hoy,
         secret: SECRETO,
         limites: crearLimites(alm.store),
-        soloGoogle: !!GOOGLE_CLIENT_ID,
+        // con ingreso por Google o Microsoft, la contraseña queda solo para el administrador
+        soloGoogle: !!(GOOGLE_CLIENT_ID || MS_CLIENT_ID),
         identidadGoogle: idg,
         extra: SHEET_URL ? { sheetUrl: SHEET_URL } : {}
       });

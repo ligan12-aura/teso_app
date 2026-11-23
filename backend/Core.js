@@ -302,7 +302,7 @@ var TesoCore = (function () {
     function normalCorreo(e) { return String(e || '').trim().toLowerCase(); }
     function loginGoogle() {
       var idg = env.identidadGoogle;
-      if (!idg || !idg.email) throw TesoError('El ingreso con Google no está disponible en este momento.');
+      if (!idg || !idg.email) throw TesoError('El ingreso con cuenta de Google o Microsoft no está disponible en este momento.');
       var correo = normalCorreo(idg.email);
       var clave = 'google:' + correo;
       exigirNoBloqueado(clave);
@@ -2312,6 +2312,8 @@ var TesoCore = (function () {
     var ACTIONS = {
       login: { fn: login, pub: true, write: true },
       loginGoogle: { fn: loginGoogle, pub: true, write: true },
+      // cuentas Microsoft (Hotmail, Outlook, Live): la función del servidor verifica la credencial igual que con Google
+      loginMicrosoft: { fn: loginGoogle, pub: true, write: true },
       me: { fn: me, pending: true },
       cerrarSesiones: { fn: cerrarSesiones, pending: true, write: true },
       cambiarPassword: { fn: cambiarPassword, pending: true, write: true },

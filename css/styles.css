@@ -1121,3 +1121,7 @@ body.is-login .guia-btn { display: none; }
 .wsp-vista { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface-2, var(--surface)); }
 .wsp-vista header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .wsp-vista pre { white-space: pre-wrap; font-family: inherit; font-size: 13.5px; line-height: 1.55; margin: 0; }
+
+.ms-btn { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; max-width: 360px; height: 42px; padding: 0 14px; border: 1px solid #8c8c8c; border-radius: 999px; background: #fff; color: #5e5e5e; font: 600 15px/1 'Segoe UI', system-ui, sans-serif; cursor: pointer; }
+.ms-btn:hover { background: #f3f3f3; }
+.ms-btn.loading { opacity: .6; pointer-events: none; }
