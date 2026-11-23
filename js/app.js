@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { call, auth, isDemo, setAuthErrorHandler } from './api.js';
+import { call, auth, isDemo, conGoogle, setAuthErrorHandler } from './api.js';
 import { resetDemo } from './demo.js';
 import { icon, esc, toast, destroyCharts, setupChartDefaults, modal, formData, esAdmin, ROL_LABEL, ministerioActivoId } from './ui.js';
 import { botonTema, alternarTema, aplicarTema, temaActual, seguirSistema } from './theme.js';
@@ -110,12 +110,21 @@ function renderLogin(msg = '') {
         <div class="login-head">
           <span class="eyebrow">Equipo de administración</span>
           <h2>Ingresar</h2>
-          <p class="muted">Usa el usuario que te entregó el administrador.</p>
+          <p class="muted">${conGoogle ? 'Con tu cuenta de Google.' : 'Usa el usuario que te entregó el administrador.'}</p>
         </div>
+        ${conGoogle ? `
+        <div class="google-login">
+          <div class="google-btn" data-google><div class="spinner sm"></div></div>
+          <p class="muted small">Entra con la cuenta de Google que el administrador registró para ti.</p>
+        </div>
+        <div class="form-error" ${msg ? '' : 'hidden'}>${esc(msg)}</div>
+        <details class="admin-login">
+          <summary>Ingreso de administrador (usuario y contraseña)</summary>` : ''}
         <label class="field"><span>Usuario</span><input name="usuario" autocomplete="username" autocapitalize="none" required></label>
         <label class="field"><span>Contraseña</span><input name="password" type="password" autocomplete="current-password" required></label>
-        <div class="form-error" ${msg ? '' : 'hidden'}>${esc(msg)}</div>
-        <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+        ${conGoogle ? '' : `<div class="form-error" ${msg ? '' : 'hidden'}>${esc(msg)}</div>`}
+        <button class="btn ${conGoogle ? 'btn-ghost' : 'btn-primary'} btn-block" type="submit">Entrar</button>
+        ${conGoogle ? '</details>' : ''}
         ${isDemo ? `
         <div class="demo-box">
           <strong>${icon('sparkle', 15)} Modo demostración</strong>
@@ -150,10 +159,53 @@ function renderLogin(msg = '') {
       err.textContent = ex.message; err.hidden = false;
     } finally { btn.disabled = false; btn.classList.remove('loading'); }
   });
+  if (conGoogle) botonGoogle(form);
   form.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', () => {
     form.usuario.value = b.dataset.u; form.password.value = 'demo'; form.requestSubmit();
   }));
   form.querySelector('[data-reset]')?.addEventListener('click', () => { resetDemo(); location.reload(); });
+}
+
+// Botón oficial de Google (Google Identity Services). La credencial la verifica el servidor.
+let gisCarga = null;
+function cargarGoogle() {
+  gisCarga ||= new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://accounts.google.com/gsi/client';
+    sc.async = true;
+    sc.onload = () => res(window.google);
+    sc.onerror = () => { gisCarga = null; rej(new Error('No se pudo cargar el ingreso con Google. Revisa tu conexión.')); };
+    document.head.appendChild(sc);
+  });
+  return gisCarga;
+}
+async function botonGoogle(form) {
+  const caja = form.querySelector('[data-google]');
+  const err = form.querySelector('.form-error');
+  try {
+    const google = await cargarGoogle();
+    google.accounts.id.initialize({
+      client_id: CONFIG.GOOGLE_CLIENT_ID,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+      callback: async (resp) => {
+        err.hidden = true;
+        caja.classList.add('loading');
+        try {
+          const r = await call('loginGoogle', { credential: resp.credential });
+          auth.token = r.token;
+          state.user = r.user;
+          await afterLogin();
+        } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+        finally { caja.classList.remove('loading'); }
+      }
+    });
+    caja.innerHTML = '';
+    google.accounts.id.renderButton(caja, { theme: temaActual() === 'dark' ? 'filled_black' : 'outline', size: 'large', text: 'continue_with', shape: 'pill', locale: 'es', width: Math.min(360, caja.clientWidth || 320) });
+  } catch (ex) {
+    caja.innerHTML = '';
+    err.textContent = ex.message; err.hidden = false;
+  }
 }
 
 async function afterLogin() {
@@ -193,6 +245,7 @@ async function forzarCambioPass() {
 
 function logout() {
   auth.token = null;
+  try { window.google?.accounts?.id?.disableAutoSelect(); } catch { /* */ }
   state.user = null; state.data = null; state.mes = null;
   location.hash = '';
   renderLogin();

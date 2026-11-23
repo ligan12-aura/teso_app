@@ -285,11 +285,34 @@ var TesoCore = (function () {
         throw TesoError('Usuario o contraseña incorrectos');
       }
       limpiarFallos(clave);
+      // Con el ingreso con Google activo, la contraseña queda solo como respaldo del administrador
+      if (env.soloGoogle && u.rol !== 'admin') throw TesoError('Tu usuario ingresa con su cuenta de Google: usa el botón “Continuar con Google”.');
       // Contraseña con el formato antiguo: se guarda con el nuevo (más resistente)
       if (String(u.hash).indexOf('v2$') !== 0) {
         var salt = uid();
         u = update('Usuarios', u.id, { salt: salt, hash: hashPassword(String(p.password || ''), salt, env.crypto.sha256Hex) });
       }
+      return { token: signToken(u), user: publicUser(u) };
+    }
+
+    // Ingreso con Google: la función del servidor ya verificó la credencial de Google (firma, emisor, destino y
+    // correo verificado) y entrega aquí el correo en env.identidadGoogle. Entra el usuario activo con ese correo,
+    // con el rol que tiene asignado.
+    function normalCorreo(e) { return String(e || '').trim().toLowerCase(); }
+    function loginGoogle() {
+      var idg = env.identidadGoogle;
+      if (!idg || !idg.email) throw TesoError('El ingreso con Google no está disponible en este momento.');
+      var correo = normalCorreo(idg.email);
+      var clave = 'google:' + correo;
+      exigirNoBloqueado(clave);
+      var u = all('Usuarios').filter(function (x) { return normalCorreo(x.email) === correo && x.activo; })[0];
+      if (!u) {
+        registrarFallo(clave);
+        throw TesoError('La cuenta ' + correo + ' no tiene acceso a la página. Pide al administrador que registre ese correo en Configuración → Usuarios.');
+      }
+      limpiarFallos(clave);
+      // con Google no hay contraseña que cambiar
+      if (u.debeCambiarPass) u = update('Usuarios', u.id, { debeCambiarPass: false });
       return { token: signToken(u), user: publicUser(u) };
     }
 
@@ -2159,7 +2182,12 @@ var TesoCore = (function () {
       if (rol === 'discipulado' && !find('GruposHogar', grupoId)) throw TesoError('Elige el grupo de discipulado de este líder');
       var dup = all('Usuarios').some(function (u) { return u.usuario === usuario && u.id !== p.id; });
       if (dup) throw TesoError('Ese nombre de usuario ya existe');
-      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, ministerioIds: listaMin.join(','), grupoId: grupoId, email: String(p.email || '').trim(), activo: p.activo === undefined ? true : toBool(p.activo) };
+      var email = normalCorreo(p.email);
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw TesoError('El correo no parece válido');
+      if (env.soloGoogle && !email && rol !== 'admin') throw TesoError('Ingresa el correo de Google con que entrará esta persona');
+      var dupMail = email && all('Usuarios').filter(function (u) { return normalCorreo(u.email) === email && u.id !== p.id; })[0];
+      if (dupMail) throw TesoError('Ese correo ya lo usa ' + dupMail.nombre);
+      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, ministerioIds: listaMin.join(','), grupoId: grupoId, email: email, activo: p.activo === undefined ? true : toBool(p.activo) };
       if (p.id === user.id && (!d.activo || ADMIN.indexOf(d.rol) < 0)) throw TesoError('No puedes quitarte a ti mismo el acceso completo ni desactivarte');
       if (p.id === user.id && user.rol === 'admin' && d.rol !== 'admin') throw TesoError('No puedes quitarte a ti mismo el rol de administrador: pídeselo a otro administrador');
       var pass = String(p.password || '');
@@ -2172,7 +2200,8 @@ var TesoCore = (function () {
       var r;
       if (p.id) r = update('Usuarios', p.id, d);
       else {
-        if (!pass) throw TesoError('Define una contraseña inicial');
+        // con Google, solo el administrador necesita contraseña (respaldo)
+        if (!pass && (!env.soloGoogle || rol === 'admin')) throw TesoError('Define una contraseña inicial');
         r = insert('Usuarios', Object.assign(d, { id: uid(), creadoEn: env.now() }));
       }
       return publicUser(r);
@@ -2231,6 +2260,7 @@ var TesoCore = (function () {
     var T = ADMIN;
     var ACTIONS = {
       login: { fn: login, pub: true, write: true },
+      loginGoogle: { fn: loginGoogle, pub: true, write: true },
       me: { fn: me, pending: true },
       cerrarSesiones: { fn: cerrarSesiones, pending: true, write: true },
       cambiarPassword: { fn: cambiarPassword, pending: true },

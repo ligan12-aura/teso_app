@@ -1098,3 +1098,13 @@ body.is-login .guia-btn { display: none; }
   .min-tabs:not(.mis-ministerios)::-webkit-scrollbar { display: none; }
   .min-tabs:not(.mis-ministerios) a { flex-shrink: 0; }
 }
+
+/* Ingreso con Google */
+.google-login { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 6px 0 4px; text-align: center; }
+.google-btn { min-height: 44px; display: flex; align-items: center; justify-content: center; width: 100%; }
+.google-btn.loading { opacity: .5; pointer-events: none; }
+.admin-login { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 6px; }
+.admin-login summary { cursor: pointer; color: var(--muted); font-size: 13.5px; font-weight: 600; list-style: none; text-align: center; }
+.admin-login summary::-webkit-details-marker { display: none; }
+.admin-login[open] summary { margin-bottom: 14px; }
+.admin-login[open] { display: flex; flex-direction: column; gap: 14px; }

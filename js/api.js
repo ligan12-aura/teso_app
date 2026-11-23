@@ -6,6 +6,8 @@ export const isDemo = !CONFIG.API_URL || new URLSearchParams(location.search).ha
 // ?supabase: prueba del servidor nuevo antes del cambio definitivo (su sesión se guarda aparte)
 const pruebaSupabase = !isDemo && !!CONFIG.API_SUPABASE && new URLSearchParams(location.search).has('supabase');
 const API = pruebaSupabase ? CONFIG.API_SUPABASE : CONFIG.API_URL;
+// Ingreso con cuenta de Google (fuera de la demo, si hay ID de cliente configurado)
+export const conGoogle = !isDemo && !!CONFIG.GOOGLE_CLIENT_ID;
 const TOKEN_KEY = isDemo ? 'teso_token_demo' : pruebaSupabase ? 'teso_token_sb' : 'teso_token';
 let core = null;
 

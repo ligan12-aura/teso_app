@@ -4,6 +4,7 @@
 import postgres from 'npm:postgres@3.4.5';
 import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
 import { createHash, createHmac } from 'node:crypto';
+import { createRemoteJWKSet, jwtVerify } from 'npm:jose@5.9.6';
 import TesoCore from './core.js';
 import { crearAlmacen, crearLimites, crearArchivos } from './almacen.js';
 
@@ -13,6 +14,19 @@ const BUCKET = 'comprobantes';
 const SECRETO = Deno.env.get('TESO_SECRET');
 const SHEET_URL = Deno.env.get('SHEET_URL') || '';
 const ZONA = 'America/Santiago';
+// Ingreso con Google: ID de cliente OAuth (público). Con él configurado, la contraseña queda solo para el administrador.
+const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || '';
+const GOOGLE_JWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
+
+// Verifica la credencial que entrega el botón de Google (firma, emisor, destinatario, vigencia y correo verificado)
+async function identidadGoogle(credential) {
+  if (!GOOGLE_CLIENT_ID || !credential) return null;
+  try {
+    const { payload } = await jwtVerify(String(credential), GOOGLE_JWKS, { issuer: ['https://accounts.google.com', 'accounts.google.com'], audience: GOOGLE_CLIENT_ID });
+    if (!payload.email || payload.email_verified !== true) return null;
+    return { email: String(payload.email).toLowerCase(), nombre: String(payload.name || '') };
+  } catch { return null; }
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -64,6 +78,8 @@ Deno.serve(async (req) => {
   const action = String(body.action || '');
   const escribe = coreInfo.isWrite(action);
   let porBorrar = [];
+  const idg = action === 'loginGoogle' ? await identidadGoogle(body.payload && body.payload.credential) : null;
+  if (action === 'loginGoogle' && !idg) return json({ ok: false, error: 'No se pudo verificar tu cuenta de Google. Intenta de nuevo.', code: 'ERR' });
   try {
     const respuesta = await sql.begin(async (tx) => {
       if (escribe) await tx`select pg_advisory_xact_lock(4242)`;
@@ -82,6 +98,8 @@ Deno.serve(async (req) => {
         today: hoy,
         secret: SECRETO,
         limites: crearLimites(alm.store),
+        soloGoogle: !!GOOGLE_CLIENT_ID,
+        identidadGoogle: idg,
         extra: SHEET_URL ? { sheetUrl: SHEET_URL } : {}
       });
       let r = core.handle(action, body.payload || {}, body.token);
