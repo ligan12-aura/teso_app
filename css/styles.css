@@ -1108,3 +1108,16 @@ body.is-login .guia-btn { display: none; }
 .admin-login summary::-webkit-details-marker { display: none; }
 .admin-login[open] summary { margin-bottom: 14px; }
 .admin-login[open] { display: flex; flex-direction: column; gap: 14px; }
+
+/* Reportes de diezmos por WhatsApp */
+.wsp-plantilla { margin: 10px 0; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+.wsp-plantilla summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.wsp-plantilla textarea { width: 100%; margin-top: 10px; font: 13.5px/1.5 var(--sans, inherit); padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); resize: vertical; box-sizing: border-box; }
+.wsp-resumen { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--muted); margin: 8px 0; }
+.wsp-lista { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; border-top: 1px solid var(--line); }
+.wsp-lista li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.wsp-quien { display: flex; flex-direction: column; min-width: 0; }
+.wsp-acciones { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.wsp-vista { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface-2, var(--surface)); }
+.wsp-vista header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.wsp-vista pre { white-space: pre-wrap; font-family: inherit; font-size: 13.5px; line-height: 1.55; margin: 0; }

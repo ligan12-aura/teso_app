@@ -4,6 +4,7 @@ import { isDemo } from '../api.js';
 import { call } from '../api.js';
 import { editarMiembro, inactivoEnAnio } from './miembros.js';
 import { importarHistorialDiezmos } from './diezmosImportar.js';
+import { abrirReportesWsp } from './diezmosWsp.js';
 
 // Un diezmo cuenta para un hermano si lo dio él o su matrimonio
 export const esDeMiembro = (d, mid) => d.miembroId === mid || d.conyugeId === mid;
@@ -229,6 +230,7 @@ export function render(root, ctx) {
         <select class="mp-select" data-sel-anio aria-label="Año">${listaAnios.map((y) => `<option ${y === anio ? 'selected' : ''}>${y}</option>`).join('')}</select>
         <button type="button" class="icon-btn" data-dir="1" aria-label="Mes siguiente">${icon('chevR')}</button>
       </div>
+      <button class="btn btn-ghost" data-wsp ${data.diezmos.length ? '' : 'disabled'}>${icon('send', 16)} Reportes por WhatsApp</button>
       <button class="btn btn-ghost" data-historial ${data.miembros.length ? '' : 'disabled'}>${icon('sheet', 16)} Importar historial</button>
       <button class="btn btn-primary" data-lote ${data.miembros.length ? '' : 'disabled'}>${icon('plus', 16)} Registrar diezmos</button>
     </div>
@@ -310,6 +312,7 @@ export function render(root, ctx) {
   mp.querySelector('[data-sel-anio]').addEventListener('change', (e) => irA(+e.target.value, mi + 1));
   root.querySelector('[data-lote]')?.addEventListener('click', () => registrarLote(ctx));
   root.querySelector('[data-historial]')?.addEventListener('click', () => importarHistorialDiezmos(ctx));
+  root.querySelector('[data-wsp]')?.addEventListener('click', () => abrirReportesWsp(ctx, anio));
   root.querySelectorAll('[data-abrir]').forEach((b) => b.addEventListener('click', () => {
     const m = porId[b.dataset.abrir];
     if (m) diezmoDelMes(ctx, m, mes);
