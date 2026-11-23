@@ -12,7 +12,7 @@ export const CONFIG = {
   API_SUPABASE: 'https://qaqpyrmibzktuyvcpnuu.supabase.co/functions/v1/api',
   // Ingreso con Google: ID de cliente OAuth (público; termina en .apps.googleusercontent.com).
   // Vacío = ingreso con usuario y contraseña para todos.
-  GOOGLE_CLIENT_ID: '',
+  GOOGLE_CLIENT_ID: '1008155354544-195kplpah2agbd58i40mt2jvlk409v94.apps.googleusercontent.com',
   NOMBRE_IGLESIA: 'Iglesia Bautista El Redentor',
   LOCALE: 'es-CL',
   MONEDA: 'CLP'
