@@ -875,6 +875,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .lote-lista li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; border-bottom: 1px solid var(--line-2); }
 .lote-lista li:last-child { border-bottom: 0; }
 .lote-lista li span { font-size: 13.5px; }
+.lote-lista li > span { flex: 1; min-width: 0; }
+.lote-esp { font-size: 12.5px; color: var(--muted); white-space: nowrap; margin: 0; }
 .lote-monto { width: 130px; border: 1.5px solid var(--line); border-radius: 9px; padding: 6px 9px; text-align: right; font-family: var(--display); font-weight: 600; background: var(--surface); color: var(--ink); }
 .lote-monto:focus { outline: none; border-color: var(--navy-3); }
 @media (max-width: 600px) {

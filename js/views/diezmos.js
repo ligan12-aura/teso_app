@@ -525,11 +525,11 @@ function registrarLote(ctx) {
         <label class="field"><span>Corresponde al mes de</span><input type="month" name="mes" value="${data.hoy.slice(0, 7)}" required></label>
         <label class="field"><span>Medio</span><select name="medio">${opcionesMedio(data)}</select></label>
       </div>
-      <p class="muted small">Si a alguien le corresponde otro mes, o dio el diezmo de varios meses, regístralo tocando su nombre en la tabla de Diezmos.</p>
+      <p class="muted small">Si a alguien le corresponde otro mes, o dio el diezmo de varios meses, regístralo tocando su nombre en la tabla de Diezmos. Marca <b>Especial</b> en la fila de quien entrega un diezmo por un ingreso fuera de lo normal (herencia, bono, venta…): va aparte del diezmo regular.</p>
       <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general)<br><small class="muted">Desmárcalo solo si ese dinero ya se registró en la tesorería por otra vía.</small></span></label>
       <div class="search lote-buscar">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
-      <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(sinTildes(m.nombre))}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><input class="lote-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
-      <div class="culto-total"><span data-cant>0 hermanos</span> · Total: <strong data-total>$0</strong></div>`,
+      <ul class="lote-lista">${activos.map((m) => `<li data-nombre="${esc(sinTildes(m.nombre))}"><span>${m.matrimonio ? '💍 ' : ''}${esc(m.nombre)}</span><label class="check lote-esp" title="Diezmo especial: ingreso extraordinario, aparte del diezmo regular"><input type="checkbox" data-esp="${m.id}"> Especial</label><input class="lote-monto" data-id="${m.id}" data-conyuge="${m.conyugeId}" inputmode="numeric" placeholder="$0" aria-label="Diezmo de ${esc(m.nombre)}"></li>`).join('')}</ul>
+      <div class="culto-total"><span data-cant>0 hermanos</span> · Total: <strong data-total>$0</strong><span data-esp-total></span></div>`,
     submitLabel: 'Guardar diezmos',
     onOpen(f) {
       const inputs = [...f.querySelectorAll('.lote-monto')];
@@ -537,7 +537,10 @@ function registrarLote(ctx) {
         const llenos = inputs.filter((i) => pesos(i.value) > 0);
         f.querySelector('[data-total]').textContent = money(llenos.reduce((a, i) => a + pesos(i.value), 0));
         f.querySelector('[data-cant]').textContent = `${llenos.length} hermano${llenos.length === 1 ? '' : 's'}`;
+        const esp = llenos.filter((i) => f.querySelector(`[data-esp="${i.dataset.id}"]`)?.checked).reduce((a, i) => a + pesos(i.value), 0);
+        f.querySelector('[data-esp-total]').textContent = esp ? ` (de ellos ${money(esp)} en diezmos especiales)` : '';
       };
+      f.querySelectorAll('[data-esp]').forEach((c) => c.addEventListener('change', upd));
       inputs.forEach((i) => { formatoPesos(i); i.addEventListener('input', upd); });
       f.querySelector('[data-buscar]').addEventListener('input', (e) => {
         const t = sinTildes(e.target.value);
@@ -546,7 +549,7 @@ function registrarLote(ctx) {
     },
     async onSubmit(f) {
       const d = formData(f);
-      const items = [...f.querySelectorAll('.lote-monto')].map((i) => ({ miembroId: i.dataset.id, conyugeId: i.dataset.conyuge || '', monto: pesos(i.value) })).filter((x) => x.monto > 0);
+      const items = [...f.querySelectorAll('.lote-monto')].map((i) => ({ miembroId: i.dataset.id, conyugeId: i.dataset.conyuge || '', monto: pesos(i.value), especial: !!f.querySelector(`[data-esp="${i.dataset.id}"]`)?.checked })).filter((x) => x.monto > 0);
       if (!items.length) throw new Error('Escribe al menos un monto');
       const r = await call('saveDiezmosLote', { fecha: d.fecha, mes: d.mes, medio: d.medio, items, sumarACaja: !!f.sumarACaja.checked });
       toast(`${r.creados} diezmo${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}${r.enCaja ? (r.creados > 1 ? ' y sumados' : ' y sumado') + ' a la caja' : ''}`);
