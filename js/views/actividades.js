@@ -35,9 +35,11 @@ export function resumenActividad(data, a) {
 // Pestañas del ministerio (Finanzas · Jóvenes · Asistencia · Actividades)
 // La asistencia del ministerio la ven su líder, el pastor y el administrador (no tesorería)
 let rolMin = '';
-export const veAsistenciaMin = (rol) => ['lider', 'pastor', 'admin'].includes(rol);
-export function tabsMinisterio(m, base, activo, rol = rolMin) {
-  const t = [['', 'Finanzas', 'wallet'], ['integrantes', etiquetaIntegrantes(m), 'users'], ...(veAsistenciaMin(rol) ? [['asistencia', 'Asistencia', 'checkCircle']] : []), ['actividades', 'Actividades', 'calendar']];
+let usrMin = null;
+// la asistencia del ministerio: su líder, el pastor, el administrador y el tesorero que lo lidera
+export const veAsistenciaMin = (rol, u = usrMin, m = null) => ['lider', 'pastor', 'admin'].includes(rol) || (rol === 'tesorero' && !!m && (u?.ministerioIds || []).includes(m.id));
+export function tabsMinisterio(m, base, activo, rol = rolMin, usuario = usrMin) {
+  const t = [['', 'Finanzas', 'wallet'], ['integrantes', etiquetaIntegrantes(m), 'users'], ...(veAsistenciaMin(rol, usuario, m) ? [['asistencia', 'Asistencia', 'checkCircle']] : []), ['actividades', 'Actividades', 'calendar']];
   return `<nav class="min-tabs" aria-label="Secciones del ministerio">${t.map(([k, l, ic]) => `<a href="#/${base}${k ? '/' + k : ''}" class="${activo === k ? 'active' : ''}">${icon(ic, 16)} ${l}</a>`).join('')}</nav>`;
 }
 
@@ -54,7 +56,8 @@ function cabecera(m, base, esTes, activo, titulo, acciones = '') {
 // Punto de entrada desde la vista del ministerio
 export function renderSeccion(root, ctx, m, { esTes, base, sub, subId }) {
   rolMin = ctx.user?.rol || '';
-  if (sub === 'asistencia' && !veAsistenciaMin(rolMin)) sub = 'actividades';
+  usrMin = ctx.user || null;
+  if (sub === 'asistencia' && !veAsistenciaMin(rolMin, usrMin, m)) sub = 'actividades';
   if (sub === 'integrantes') return renderIntegrantes(root, ctx, m, base, esTes);
   if (sub === 'asistencia') return renderAsistencia(root, ctx, m, (acciones) => cabecera(m, base, esTes, 'asistencia', 'Asistencia', acciones), etiquetaIntegrantes(m));
   if (sub === 'actividad' && subId) return renderActividad(root, ctx, m, base, esTes, subId);

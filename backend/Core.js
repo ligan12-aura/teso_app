@@ -192,6 +192,7 @@ var TesoCore = (function () {
     if (!ids.length && u && u.ministerioId) ids = [String(u.ministerioId)];
     return ids;
   }
+  function lideraMin(u, mid) { return !!u && !!mid && idsMinisterios(u).indexOf(String(mid)) >= 0 && (u.rol === 'lider' || ADMIN.indexOf(u.rol) >= 0); }
   function publicUser(u) {
     return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, ministerioIds: idsMinisterios(u), grupoId: u.grupoId || '', email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
   }
@@ -413,8 +414,9 @@ var TesoCore = (function () {
           base.personasAsistencia = personasAsistencia();
           datosAsistenciaExtra(base, false);
         } else {
-          // tesorero: no ve asistencia
-          base.asistencias = []; base.personasAsistencia = []; base.asistenciasMin = [];
+          // tesorero: no ve asistencia (salvo la de los ministerios que él mismo lidera)
+          base.asistencias = []; base.personasAsistencia = [];
+          base.asistenciasMin = all('AsistenciasMinisterios').filter(function (a) { return lideraMin(user, a.ministerioId); });
           base.gruposHogar = []; base.personasHogar = []; base.asistenciasHogar = [];
         }
       } else {
@@ -713,7 +715,7 @@ var TesoCore = (function () {
     function saveAsistenciaMinisterio(user, p) {
       var actual = p.id ? find('AsistenciasMinisterios', p.id) : null;
       if (p.id && !actual) throw TesoError('Esa asistencia ya no existe');
-      if (ASIST_MIN.indexOf(user.rol) < 0) throw TesoError('No tienes permiso', 'FORBIDDEN');
+      if (ASIST_MIN.indexOf(user.rol) < 0 && !lideraMin(user, actual ? actual.ministerioId : p.ministerioId)) throw TesoError('No tienes permiso', 'FORBIDDEN');
       var m = ministerioConActividades(user, actual ? actual.ministerioId : p.ministerioId);
       if (actual && actual.ministerioId !== m.id) throw TesoError('No tienes permiso', 'FORBIDDEN');
       var fecha = String(p.fecha || '').trim();
@@ -743,6 +745,7 @@ var TesoCore = (function () {
     function deleteAsistenciaMinisterio(user, p) {
       var a = find('AsistenciasMinisterios', p.id);
       if (!a) throw TesoError('Esa asistencia ya no existe');
+      if (ASIST_MIN.indexOf(user.rol) < 0 && !lideraMin(user, a.ministerioId)) throw TesoError('No tienes permiso', 'FORBIDDEN');
       ministerioConActividades(user, a.ministerioId, true);
       remove('AsistenciasMinisterios', a.id);
       return { id: a.id };
@@ -1273,6 +1276,7 @@ var TesoCore = (function () {
     }
     function revisarRendicion(user, p) {
       var m = getMinisterio(p.ministerioId);
+      if (lideraMin(user, m.id)) throw TesoError('No puedes aprobar ni observar la rendición de un ministerio que lideras: la revisa el pastor o el administrador.');
       if (!isMonth(p.mes)) throw TesoError('Mes inválido');
       if (p.decision !== 'aprobada' && p.decision !== 'observada') throw TesoError('Decisión inválida');
       var e = estadoRendicion(m.id, p.mes);
@@ -2209,7 +2213,8 @@ var TesoCore = (function () {
       if (!nombre) throw TesoError('Ingresa el nombre');
       var rol = ROLES.indexOf(p.rol) >= 0 ? p.rol : 'lider';
       // un líder puede liderar varios ministerios (p. ej. Infantil y, junto a su cónyuge, Familia)
-      var listaMin = rol === 'lider' ? (Array.isArray(p.ministerioIds) ? p.ministerioIds : String(p.ministerioIds || p.ministerioId || '').split(',')).map(function (x) { return String(x).trim(); }).filter(Boolean) : [];
+      // tesorero, pastor y administrador pueden además liderar ministerios ("También lidera", opcional)
+      var listaMin = rol === 'lider' || ADMIN.indexOf(rol) >= 0 ? (Array.isArray(p.ministerioIds) ? p.ministerioIds : String(p.ministerioIds || (rol === 'lider' ? p.ministerioId : '') || '').split(',')).map(function (x) { return String(x).trim(); }).filter(Boolean) : [];
       listaMin = listaMin.filter(function (x, k) { return listaMin.indexOf(x) === k; });
       listaMin.forEach(function (x) { if (!find('Ministerios', x)) throw TesoError('Uno de los ministerios ya no existe'); });
       if (rol === 'lider' && !listaMin.length) throw TesoError('Asigna al menos un ministerio al líder');
@@ -2331,8 +2336,8 @@ var TesoCore = (function () {
       agregarMiembrosIntegrantes: { fn: agregarMiembrosIntegrantes, role: ADMIN, write: true },
       saveAsistencia: { fn: saveAsistencia, role: ASISTENCIA, write: true },
       deleteAsistencia: { fn: deleteAsistencia, role: ASISTENCIA, write: true },
-      saveAsistenciaMinisterio: { fn: saveAsistenciaMinisterio, role: ASIST_MIN, write: true },
-      deleteAsistenciaMinisterio: { fn: deleteAsistenciaMinisterio, role: ASIST_MIN, write: true },
+      saveAsistenciaMinisterio: { fn: saveAsistenciaMinisterio, role: ASIST_MIN.concat('tesorero'), write: true },
+      deleteAsistenciaMinisterio: { fn: deleteAsistenciaMinisterio, role: ASIST_MIN.concat('tesorero'), write: true },
       saveVisita: { fn: saveVisita, role: ASISTENCIA, write: true },
       deleteVisita: { fn: deleteVisita, role: ASISTENCIA, write: true },
       saveGrupoHogar: { fn: saveGrupoHogar, role: ASISTENCIA, write: true },

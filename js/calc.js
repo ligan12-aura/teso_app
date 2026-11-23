@@ -111,7 +111,8 @@ export const estadoDe = (data, mid, mes) => rendicionDe(data, mid, mes)?.estado 
 export function transferenciaDe(data, mid, mes) {
   return data.transferencias.find((t) => t.ministerioId === mid && t.mes === mes) || null;
 }
-export const lideraMinisterio = (u, mid) => u.rol === 'lider' && (u.ministerioIds?.length ? u.ministerioIds : [u.ministerioId]).includes(mid);
+// líder de ministerio, o tesorero / pastor / administrador que "también lidera" ese ministerio
+export const lideraMinisterio = (u, mid) => (u.rol === 'lider' ? (u.ministerioIds?.length ? u.ministerioIds : [u.ministerioId]) : ['admin', 'tesorero', 'pastor'].includes(u.rol) ? (u.ministerioIds || []) : []).includes(mid);
 // Líder(es) de un ministerio: si son dos (p. ej. un matrimonio) se muestran los dos nombres
 export function liderDe(data, mid) {
   const ls = data.usuarios.filter((u) => lideraMinisterio(u, mid) && u.activo);

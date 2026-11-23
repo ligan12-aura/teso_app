@@ -1,3 +1,4 @@
+import { lideraMinisterio } from '../calc.js';
 import { icon, esc, money, modal, formData, toast, fecha, emptyState, pesos, formatoPesos, confirmar } from '../ui.js';
 import { call, isDemo, conGoogle } from '../api.js';
 import { renderImportar } from './importar.js';
@@ -31,7 +32,7 @@ export function render(root, ctx) {
       ${data.ministerios.length ? `<div class="table-wrap"><table class="table">
         <thead><tr><th>Ministerio</th><th>Líder</th><th class="num">Ítem mensual</th><th class="num">Presupuesto</th><th>Estado</th><th></th></tr></thead>
         <tbody>${data.ministerios.map((m) => {
-          const lid = data.usuarios.filter((u) => u.rol === 'lider' && (u.ministerioIds?.length ? u.ministerioIds : [u.ministerioId]).includes(m.id));
+          const lid = data.usuarios.filter((u) => lideraMinisterio(u, m.id));
           return `<tr class="${m.activo ? '' : 'inactive'}">
             <td><span class="min-dot" style="background:${m.color}">${esc(m.icono)}</span> <b>${esc(m.nombre)}</b>${m.actividades === 'si' ? ' <span class="tag tag-verde">Integrantes y actividades</span>' : ''}</td>
             <td>${lid.length ? lid.map((u) => esc(u.nombre)).join(', ') : '<span class="muted">—</span>'}</td>
@@ -62,7 +63,7 @@ export function render(root, ctx) {
             <td><b>${esc(u.nombre)}</b>${u.email ? `<br><small class="muted">${esc(u.email)}</small>` : ''}</td>
             <td><code>${esc(u.usuario)}</code></td>
             <td>${{ admin: '<span class="badge st-sent">Administrador</span>', tesorero: '<span class="badge st-sent">Tesorero</span>', pastor: '<span class="badge st-sent">Pastor</span>', secretaria: '<span class="badge st-sent">Secretaría</span>', discipulado: '<span class="badge st-open">Líder de discipulado</span>' }[u.rol] || '<span class="badge st-open">Líder</span>'}</td>
-            <td>${u.rol === 'lider' && (u.ministerioIds || []).filter((id) => minName[id]).length ? (u.ministerioIds || []).filter((id) => minName[id]).map((id) => `${esc(minName[id].icono)} ${esc(minName[id].nombre)}`).join('<br>') : minName[u.ministerioId] ? `${esc(minName[u.ministerioId].icono)} ${esc(minName[u.ministerioId].nombre)}` : u.rol === 'discipulado' && (data.gruposHogar || []).find((g) => g.id === u.grupoId) ? `${icon('users', 13)} ${esc(data.gruposHogar.find((g) => g.id === u.grupoId).nombre)}` : '<span class="muted">—</span>'}</td>
+            <td>${(u.ministerioIds || []).filter((id) => minName[id]).length ? (u.ministerioIds || []).filter((id) => minName[id]).map((id) => `${esc(minName[id].icono)} ${esc(minName[id].nombre)}`).join('<br>') : minName[u.ministerioId] ? `${esc(minName[u.ministerioId].icono)} ${esc(minName[u.ministerioId].nombre)}` : u.rol === 'discipulado' && (data.gruposHogar || []).find((g) => g.id === u.grupoId) ? `${icon('users', 13)} ${esc(data.gruposHogar.find((g) => g.id === u.grupoId).nombre)}` : '<span class="muted">—</span>'}</td>
             <td>${u.activo ? (u.debeCambiarPass ? '<span class="badge st-obs">Clave temporal</span>' : '<span class="badge st-ok">Activo</span>') : '<span class="badge st-open">Inactivo</span>'}</td>
             <td class="row-actions">${puede ? `<button class="icon-btn sm" data-edit="${u.id}" title="Editar">${icon('edit', 16)}</button>${u.id !== ctx.user?.id ? `<button class="icon-btn sm danger" data-del="${u.id}" title="Eliminar usuario">${icon('trash', 16)}</button>` : ''}` : ''}</td>
           </tr>`).join('')}</tbody></table></div>
@@ -261,7 +262,7 @@ function editUsuario(ctx, u = null) {
         <label class="field"><span>Rol</span><select name="rol">${[['lider', 'Líder de ministerio'], ['tesorero', 'Tesorero'], ['pastor', 'Pastor'], ['admin', 'Administrador (todo)'], ['secretaria', 'Secretaría (miembros y asistencia)'], ['discipulado', 'Líder de discipulado (asistencia de su grupo)']].map(([v, l]) => `<option value="${v}" ${(u?.rol || 'lider') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
       <p class="muted small" data-rol-ayuda style="margin-top:-6px"></p>
-      <div class="field" data-min><span>Ministerio(s) que lidera</span>
+      <div class="field" data-min><span data-min-lbl>Ministerio(s) que lidera</span>
         <div class="min-checks">${mins.map((m) => `<label class="check"><input type="checkbox" name="minLider" value="${m.id}" ${(u?.ministerioIds?.length ? u.ministerioIds : [u?.ministerioId]).includes(m.id) ? 'checked' : ''}> ${esc(m.icono)} ${esc(m.nombre)}</label>`).join('')}</div>
         <small class="hint">Puede liderar más de uno (por ejemplo, Infantil y, junto a su cónyuge, Familia). Si un ministerio lo lidera un matrimonio, crea un usuario para cada uno con el mismo ministerio.</small></div>
       <label class="field" data-grupo><span>Grupo de discipulado</span><select name="grupoId"><option value="">— Selecciona —</option>${(ctx.data.gruposHogar || []).filter((g) => g.activo || g.id === u?.grupoId).map((g) => `<option value="${g.id}" ${u?.grupoId === g.id ? 'selected' : ''}>${esc(g.nombre)}${g.sector ? ` · ${esc(g.sector)}` : ''}</option>`).join('')}</select>${(ctx.data.gruposHogar || []).length ? '' : '<small class="hint">Aún no hay grupos: créalos en Asistencia → Discipulados.</small>'}</label>
@@ -285,7 +286,10 @@ function editUsuario(ctx, u = null) {
           f.querySelector('[data-usuario-wrap]').hidden = !esAdm;
           f.usuario.required = esAdm;
         } else f.password.required = !u;
-        f.querySelector('[data-min]').hidden = f.rol.value !== 'lider';
+        // tesorero, pastor y administrador también pueden liderar ministerios (opcional)
+        const adminRol = ['tesorero', 'pastor', 'admin'].includes(f.rol.value);
+        f.querySelector('[data-min]').hidden = f.rol.value !== 'lider' && !adminRol;
+        f.querySelector('[data-min-lbl]').textContent = adminRol ? 'También lidera (opcional)' : 'Ministerio(s) que lidera';
         f.querySelector('[data-grupo]').hidden = f.rol.value !== 'discipulado';
         const ayuda = f.querySelector('[data-rol-ayuda]');
         if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', admin: 'Permiso para todo, y es el único que puede agregar, modificar o desactivar usuarios.', secretaria: 'Accede a Miembros (agregar y editar sus datos) y a Asistencia. No ve dinero ni diezmos.', discipulado: 'Solo ve la asistencia de su grupo de discipulado: la toma, la corrige y agrega visitas o no miembros. No ve Miembros, dinero ni otros grupos.' }[f.rol.value];
@@ -297,7 +301,7 @@ function editUsuario(ctx, u = null) {
       if (u) { d.id = u.id; d.activo = f.activo.checked; }
       if (conGoogle && d.rol !== 'admin') delete d.password;
       delete d.minLider;
-      d.ministerioIds = d.rol === 'lider' ? [...f.querySelectorAll('[name=minLider]:checked')].map((c) => c.value) : [];
+      d.ministerioIds = ['lider', 'tesorero', 'pastor', 'admin'].includes(d.rol) ? [...f.querySelectorAll('[name=minLider]:checked')].map((c) => c.value) : [];
       if (d.rol === 'lider' && !d.ministerioIds.length) throw new Error('Marca al menos un ministerio para el líder');
       d.ministerioId = d.ministerioIds[0] || '';
       if (d.rol === 'discipulado' && !d.grupoId) throw new Error('Elige el grupo de discipulado de este líder');
