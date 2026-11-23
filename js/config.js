@@ -13,7 +13,7 @@ export const CONFIG = {
   // Ingreso con Google: ID de cliente OAuth (público; termina en .apps.googleusercontent.com).
   // Vacío = ingreso con usuario y contraseña para todos.
   // Ingreso con Microsoft (Hotmail, Outlook, Live): ID de aplicación de Microsoft Entra (público). Vacío = sin botón.
-  MS_CLIENT_ID: '',
+  MS_CLIENT_ID: 'ae51abdd-7989-474a-9a13-f830c795f1c4',
   GOOGLE_CLIENT_ID: '1008155354544-195kplpah2agbd58i40mt2jvlk409v94.apps.googleusercontent.com',
   NOMBRE_IGLESIA: 'Iglesia Bautista El Redentor',
   LOCALE: 'es-CL',
