@@ -7,7 +7,7 @@ import { editarMiembro } from './miembros.js';
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-const CLAVE_PLANTILLA = 'teso_wsp_plantilla';
+const CLAVE_PLANTILLA = 'teso_wsp_plantilla_v2';
 const PLANTILLA = `Hola {nombre} 👋, bendiciones.
 
 Te compartimos el resumen de tus diezmos {periodo} en la Iglesia Bautista El Redentor:
@@ -15,6 +15,8 @@ Te compartimos el resumen de tus diezmos {periodo} en la Iglesia Bautista El Red
 • Total diezmado: *{total}*
 • Meses con diezmo: {meses}
 {especiales}
+• Tu aporte equivale al *{aporte}* de los ingresos de la iglesia en este período
+
 {detalle}
 
 ¡Gracias por tu fidelidad y por sostener la obra del Señor! 🙏
@@ -77,12 +79,23 @@ function periodoTexto(anio, mesesPeriodo, hoy) {
   return mesesPeriodo <= 1 ? `de enero de ${anio}` : `de enero a ${MESES[mesesPeriodo - 1]} de ${anio}`;
 }
 
-export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy) {
+// Ingresos de la tesorería general en los primeros n meses del año
+function ingresosIglesia(data, anio, n) {
+  const hasta = `${anio}-${String(n).padStart(2, '0')}`;
+  return (data.movGenerales || []).filter((m) => m.tipo === 'ingreso' && m.mes >= `${anio}-01` && m.mes <= hasta).reduce((a, m) => a + m.monto, 0);
+}
+
+export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
   const conDiezmo = f.meses.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);
   // el mes en curso solo cuenta si ya tiene diezmo (mientras no termina, no es una falta)
   let evaluados = Math.max(1, Math.min(12, mesesPeriodo));
   if (anio === +hoy.slice(0, 4) && evaluados > 1 && !f.meses[evaluados - 1]) evaluados--;
   mesesPeriodo = evaluados;
+  // aporte: lo que dio en el período (diezmo regular y especial) sobre todos los ingresos de la iglesia en esos meses
+  const ing = data ? ingresosIglesia(data, anio, evaluados) : 0;
+  const dio = f.meses.slice(0, evaluados).reduce((a, v) => a + v, 0) + f.especiales;
+  const pct = ing ? (dio * 100) / ing : 0;
+  const aporte = ing ? `${pct < 0.1 && dio ? 'menos de 0,1' : pct.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%` : '';
   const reemplazos = {
     nombre: f.saludo,
     anio: String(anio),
@@ -91,10 +104,14 @@ export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy) {
     meses: conDiezmo.length ? `${conDiezmo.length} de ${evaluados}` : `aún no registramos diezmos en ${evaluados === 1 ? 'el mes' : `los ${evaluados} meses`}`,
     especiales: f.especiales ? `• Diezmos especiales (aparte): *${money(f.especiales)}*` : '',
     detalle: conDiezmo.length ? 'Detalle por mes:\n' + conDiezmo.map((i) => `   ${MESES_C[i]}: ${money(f.meses[i])}`).join('\n') : '',
-    matrimonio: f.matrimonio ? '(diezmos del matrimonio)' : ''
+    matrimonio: f.matrimonio ? '(diezmos del matrimonio)' : '',
+    aporte
   };
-  return plantilla.replace(/\{(\w+)\}/g, (m, k) => (k in reemplazos ? reemplazos[k] : m))
-    // líneas que quedaron vacías por un dato que no aplica: no se dejan huecos dobles
+  const rellenar = (l) => l.replace(/\{(\w+)\}/g, (m, k) => (k in reemplazos ? reemplazos[k] : m));
+  return plantilla.split('\n')
+    // una línea con un dato que no aplica (sin especiales, sin aporte…) se quita entera
+    .filter((l) => !/\{(\w+)\}/.test(l) || ![...l.matchAll(/\{(\w+)\}/g)].some(([, k]) => k in reemplazos && !reemplazos[k]))
+    .map(rellenar).join('\n')
     .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n').trim();
 }
 
@@ -121,7 +138,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
       <details class="wsp-plantilla">
         <summary>${icon('edit', 14)} Editar el mensaje</summary>
         <textarea data-plantilla rows="14">${esc(plantilla)}</textarea>
-        <p class="muted small">Puedes usar: <code>{nombre}</code> <code>{periodo}</code> <code>{total}</code> <code>{meses}</code> <code>{especiales}</code> <code>{detalle}</code> <code>{anio}</code>. Si un dato no aplica (por ejemplo, sin diezmos especiales), esa línea se quita sola. <button type="button" class="link-btn" data-restaurar>Volver al mensaje original</button></p>
+        <p class="muted small">Puedes usar: <code>{nombre}</code> <code>{periodo}</code> <code>{total}</code> <code>{meses}</code> <code>{especiales}</code> <code>{detalle}</code> <code>{aporte}</code> <code>{anio}</code>. Si un dato no aplica (por ejemplo, sin diezmos especiales), esa línea se quita sola. <button type="button" class="link-btn" data-restaurar>Volver al mensaje original</button></p>
       </details>
       <div class="wsp-resumen" data-resumen></div>
       <ul class="wsp-lista" data-lista></ul>
@@ -150,14 +167,14 @@ export function abrirReportesWsp(ctx, anioInicial) {
         lista.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => {
           const x = filaDe(b.dataset.ver);
           vista.hidden = false;
-          vista.innerHTML = `<header><b>Mensaje para ${esc(x.nombre)}</b><button type="button" class="icon-btn sm" data-cerrar-vista aria-label="Cerrar vista previa">${icon('x', 15)}</button></header><pre>${esc(armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy))}</pre>`;
+          vista.innerHTML = `<header><b>Mensaje para ${esc(x.nombre)}</b><button type="button" class="icon-btn sm" data-cerrar-vista aria-label="Cerrar vista previa">${icon('x', 15)}</button></header><pre>${esc(armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data))}</pre>`;
           vista.querySelector('[data-cerrar-vista]').addEventListener('click', () => { vista.hidden = true; });
           vista.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }));
         lista.querySelectorAll('[data-enviar]').forEach((b) => b.addEventListener('click', () => {
           const x = filaDe(b.dataset.enviar);
           const p = x.personas.find((y) => y.id === b.dataset.persona);
-          const url = `https://wa.me/${p.numero}?text=${encodeURIComponent(armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy))}`;
+          const url = `https://wa.me/${p.numero}?text=${encodeURIComponent(armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data))}`;
           window.open(url, '_blank', 'noopener');
           marcarEnviado(x.id + ':' + p.id);
           pintar();
