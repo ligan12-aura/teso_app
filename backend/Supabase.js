@@ -44,6 +44,13 @@ function abrirEscrituraEnGoogle() {
 
 // 2. Todas las hojas → tabla "filas" de Supabase (en el mismo orden; repetirlo no duplica)
 function trasladarDatosASupabase() {
+  // Después del traslado, Supabase es la base principal y la planilla es solo el respaldo de la noche anterior:
+  // copiarla de nuevo borraría los cambios del día. Para forzarlo (solo si se sabe lo que se hace), agrega la
+  // propiedad del script PERMITIR_RETRASLADO = si, ejecuta y bórrala.
+  var props0 = PropertiesService.getScriptProperties();
+  if (props0.getProperty('ULTIMO_RESPALDO') && props0.getProperty('PERMITIR_RETRASLADO') !== 'si') {
+    throw new Error('El traslado ya se hizo: Supabase es la base principal y esta planilla es solo un respaldo. Copiarla de nuevo borraría los cambios hechos después del último respaldo.');
+  }
   var ss = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty(PROP_SHEET));
   var st = new SheetStore_(ss);
   var total = 0, resumen = [];

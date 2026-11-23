@@ -56,6 +56,17 @@ const PAGINAS = {
     { en: '.kpis', titulo: 'Resumen', texto: 'Cuántas actividades hay, lo que entró, lo que salió y el resultado.' },
     { en: '.act-card', titulo: 'Cada actividad', texto: 'Confirmados, cuántos pagaron, entradas, salidas y resultado. Tócala para abrirla.' },
   ],
+  'actividades-general': [
+    { en: '.min-tabs', titulo: 'Movimientos y Actividades', texto: 'Cambia entre el libro de la tesorería y las actividades de la iglesia.' },
+    { en: 'b:Nueva actividad', titulo: 'Nueva actividad', texto: 'Crea un aniversario, un retiro o una venta con su fecha y la cuota por persona.' },
+    { en: '.kpis', titulo: 'Resumen', texto: 'Cuántas actividades hay, lo que entró, lo que salió y el resultado.' },
+    { en: '.act-card', titulo: 'Cada actividad', texto: 'Confirmados, cuántos pagaron, entradas, salidas y resultado. Tócala para abrirla.' },
+  ],
+  'actividad-general': [
+    { en: '.kpis', titulo: 'Resumen', texto: 'Confirmados, cuotas pagadas (y cuánto falta), gastos y el resultado de la actividad.' },
+    { en: 'b:Elegir confirmados', titulo: 'Confirmados', texto: 'Marca de la lista de miembros quiénes van. Cuando cada uno pague, toca «Registrar pago»: entra como ingreso «Actividades» de la tesorería en esa fecha.' },
+    { en: 't:Entradas y salidas', titulo: 'Entradas y salidas', texto: 'Registra aquí los gastos y otros ingresos de la actividad. Todo queda también en el libro de la tesorería general.' },
+  ],
   actividad: [
     { en: '.kpis', titulo: 'Resumen', texto: 'Confirmados, cuotas pagadas (y cuánto falta), gastos y el resultado de la actividad.' },
     { en: 'b:Elegir confirmados', titulo: 'Confirmados', texto: 'Marca del listado quiénes van. Cuando cada uno pague, toca «Registrar pago»: entra como ingreso del ministerio en esa fecha.' },
@@ -117,6 +128,8 @@ function clave() {
     return 'ministerio';
   }
   if (r === 'asistencia' && p[1] === 'discipulados') return 'discipulados';
+  if (r === 'general' && p[1] === 'actividades') return 'actividades-general';
+  if (r === 'general' && p[1] === 'actividad') return 'actividad-general';
   return r;
 }
 

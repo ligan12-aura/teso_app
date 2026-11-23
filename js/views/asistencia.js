@@ -71,8 +71,8 @@ export function ambitoMinisterio(data, m, etiquetaLista = 'Integrantes') {
   const jov = /j[oó]ven/i.test(m.nombre);
   const integ = data.integrantesAsistencia || data.integrantes || [];
   const personas = integ.filter((i) => i.ministerioId === m.id).map((i) => ({
-    id: i.id, tipo: i.esMiembro ? 'miembro' : 'integrante', nombre: i.nombre, activo: !!i.activo,
-    desde: String(i.creadoEn || '').slice(0, 10), celular: i.celular || ''
+    id: i.id, tipo: i.esMiembro ? 'miembro' : 'integrante', nombre: i.nombre, activo: !!i.activo && !i.inactivoAnio,
+    desde: String(i.creadoEn || '').slice(0, 10), celular: i.celular || '', terceraEdad: !!i.terceraEdad
   }));
   return {
     clave: 'asist_min_' + m.id,
@@ -103,7 +103,7 @@ export function ambitoMinisterio(data, m, etiquetaLista = 'Integrantes') {
 const tipoHogar = (x) => (x.tipo === 'visita' ? 'visita' : x.esMiembro ? 'miembro' : 'integrante');
 function ambitoHogar(data, g) {
   const personas = (data.personasHogar || []).filter((x) => x.grupoId === g.id).map((x) => ({
-    id: x.id, tipo: tipoHogar(x), nombre: x.nombre, activo: !!x.activo, desde: String(x.creadoEn || '').slice(0, 10),
+    id: x.id, tipo: tipoHogar(x), nombre: x.nombre, activo: !!x.activo && !x.inactivoAnio, desde: String(x.creadoEn || '').slice(0, 10),
     celular: x.celular || '', notas: x.notas || '', miembroId: x.miembroId || '', terceraEdad: !!x.terceraEdad
   }));
   return {

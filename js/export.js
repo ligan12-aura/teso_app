@@ -104,15 +104,17 @@ export async function exportarExcel(data) {
   }), [14, 11, 22, 10, 90, 30]);
   if (data.actividades?.length) {
     add('Actividades', data.actividades.map((a) => {
-      const movs = data.movMinisterios.filter((x) => x.actividadId === a.id);
+      // actividad de la tesorería general: sus cuotas y gastos están en el libro general
+      const movs = (a.ministerioId ? data.movMinisterios : data.movGenerales || []).filter((x) => x.actividadId === a.id);
       const ing = movs.filter((x) => x.tipo === 'ingreso').reduce((s, x) => s + x.monto, 0);
       const gas = movs.filter((x) => x.tipo === 'gasto').reduce((s, x) => s + x.monto, 0);
       const ins = (data.inscripciones || []).filter((x) => x.actividadId === a.id);
-      return { Ministerio: min[a.ministerioId] || '', Actividad: a.nombre, Fecha: a.fecha, Cuota: a.cuota, Confirmados: ins.length, Pagaron: ins.filter((x) => x.movId).length, Entradas: ing, Salidas: gas, Resultado: ing - gas, Estado: a.estado };
+      return { Ministerio: a.ministerioId ? min[a.ministerioId] || '' : 'Tesorería general', Actividad: a.nombre, Fecha: a.fecha, Cuota: a.cuota, Confirmados: ins.length, Pagaron: ins.filter((x) => x.movId).length, Entradas: ing, Salidas: gas, Resultado: ing - gas, Estado: a.estado };
     }), [14, 28, 11, 10, 12, 10, 12, 12, 12, 10]);
     add('Inscripciones', (data.inscripciones || []).map((x) => {
       const a = data.actividades.find((y) => y.id === x.actividadId);
-      return { Actividad: a?.nombre || '', Integrante: integ[x.integranteId]?.nombre || '', Pagó: x.movId ? 'Sí' : 'No', Monto: x.pagoMonto || '', 'Fecha de pago': x.fechaPago };
+      const nombreMb = (data.miembros || []).find((m) => m.id === x.miembroId)?.nombre;
+      return { Actividad: a?.nombre || '', Inscrito: integ[x.integranteId]?.nombre || nombreMb || '', Pagó: x.movId ? 'Sí' : 'No', Monto: x.pagoMonto || '', 'Fecha de pago': x.fechaPago };
     }), [28, 30, 8, 12, 14]);
   }
 

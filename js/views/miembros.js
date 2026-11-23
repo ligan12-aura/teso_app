@@ -229,12 +229,14 @@ export function editarMiembro(ctx, m = null) {
       syncConyuge();
       // con cónyuge registrado el estado civil es casado (no se puede cambiar mientras tenga cónyuge)
       const syncCivil = () => {
-        const con = !!f.conyugeId.value;
+        const cy = ctx.data.miembros.find((x) => x.id === f.conyugeId.value);
+        const con = !!cy && cy.estado !== 'fallecido' && f.estado.value !== 'fallecido';
         if (con) f.estadoCivil.value = 'casado';
         f.estadoCivil.disabled = con;
         f.querySelector('[data-civil-hint]').hidden = !con;
       };
       f.conyugeId.addEventListener('change', syncCivil);
+      f.estado.addEventListener('change', syncCivil);
       syncCivil();
       f.fechaBaja.required = f.estado.value === 'trasladado' || f.estado.value === 'fallecido';
       // al habilitar para diezmar a alguien que no lo estaba, cuenta desde hoy (se puede cambiar la fecha)
@@ -254,7 +256,7 @@ export function editarMiembro(ctx, m = null) {
     async onSubmit(f) {
       const d = formData(f);
       if (m) d.id = m.id;
-      if (f.conyugeId.value) d.estadoCivil = 'casado';
+      if (f.estadoCivil.disabled) d.estadoCivil = 'casado';
       delete d.anioIn;
       d.aniosInactivo = [...f.querySelectorAll('[name=anioIn]')].filter((c) => c.checked).map((c) => c.value).join(',');
       d.terceraEdad = d.estado === 'activo' && f.terceraEdad.checked;
@@ -263,7 +265,7 @@ export function editarMiembro(ctx, m = null) {
       d.trasladarConyuge = !f.querySelector('[data-traslado-conyuge]').hidden && f.trasladarConyuge.checked;
       const r = await call('saveMiembro', d);
       const enl = r?.enlazados?.length ? ` · enlazado en el listado (${r.enlazados.join(', ')})` : '';
-      toast((m ? 'Ficha actualizada' : 'Miembro agregado') + enl + (r?.conyugeTrasladado ? ` · también se trasladó ${r.conyugeTrasladado}` : ''));
+      toast((m ? 'Ficha actualizada' : 'Miembro agregado') + enl + (r?.conyugeTrasladado ? ` · también se trasladó ${r.conyugeTrasladado}` : '') + (r?.conyugeViudo ? ` · ${r.conyugeViudo} quedó como viudo/a` : ''));
       await ctx.refresh();
     }
   });

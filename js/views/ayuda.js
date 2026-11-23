@@ -27,7 +27,7 @@ const TEMAS = {
   tesorero: [
     {
       id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `
-      <p>Esta app reúne en un solo lugar la <b>administración</b> de la iglesia: la <b>tesorería general</b>, el <b>control de los fondos de cada ministerio</b>, la <b>ficha de los miembros</b> y la <b>asistencia</b>. Todo lo que se registra queda guardado automáticamente en la planilla de Google y las boletas en Google Drive.</p>
+      <p>Esta app reúne en un solo lugar la <b>administración</b> de la iglesia: la <b>tesorería general</b>, el <b>control de los fondos de cada ministerio</b>, la <b>ficha de los miembros</b> y la <b>asistencia</b>. Todo lo que se registra queda guardado en el servidor de la iglesia, y cada noche se copia a la planilla de Google como respaldo.</p>
       <h4>El ciclo de cada mes</h4>${FLUJO}
       <h4>Qué ve cada persona</h4>
       <ul class="hp-list">
@@ -125,6 +125,8 @@ const TEMAS = {
         <li><span class="badge st-sin">No diezma</span> no tiene diezmos en el año.</li>
         <li><span class="badge st-open">Inactivo en 2026</span> en su ficha se marcó ese año como inactivo: ese año no se evalúa (ni constante ni irregular).</li>
       </ul>
+      <h4>Reportes por WhatsApp</h4>
+      <p>Con ${btn('send', 'Reportes por WhatsApp')} se prepara un resumen personal del año para cada hermano activo y habilitado para diezmar (un matrimonio recibe uno solo, en el celular de cada uno): total del diezmo regular, meses con diezmo, diezmos especiales aparte, detalle por mes y su <b>aporte</b> en % de los ingresos de la iglesia en el período. Al tocar <b>Enviar</b> se abre WhatsApp con el mensaje listo y lo envías tú. El mensaje se puede editar, el botón queda como “Enviado” y <b>Reiniciar envíos</b> los vuelve a “Enviar”. Quien no tenga celular en su ficha aparece con “Agregar celular”.</p>
       <h4>Estadística del mes</h4>
       <p>Elige el <b>mes y el año</b> arriba (con las flechas o las listas). Verás el total diezmado y su variación frente al mes anterior, cuántos hermanos activos diezmaron y cuántos no, el promedio por hermano (un matrimonio cuenta como 2) y las listas de <b>quiénes diezmaron</b> y <b>quiénes no</b> ese mes. El gráfico <b>Mes a mes</b> muestra el total de cada mes del año y el % de hermanos que diezmó; toca una barra para ir a ese mes.</p>`
     },
@@ -183,10 +185,10 @@ const TEMAS = {
     {
       id: 'excel', titulo: 'Excel y respaldo', ico: 'sheet', html: `
       <ul class="hp-list">
-        <li><b>Planilla automática:</b> cada movimiento se guarda al instante en la planilla de Google. Ábrela con ${btn('sheet', 'Abrir planilla')} en el menú. La pestaña <b>Resumen</b> calcula totales por mes sola.</li>
+        <li><b>Planilla de respaldo:</b> cada noche se copian todos los datos a la planilla de Google, que queda solo para mirar (lo que se cambie directo ahí no llega a la página). La pestaña <b>Resumen</b> calcula totales por mes sola.</li>
         <li><b>Descargar planilla:</b> el botón ${btn('download', 'Descargar planilla')} del menú genera la planilla de la tesorería general del año elegido, con los datos al día: resumen con saldos y presupuesto, flujo de caja por categoría y mes, y todos los movimientos. Dentro de cada ministerio hay un botón igual con su planilla. Las fórmulas siguen funcionando si agregas filas en Excel.</li>
         <li><b>Respaldo completo:</b> en Configuración → General puedes descargar todos los datos en bruto (.xlsx).</li>
-        <li><b>Boletas:</b> se guardan en la carpeta privada <i>“Tesorería El Redentor · Boletas”</i> de Google Drive, ordenadas por ministerio y mes.</li>
+        <li><b>Boletas y comprobantes:</b> se guardan en un espacio privado del servidor, ordenados por ministerio y mes; solo los ve quien tiene permiso.</li>
       </ul>
       ${tip('No modifiques a mano las hojas de la planilla: la app usa la columna <b>id</b> para encontrar cada registro. Para corregir algo, hazlo desde la app.', 'warn')}`
     },

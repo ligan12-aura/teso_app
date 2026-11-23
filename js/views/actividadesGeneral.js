@@ -4,6 +4,7 @@
 import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, sinTildes } from '../ui.js';
 import { call } from '../api.js';
 import { abrirFormMovimiento } from './movform.js';
+import { activoHoy } from './miembros.js';
 
 export const actividadesGenerales = (data) => (data.actividades || []).filter((a) => !a.ministerioId);
 
@@ -98,7 +99,7 @@ function renderActividad(root, ctx, aid) {
   if (!a) { root.innerHTML = `${cabecera('actividades', 'Actividades', '', true)}${emptyState('Actividad no encontrada', 'alert')}`; return; }
   const r = resumenActividadGeneral(data, a);
   const mb = Object.fromEntries(data.miembros.map((m) => [m.id, m]));
-  const activosTot = data.miembros.filter((m) => m.estado === 'activo').length;
+  const activosTot = data.miembros.filter((m) => activoHoy(m, data.hoy)).length;
   const ins = [...r.ins].sort((x, y) => (mb[x.miembroId]?.nombre || '').localeCompare(mb[y.miembroId]?.nombre || '', 'es'));
   const cuotasMovs = r.movs.filter((x) => x.origen === 'cuota');
   const otros = r.movs.filter((x) => x.origen !== 'cuota').sort((x, y) => (y.fecha + y.creadoEn).localeCompare(x.fecha + x.creadoEn));
@@ -185,7 +186,7 @@ function renderActividad(root, ctx, aid) {
 
 function elegirConfirmados(ctx, a, r) {
   const ya = new Map(r.ins.map((x) => [x.miembroId, x]));
-  const lista = ctx.data.miembros.filter((m) => m.estado === 'activo' || ya.has(m.id)).sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
+  const lista = ctx.data.miembros.filter((m) => activoHoy(m, ctx.data.hoy) || ya.has(m.id)).sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
   if (!lista.length) return toast('Primero registra a los miembros de la iglesia', 'err');
   return modal({
     title: `Confirmados · ${esc(a.nombre)}`,

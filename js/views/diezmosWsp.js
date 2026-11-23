@@ -86,24 +86,28 @@ function ingresosIglesia(data, anio, n) {
 }
 
 export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
-  const conDiezmo = f.meses.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);
   // el mes en curso solo cuenta si ya tiene diezmo (mientras no termina, no es una falta)
   let evaluados = Math.max(1, Math.min(12, mesesPeriodo));
   if (anio === +hoy.slice(0, 4) && evaluados > 1 && !f.meses[evaluados - 1]) evaluados--;
   mesesPeriodo = evaluados;
+  const enPeriodo = f.meses.slice(0, evaluados);
+  const totalPeriodo = enPeriodo.reduce((a, v) => a + v, 0);
+  const adelantados = f.meses.map((v, i) => (v && i >= evaluados ? i : -1)).filter((i) => i >= 0);
   // aporte: lo que dio en el período (diezmo regular y especial) sobre todos los ingresos de la iglesia en esos meses
   const ing = data ? ingresosIglesia(data, anio, evaluados) : 0;
-  const dio = f.meses.slice(0, evaluados).reduce((a, v) => a + v, 0) + f.especiales;
+  const conDiezmo = enPeriodo.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);
+  const dio = totalPeriodo + f.especiales;
   const pct = ing ? (dio * 100) / ing : 0;
   const aporte = ing ? `${pct < 0.1 && dio ? 'menos de 0,1' : pct.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%` : '';
   const reemplazos = {
     nombre: f.saludo,
     anio: String(anio),
     periodo: periodoTexto(anio, mesesPeriodo, hoy),
-    total: money(f.total),
+    total: money(totalPeriodo),
     meses: conDiezmo.length ? `${conDiezmo.length} de ${evaluados}` : `aún no registramos diezmos en ${evaluados === 1 ? 'el mes' : `los ${evaluados} meses`}`,
     especiales: f.especiales ? `• Diezmos especiales (aparte): *${money(f.especiales)}*` : '',
-    detalle: conDiezmo.length ? 'Detalle por mes:\n' + conDiezmo.map((i) => `   ${MESES_C[i]}: ${money(f.meses[i])}`).join('\n') : '',
+    detalle: (conDiezmo.length ? 'Detalle por mes:\n' + conDiezmo.map((i) => `   ${MESES_C[i]}: ${money(f.meses[i])}`).join('\n') : '') +
+      (adelantados.length ? `${conDiezmo.length ? '\n' : ''}Además, adelantado: ${adelantados.map((i) => `${MESES_C[i]} ${money(f.meses[i])}`).join(', ')}` : ''),
     matrimonio: f.matrimonio ? '(diezmos del matrimonio)' : '',
     aporte
   };

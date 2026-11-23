@@ -59,7 +59,8 @@ export function abrirFormMovimiento(opts) {
     </div>`;
 
   return modal({
-    title: opts.titulo || (mov ? 'Editar movimiento' : 'Nuevo movimiento'),
+    // el título puede traer el nombre de una actividad o ministerio: siempre como texto
+    title: esc(opts.titulo || (mov ? 'Editar movimiento' : 'Nuevo movimiento')),
     body,
     submitLabel: mov ? 'Guardar cambios' : 'Registrar',
     onOpen(form) {

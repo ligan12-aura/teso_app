@@ -177,7 +177,7 @@ export function render(root, ctx) {
       <article class="card">
         <header class="card-head"><div><h3>Base de datos</h3></div></header>
         ${isDemo ? `<div class="note">${icon('sparkle', 16)} Estás en <b>modo demo</b>: los datos viven solo en este navegador. Para usar la app en serio, configura Google Sheets siguiendo el README del repositorio.</div>` : `
-        <p>Todos los datos se guardan automáticamente en una planilla de Google (compatible con Excel) y las boletas en una carpeta privada de Google Drive.</p>
+        <p>Los datos y las boletas se guardan en el servidor de la iglesia (Supabase). Cada noche se copian a una planilla de Google (compatible con Excel) como respaldo, solo para mirar.</p>
         ${data.extra?.sheetUrl ? `<a class="btn btn-ghost" href="${esc(data.extra.sheetUrl)}" target="_blank" rel="noopener">${icon('sheet', 16)} Abrir planilla</a>` : ''}`}
         <p class="muted small" style="margin-top:14px">La planilla con resumen, flujo de caja y movimientos se descarga con el botón “Descargar planilla” del menú (tesorería general) o dentro de cada ministerio.</p>
         <button class="btn btn-ghost btn-sm" data-respaldo style="margin-top:10px">${icon('download', 15)} Respaldo completo de datos (.xlsx)</button>
@@ -279,7 +279,7 @@ function editUsuario(ctx, u = null) {
         const esAdm = f.rol.value === 'admin';
         if (conGoogle) {
           f.querySelector('[data-pass-wrap]').hidden = !esAdm;
-          f.email.required = !esAdm;
+          f.email.required = !esAdm && (!f.activo || f.activo.checked);
           f.password.required = esAdm && !u?.id;
         } else f.password.required = !u;
         f.querySelector('[data-min]').hidden = f.rol.value !== 'lider';
@@ -287,7 +287,7 @@ function editUsuario(ctx, u = null) {
         const ayuda = f.querySelector('[data-rol-ayuda]');
         if (ayuda) ayuda.textContent = { lider: 'Solo ve y registra los movimientos de su ministerio.', tesorero: 'Acceso completo: tesorería, ministerios, diezmos, miembros y configuración.', pastor: 'Acceso completo, igual que el tesorero.', admin: 'Permiso para todo, y es el único que puede agregar, modificar o desactivar usuarios.', secretaria: 'Accede a Miembros (agregar y editar sus datos) y a Asistencia. No ve dinero ni diezmos.', discipulado: 'Solo ve la asistencia de su grupo de discipulado: la toma, la corrige y agrega visitas o no miembros. No ve Miembros, dinero ni otros grupos.' }[f.rol.value];
       };
-      f.rol.addEventListener('change', sync); sync();
+      f.rol.addEventListener('change', sync); f.activo?.addEventListener('change', sync); sync();
     },
     async onSubmit(f) {
       const d = formData(f);
