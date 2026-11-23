@@ -1,7 +1,7 @@
 // Actividades de la tesorería general (aniversario, retiro, venta…): cuota, confirmados (miembros de la iglesia),
 // pagos y gastos. Las cuotas entran como ingreso "Actividades" de la tesorería general; los gastos de la actividad
 // son movimientos de la tesorería asociados a ella.
-import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, sinTildes } from '../ui.js';
+import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, sinTildes, coincide } from '../ui.js';
 import { call } from '../api.js';
 import { abrirFormMovimiento } from './movform.js';
 import { activoHoy } from './miembros.js';
@@ -205,7 +205,7 @@ function elegirConfirmados(ctx, a, r) {
       cajas.forEach((c) => c.addEventListener('change', contar)); contar();
       f.querySelector('[data-buscar]').addEventListener('input', (e) => {
         const q = sinTildes(e.target.value);
-        f.querySelectorAll('.pick-list li').forEach((li) => { li.hidden = q && !li.dataset.nombre.includes(q); });
+        f.querySelectorAll('.pick-list li').forEach((li) => { li.hidden = q && !coincide(li.dataset.nombre, q); });
       });
       f.querySelector('[data-todos]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.closest('li').hidden) c.checked = true; }); contar(); });
       f.querySelector('[data-ninguno]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.disabled && !c.closest('li').hidden) c.checked = false; }); contar(); });

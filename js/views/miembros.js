@@ -1,5 +1,5 @@
 // Registro de miembros de la iglesia (solo tesorero): estado y datos de contacto
-import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha, esAdmin, sinTildes } from '../ui.js';
+import { icon, esc, modal, formData, toast, confirmar, emptyState, fecha, esAdmin, sinTildes, coincide } from '../ui.js';
 import { call } from '../api.js';
 import { cargarExcelJS } from '../planillaDescarga.js';
 
@@ -64,7 +64,7 @@ export function render(root, ctx) {
     if (filtros.estado === 'fallecidos' && m.estado !== 'fallecido') return false;
     if (filtros.estado === 'incompletas' && fichaCompleta(m)) return false;
     if (filtros.estado === 'nohab' && m.habilitadoDiezmo !== 'no') return false;
-    return !q || sinTildes(`${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas} ${m.rut || ''} ${String(m.rut || '').replace(/\./g, '')}`).includes(q)
+    return !q || coincide(`${m.nombre} ${m.celular} ${m.email} ${m.domicilio} ${m.notas} ${m.rut || ''} ${String(m.rut || '').replace(/\./g, '')}`, q)
       || (qRut.length >= 3 && /^[0-9k]+$/.test(qRut) && String(m.rut || '').toLowerCase().replace(/[^0-9k]/g, '').includes(qRut));
   });
 
@@ -547,7 +547,7 @@ function pintarCompleto(prev, ctx, filas) {
       const x = filas[+sel.dataset.fila];
       if (sel.value === 'buscar') {
         const q = prompt(`¿Con qué miembro de la app corresponde ${x.nombre}? Escribe parte de su nombre:`);
-        const hallados = q ? miembros.filter((m) => normalNombre(m.nombre).includes(normalNombre(q))) : [];
+        const hallados = q ? miembros.filter((m) => coincide(m.nombre, q)) : [];
         hallados.slice(0, 10).forEach((m) => { if (!x.sugeridos.includes(m.id)) x.sugeridos.push(m.id); });
         if (hallados.length === 1) { x.destino = hallados[0].id; x.como = 'elegido'; }
         else if (q && !hallados.length) toast('No encontré a nadie con ese nombre', 'err');

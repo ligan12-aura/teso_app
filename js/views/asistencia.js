@@ -2,7 +2,7 @@
 // hogares y reuniones de los ministerios con listado (p. ej. Jóvenes).
 // Se marca a los presentes y la app avisa quién lleva varias reuniones seguidas sin venir.
 // El mismo control se usa dentro de un ministerio (p. ej. Jóvenes) con los integrantes de su listado.
-import { icon, esc, modal, toast, confirmar, emptyState, fecha } from '../ui.js';
+import { icon, esc, modal, toast, confirmar, emptyState, fecha, coincide } from '../ui.js';
 import { call } from '../api.js';
 
 const BASE = ['Culto dominical', 'Escuela dominical'];
@@ -324,7 +324,7 @@ function renderAmbito(root, ctx, cfg, cabecera, redibujar) {
     root.querySelectorAll('.asist-tabla tbody tr').forEach((tr) => {
       const g = tr.dataset.grupo;
       const okF = vista.filtro === 'todos' || (vista.filtro === 'visita' ? g === 'visita' : g === vista.filtro);
-      tr.hidden = !okF || (q && !tr.dataset.nombre.includes(q));
+      tr.hidden = !okF || (q && !coincide(tr.dataset.nombre, q));
     });
   };
   root.querySelector('[data-q]').addEventListener('input', filtrar);
@@ -403,7 +403,7 @@ function tomarAsistencia(ctx, cfg, vista, sesion = null) {
         const t = f.querySelector('[data-tipo]').value;
         f.querySelectorAll('[data-lista] li').forEach((li) => {
           const chk = li.querySelector('input').checked;
-          li.hidden = (q && !li.dataset.nombre.includes(q)) || (t && li.dataset.tipo !== t) || (soloMarcados && !chk);
+          li.hidden = (q && !coincide(li.dataset.nombre, q)) || (t && li.dataset.tipo !== t) || (soloMarcados && !chk);
         });
       };
       const conectar = (root) => root.querySelectorAll('[name=p]').forEach((c) => c.addEventListener('change', contar));
@@ -685,7 +685,7 @@ function agregarMiembrosHogar(ctx, g) {
       const filtrar = () => {
         const q = norm(f.querySelector('[data-buscar]').value);
         const sg = f.querySelector('[data-sin-grupo]').checked;
-        f.querySelectorAll('[data-lista] li').forEach((li) => { li.hidden = (q && !li.dataset.nombre.includes(q)) || (sg && li.dataset.conGrupo === '1'); });
+        f.querySelectorAll('[data-lista] li').forEach((li) => { li.hidden = (q && !coincide(li.dataset.nombre, q)) || (sg && li.dataset.conGrupo === '1'); });
       };
       f.querySelector('[data-buscar]').addEventListener('input', filtrar);
       f.querySelector('[data-sin-grupo]').addEventListener('change', filtrar);

@@ -1,7 +1,7 @@
 // Reportes por WhatsApp: un resumen personal de los diezmos del año para cada hermano habilitado para diezmar
 // (un matrimonio recibe un solo resumen, en el celular de cada uno). La página arma el mensaje y abre WhatsApp
 // con el texto listo: quien envía es la persona de tesorería, desde su propio WhatsApp.
-import { icon, esc, money, modal, toast, sinTildes } from '../ui.js';
+import { icon, esc, money, modal, toast, sinTildes, coincide } from '../ui.js';
 import { resumenDiezmos, esDeMiembro, esEspecial, diezmosRegulares } from './diezmos.js';
 import { editarMiembro } from './miembros.js';
 
@@ -198,7 +198,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
         const { filas, mesesPeriodo } = filasReporte(data, anio);
         const env = enviados();
         const qq = sinTildes(q);
-        const vis = filas.filter((x) => !qq || sinTildes(x.nombre).includes(qq));
+        const vis = filas.filter((x) => !qq || coincide(x.nombre, qq));
         const conNum = filas.filter((x) => x.personas.some((p) => p.numero));
         const listos = filas.filter((x) => x.personas.some((p) => env[x.id + ':' + p.id]));
         f.querySelector('[data-resumen]').innerHTML = `<span><b>${filas.length}</b> ${filas.length === 1 ? 'resumen' : 'resúmenes'} ${periodoTexto(anio, mesesPeriodo, data.hoy)}</span><span><b>${conNum.length}</b> con celular</span>${filas.length - conNum.length ? `<span class="falta"><b>${filas.length - conNum.length}</b> sin celular</span>` : ''}<span><b>${listos.length}</b> enviado${listos.length === 1 ? '' : 's'}</span>${Object.keys(env).length ? `<button type="button" class="link-btn" data-reiniciar>${icon('undo', 13)} Reiniciar envíos</button>` : ''}`;

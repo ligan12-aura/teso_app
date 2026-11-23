@@ -20,6 +20,14 @@ export function moneyShort(n) {
 }
 // Para buscar: sin tildes ni mayúsculas ("Ramírez" = "ramirez", "Muñoz" = "munoz")
 export const sinTildes = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+// Buscadores: cada palabra escrita debe aparecer en el texto, en cualquier orden y sin importar tildes ni
+// mayúsculas ("sofia poblete" encuentra "Sofía Belén Poblete López")
+export const coincide = (texto, q) => {
+  const palabras = sinTildes(q).split(/\s+/).filter(Boolean);
+  if (!palabras.length) return true;
+  const t = sinTildes(texto);
+  return palabras.every((w) => t.includes(w));
+};
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];

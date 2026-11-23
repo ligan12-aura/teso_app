@@ -1,5 +1,5 @@
 // Control de diezmos por hermano (solo tesorero)
-import { icon, esc, money, moneyShort, modal, formData, toast, confirmar, emptyState, fecha, chart, COLOR, pesos, formatoPesos, cap, mesLargo, fileToPayload, verArchivo, sinTildes } from '../ui.js';
+import { icon, esc, money, moneyShort, modal, formData, toast, confirmar, emptyState, fecha, chart, COLOR, pesos, formatoPesos, cap, mesLargo, fileToPayload, verArchivo, sinTildes, coincide } from '../ui.js';
 import { isDemo } from '../api.js';
 import { call } from '../api.js';
 import { editarMiembro, inactivoEnAnio } from './miembros.js';
@@ -215,7 +215,7 @@ export function render(root, ctx) {
     } else filasTabla.push({ ...x, nombreFila: x.m.nombre });
   });
   filasTabla.sort((a, b) => a.nombreFila.localeCompare(b.nombreFila, 'es'));
-  const lista = filasTabla.filter((x) => (vista.inactivos || x.enPeriodo) && (vista.filtro === 'todos' || (x.enPeriodo && x.cat === vista.filtro)) && (!q || sinTildes(x.nombreFila).includes(q)));
+  const lista = filasTabla.filter((x) => (vista.inactivos || x.enPeriodo) && (vista.filtro === 'todos' || (x.enPeriodo && x.cat === vista.filtro)) && (!q || coincide(x.nombreFila, q)));
   const noHabAnio = todos.filter((x) => !x.habilitado && x.m.estado === 'activo').length;
   const maxCelda = Math.max(1, ...filasTabla.flatMap((x) => x.meses));
   const nomMes = cap(mesLargo(mes));
@@ -544,7 +544,7 @@ function registrarLote(ctx) {
       inputs.forEach((i) => { formatoPesos(i); i.addEventListener('input', upd); });
       f.querySelector('[data-buscar]').addEventListener('input', (e) => {
         const t = sinTildes(e.target.value);
-        f.querySelectorAll('.lote-lista li').forEach((li) => { li.hidden = t && !li.dataset.nombre.includes(t); });
+        f.querySelectorAll('.lote-lista li').forEach((li) => { li.hidden = t && !coincide(li.dataset.nombre, t); });
       });
     },
     async onSubmit(f) {

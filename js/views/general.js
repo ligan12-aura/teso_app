@@ -1,4 +1,4 @@
-import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState, sinTildes } from '../ui.js';
+import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState, sinTildes, coincide } from '../ui.js';
 import { call } from '../api.js';
 import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe, presupuestoGeneralMensual } from '../calc.js';
 import { PALETA } from '../ui.js';
@@ -60,7 +60,7 @@ export function render(root, ctx) {
   const q = sinTildes(filtros.q);
   const lista = periodoMovs
     .filter((m) => (!filtros.tipo || m.tipo === filtros.tipo) && (!filtros.categoria || m.categoria === filtros.categoria) && (!filtros.grupo || grupoDe(m.tipo, m.categoria) === filtros.grupo))
-    .filter((m) => !q || sinTildes(`${m.categoria} ${m.descripcion} ${m.medio}`).includes(q))
+    .filter((m) => !q || coincide(`${m.categoria} ${m.descripcion} ${m.medio}`, q))
     .sort((a, b) => (b.fecha + b.creadoEn).localeCompare(a.fecha + a.creadoEn));
   const s = split(periodoMovs);
   const saldoFinal = filtros.periodo === 'mes' ? saldoGeneralHasta(data, mes) : saldoGeneralHasta(data, `${anio}-12`);

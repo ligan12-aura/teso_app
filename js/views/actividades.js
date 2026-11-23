@@ -1,6 +1,6 @@
 // Listado de integrantes (p. ej. jóvenes) y actividades con cuota de un ministerio.
 // Lo usa el líder del ministerio y también tesorería/administración.
-import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, mesLargo, esAdmin, sinTildes } from '../ui.js';
+import { icon, esc, money, fecha, modal, formData, toast, confirmar, emptyState, pesos, formatoPesos, cap, mesLargo, esAdmin, sinTildes, coincide } from '../ui.js';
 import { rendicionDe } from '../calc.js';
 import { call } from '../api.js';
 import { abrirFormMovimiento } from './movform.js';
@@ -82,7 +82,7 @@ function renderIntegrantes(root, ctx, m, base, esTes) {
     if (filtros.tipo === 'miembros' && !(i.activo && i.esMiembro)) return false;
     if (filtros.tipo === 'nomiembros' && !(i.activo && !i.esMiembro)) return false;
     if (filtros.tipo === 'inactivos' && i.activo) return false;
-    return !q || sinTildes(`${i.nombre} ${i.celular} ${i.email}`).includes(q);
+    return !q || coincide(`${i.nombre} ${i.celular} ${i.email}`, q);
   });
   const lbl = etiquetaIntegrantes(m);
 
@@ -168,7 +168,7 @@ function agregarVariosMiembros(ctx, m) {
         f.querySelectorAll('.pick-list li').forEach((li) => {
           const e = li.dataset.edad === '' ? null : +li.dataset.edad;
           const soloMat = f.querySelector('[data-solo-mat]')?.checked;
-          li.hidden = (q && !li.dataset.nombre.includes(q)) || (max && (e == null || e > max)) || (soloMat && li.dataset.mat !== '1');
+          li.hidden = (q && !coincide(li.dataset.nombre, q)) || (max && (e == null || e > max)) || (soloMat && li.dataset.mat !== '1');
         });
       };
       cajas.forEach((c) => c.addEventListener('change', contar)); contar();
@@ -467,7 +467,7 @@ function elegirConfirmados(ctx, m, a, r) {
       cajas.forEach((c) => c.addEventListener('change', contar)); contar();
       f.querySelector('[data-buscar]').addEventListener('input', (e) => {
         const q = sinTildes(e.target.value);
-        f.querySelectorAll('.pick-list li').forEach((li) => { li.hidden = q && !li.dataset.nombre.includes(q); });
+        f.querySelectorAll('.pick-list li').forEach((li) => { li.hidden = q && !coincide(li.dataset.nombre, q); });
       });
       f.querySelector('[data-todos]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.closest('li').hidden) c.checked = true; }); contar(); });
       f.querySelector('[data-ninguno]').addEventListener('click', () => { cajas.forEach((c) => { if (!c.disabled && !c.closest('li').hidden) c.checked = false; }); contar(); });
