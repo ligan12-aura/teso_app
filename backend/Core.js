@@ -2030,17 +2030,36 @@ var TesoCore = (function () {
         if (g) update('MovimientosGenerales', g.id, { fecha: d.fecha, mes: d.fecha.slice(0, 7), monto: d.monto, medio: d.medio, categoria: catDiezmo(d), grupo: grupoDe('ingreso', catDiezmo(d)), descripcion: descDiezmo(d), actualizadoEn: now });
         return update('Diezmos', p.id, Object.assign(d, { actualizadoEn: now }));
       }
-      // diezmo de varios meses: un registro por mes, con el monto repartido
-      var n = Math.max(1, Math.min(12, Math.round(Number(p.meses) || 1)));
+      // diezmo de varios meses: un registro por mes, con el monto repartido en partes iguales.
+      // Los meses pueden venir elegidos uno a uno (mesesLista, p. ej. septiembre y noviembre) o como cantidad
+      // de meses seguidos desde "mes" (meses)
+      var lista;
+      if (Array.isArray(p.mesesLista) && p.mesesLista.length) {
+        lista = [];
+        p.mesesLista.forEach(function (m) {
+          m = String(m || '').trim();
+          if (!isMonth(m) || m < '2000-01' || m > sumarMeses(env.today().slice(0, 7), 12)) throw TesoError('Mes del diezmo inválido: ' + m);
+          if (lista.indexOf(m) < 0) lista.push(m);
+        });
+        if (lista.length > 12) throw TesoError('Elige como máximo 12 meses');
+        lista.sort();
+        d.mes = lista[0];
+      } else {
+        var cant = Math.max(1, Math.min(12, Math.round(Number(p.meses) || 1)));
+        lista = [];
+        for (var k = 0; k < cant; k++) lista.push(sumarMeses(d.mes, k));
+      }
+      var n = lista.length;
       if (n > 1 && d.especial === 'si') throw TesoError('Un diezmo especial es un ingreso de una sola vez: no se reparte en varios meses.');
       if (n > 1) {
         if (d.monto < n) throw TesoError('El monto es muy bajo para repartirlo en ' + n + ' meses');
         var partes = repartirMeses(d.monto, n);
-        var ultimoMes = sumarMeses(d.mes, n - 1);
+        var ultimoMes = lista[n - 1];
         if (ultimoMes > sumarMeses(env.today().slice(0, 7), 12)) throw TesoError('Los meses del diezmo no pueden ir más allá de un año desde hoy');
-        var nota = 'Diezmo de ' + n + ' meses (' + labelMes(d.mes) + ' a ' + labelMes(ultimoMes) + ')';
+        var seguidos = lista.every(function (m, i) { return i === 0 || m === sumarMeses(lista[i - 1], 1); });
+        var nota = 'Diezmo de ' + n + ' meses (' + (seguidos ? labelMes(d.mes) + ' a ' + labelMes(ultimoMes) : lista.map(labelMes).join(', ')) + ')';
         var creados = partes.map(function (monto, i) {
-          var x = Object.assign({}, d, { mes: sumarMeses(d.mes, i), monto: monto, notas: (d.notas ? d.notas + ' · ' : '') + nota, id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, archivoId: i === 0 ? archivoNuevo : '' });
+          var x = Object.assign({}, d, { mes: lista[i], monto: monto, notas: (d.notas ? d.notas + ' · ' : '') + nota, id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, archivoId: i === 0 ? archivoNuevo : '' });
           x.movGeneralId = p.sumarACaja ? ingresoDeDiezmo(user, x, x.id).id : '';
           return insert('Diezmos', x);
         });

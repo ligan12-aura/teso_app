@@ -1127,3 +1127,16 @@ body.is-login .guia-btn { display: none; }
 .ms-btn { display: inline-flex; align-items: center; justify-content: center; gap: 12px; width: 100%; max-width: 360px; height: 42px; padding: 0 14px; border: 1px solid #8c8c8c; border-radius: 999px; background: #fff; color: #5e5e5e; font: 600 15px/1 'Segoe UI', system-ui, sans-serif; cursor: pointer; }
 .ms-btn:hover { background: #f3f3f3; }
 .ms-btn.loading { opacity: .6; pointer-events: none; }
+
+/* Diezmo: elegir el mes o los meses tocándolos */
+.meses-diezmo { gap: 8px; }
+.md-anio { display: flex; align-items: center; justify-content: center; gap: 14px; font-family: var(--display); font-size: 15px; }
+.md-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.md-mes { position: relative; padding: 9px 0; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 600; font-size: 13.5px; cursor: pointer; transition: background-color .15s ease, border-color .15s ease, color .15s ease; }
+.md-mes:hover:not(:disabled) { border-color: var(--navy-3, var(--navy)); }
+.md-mes.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.md-mes:disabled { opacity: .35; cursor: not-allowed; }
+.md-ya { position: absolute; top: 4px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.md-mes.on .md-ya { background: var(--gold-2, #e8c26a); }
+@media (max-width: 420px) { .md-grid { grid-template-columns: repeat(4, 1fr); } }
+.md-ya.md-ya-ley { position: static; display: inline-block; vertical-align: middle; margin: 0 2px 1px 4px; }

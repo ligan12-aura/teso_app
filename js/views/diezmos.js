@@ -387,10 +387,14 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         <label class="field"><span>Monto ($)</span><input name="monto" inputmode="numeric" class="input-money" placeholder="0" required></label>
         <label class="field"><span>Fecha en que lo entregó</span><input type="date" name="fecha" value="${fechaDef}" max="${data.hoy}" required></label>
       </div>
-      <div class="form-row">
-        <label class="field"><span>Corresponde al mes de</span><input type="month" name="mes" value="${mes}" required><small class="hint">Por ejemplo, lo entrega en septiembre pero es el diezmo de julio.</small></label>
-        <label class="field" data-varios><span>¿Cuántos meses cubre?</span><select name="meses">${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">${i + 1 === 1 ? '1 mes' : `${i + 1} meses`}</option>`).join('')}</select><small class="hint" data-reparto></small></label>
+      <div class="field meses-diezmo">
+        <span>¿A qué mes o meses corresponde? <small class="muted" data-meses-ayuda>Toca uno o más meses</small></span>
+        <div class="md-anio"><button type="button" class="icon-btn sm" data-anio="-1" aria-label="Año anterior">${icon('chevL', 16)}</button><b data-anio-lbl></b><button type="button" class="icon-btn sm" data-anio="1" aria-label="Año siguiente">${icon('chevR', 16)}</button></div>
+        <div class="md-grid" data-meses role="group" aria-label="Meses del diezmo"></div>
+        <small class="hint" data-reparto></small>
       </div>
+      ${conyuge ? `<label class="check pareja-check"><input type="checkbox" name="matrimonio" checked> <span>💍 <b>Diezmo del matrimonio</b> con ${esc(conyuge.nombre)}<br><small class="muted">Cuenta como diezmo de ambos hermanos.</small></span></label>` : ''}
+      <label class="check especial-check"><input type="checkbox" name="especial"> <span>${icon('sparkle', 13)} <b>Diezmo especial</b> (ingreso extraordinario: herencia, bono, venta…)<br><small class="muted">Entra a la caja como “Diezmos especiales”, aparte del diezmo regular: no cuenta en promedios, comparaciones ni constancia. Es de un solo mes.</small></span></label>
       <div class="form-row">
         <label class="field"><span>Medio</span><select name="medio">${opcionesMedio(data)}</select></label>
         <label class="field"><span>Nota (opcional)</span><input name="notas" maxlength="200"></label>
@@ -405,25 +409,51 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
           </div>
         </label>
       </div>
-      <label class="check especial-check"><input type="checkbox" name="especial"> <span>${icon('sparkle', 13)} <b>Diezmo especial</b> (ingreso extraordinario: herencia, bono, venta…)<br><small class="muted">Entra a la caja como “Diezmos especiales”, aparte del diezmo regular: no cuenta en promedios, comparaciones ni constancia.</small></span></label>
-      ${conyuge ? `<label class="check pareja-check"><input type="checkbox" name="matrimonio" checked> <span>💍 <b>Diezmo del matrimonio</b> con ${esc(conyuge.nombre)}<br><small class="muted">Cuenta como diezmo de ambos hermanos.</small></span></label>` : ''}
       <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general, en la fecha en que se entregó)<br><small class="muted">Desmárcalo solo si ese dinero ya se registró en la tesorería por otra vía.</small></span></label>`,
     submitLabel: 'Registrar diezmo',
     onOpen(f, { close }) {
       formatoPesos(f.monto);
-      // reparto de un diezmo de varios meses
-      const MES_N = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-      const sumar = (mm, n) => { const t = +mm.slice(0, 4) * 12 + (+mm.slice(5, 7) - 1) + n; return `${Math.floor(t / 12)}-${pad((t % 12) + 1)}`; };
-      const reparto = () => {
-        const n = +f.meses.value, monto = pesos(f.monto.value), ini = f.mes.value;
-        if (n < 2 || !ini) { f.querySelector('[data-reparto]').textContent = ''; return; }
-        const fin = sumar(ini, n - 1);
-        f.querySelector('[data-reparto]').textContent = `Se registra un diezmo en cada mes, de ${MES_N[+ini.slice(5, 7) - 1]} a ${MES_N[+fin.slice(5, 7) - 1]} ${fin.slice(0, 4)}${monto ? `: ${money(Math.floor(monto / n))} por mes` : ''}.`;
+      // ---- meses del diezmo: se tocan uno o más (también no seguidos); el monto se reparte en partes iguales ----
+      const MES_C2 = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      const MES_L2 = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+      const tope = (() => { const t = +data.hoy.slice(0, 4) * 12 + (+data.hoy.slice(5, 7) - 1) + 12; return `${Math.floor(t / 12)}-${pad((t % 12) + 1)}`; })();
+      // meses en que este hermano (o su matrimonio) ya tiene diezmo: se marcan con un punto
+      const yaTiene = new Set(data.diezmos.filter((d) => esDeMiembro(d, m.id) || (conyuge && esDeMiembro(d, conyuge.id))).map((d) => d.mes || d.fecha.slice(0, 7)));
+      const elegidos = new Set([mes]);
+      let anioVista = +mes.slice(0, 4);
+      const unSolo = () => f.especial.checked || !!f.dataset.editId; // especial o corrección: un solo mes
+      const nombreMes = (mm) => `${MES_L2[+mm.slice(5, 7) - 1]}${mm.slice(0, 4) !== data.hoy.slice(0, 4) || [...elegidos].some((x) => x.slice(0, 4) !== mm.slice(0, 4)) ? ' ' + mm.slice(0, 4) : ''}`;
+      const lista = () => [...elegidos].sort();
+      const pintarMeses = () => {
+        f.querySelector('[data-anio-lbl]').textContent = anioVista;
+        f.querySelector('[data-anio="1"]').disabled = `${anioVista + 1}-01` > tope;
+        f.querySelector('[data-meses]').innerHTML = MES_C2.map((c, i) => {
+          const mm = `${anioVista}-${pad(i + 1)}`;
+          const on = elegidos.has(mm), fuera = mm > tope;
+          return `<button type="button" class="md-mes ${on ? 'on' : ''}" data-mes="${mm}" aria-pressed="${on}" ${fuera ? 'disabled' : ''} title="${MES_L2[i]} ${anioVista}${yaTiene.has(mm) ? ' · ya tiene diezmo' : ''}">${c}${yaTiene.has(mm) ? '<i class="md-ya" aria-hidden="true"></i>' : ''}</button>`;
+        }).join('');
+        const l = lista(), monto = pesos(f.monto.value);
+        f.querySelector('[data-meses-ayuda]').innerHTML = `${unSolo() ? 'Toca el mes' : 'Toca uno o más meses'}${yaTiene.size ? ' · <i class="md-ya md-ya-ley" aria-hidden="true"></i> ya tiene diezmo' : ''}`;
+        const txt = !l.length ? 'Elige al menos un mes.'
+          : l.length === 1 ? `Diezmo de ${nombreMes(l[0])}${l[0] !== data.hoy.slice(0, 7) && monto ? ` · ${money(monto)}` : ''}.`
+          : `Se reparte en ${l.length} meses (${l.map(nombreMes).join(', ').replace(/, ([^,]*)$/, ' y $1')})${monto ? `: ${money(Math.floor(monto / l.length))} por mes` : ''}.`;
+        f.querySelector('[data-reparto]').textContent = txt;
       };
-      ['input', 'change'].forEach((ev) => { f.monto.addEventListener(ev, reparto); f.meses.addEventListener(ev, reparto); f.mes.addEventListener(ev, reparto); });
-      // un diezmo especial es de una sola vez: no se reparte en meses
-      const syncEspecial = () => { const esp = f.especial.checked; if (esp) { f.meses.value = '1'; reparto(); } f.querySelector('[data-varios]').hidden = esp || !!f.dataset.editId; };
-      f.especial.addEventListener('change', syncEspecial);
+      f.querySelector('[data-meses]').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-mes]');
+        if (!b || b.disabled) return;
+        const mm = b.dataset.mes;
+        if (unSolo()) { elegidos.clear(); elegidos.add(mm); }
+        else if (elegidos.has(mm)) elegidos.delete(mm);
+        else elegidos.add(mm);
+        pintarMeses();
+      });
+      f.querySelectorAll('[data-anio]').forEach((b) => b.addEventListener('click', () => { anioVista += +b.dataset.anio; pintarMeses(); }));
+      ['input', 'change'].forEach((ev) => f.monto.addEventListener(ev, pintarMeses));
+      // un diezmo especial es de una sola vez: queda un solo mes (el primero elegido)
+      f.especial.addEventListener('change', () => { if (unSolo() && elegidos.size > 1) { const p0 = lista()[0]; elegidos.clear(); elegidos.add(p0); } pintarMeses(); });
+      pintarMeses();
+      f._mesesElegidos = lista;
       const file = f.archivo;
       const prev = f.querySelector('.upload-preview');
       file.addEventListener('change', async () => {
@@ -449,9 +479,9 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         f.querySelector('[data-editando]').hidden = true;
         cajaCheck.hidden = false;
         f.fecha.readOnly = false;
-        f.monto.value = ''; f.notas.value = ''; f.fecha.value = fechaDef; f.mes.value = mes;
+        f.monto.value = ''; f.notas.value = ''; f.fecha.value = fechaDef;
         f.especial.checked = false;
-        f.querySelector('[data-varios]').hidden = false;
+        elegidos.clear(); elegidos.add(mes); anioVista = +mes.slice(0, 4); pintarMeses();
         btnGuardar.textContent = 'Registrar diezmo';
       };
       f.querySelector('[data-cancelar-ed]').addEventListener('click', salirEdicion);
@@ -461,9 +491,9 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         f.dataset.editId = reg.id;
         f.monto.value = Number(reg.monto).toLocaleString('es-CL');
         f.fecha.value = reg.fecha;
-        f.mes.value = reg.mes || reg.fecha.slice(0, 7);
         // al corregir se edita ese registro (un solo mes)
-        f.meses.value = '1'; f.querySelector('[data-varios]').hidden = true; reparto();
+        const mr = reg.mes || reg.fecha.slice(0, 7);
+        elegidos.clear(); elegidos.add(mr); anioVista = +mr.slice(0, 4);
         if ([...f.medio.options].some((o) => o.value === reg.medio)) f.medio.value = reg.medio;
         f.notas.value = reg.notas || '';
         f.especial.checked = esEspecial(reg);
@@ -474,6 +504,7 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         cajaCheck.hidden = true;
         f.querySelector('[data-ed-fecha]').textContent = fecha(reg.fecha);
         f.querySelector('[data-editando]').hidden = false;
+        pintarMeses();
         btnGuardar.textContent = 'Guardar corrección';
         f.monto.focus();
       }));
@@ -491,6 +522,8 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
       if (!d.monto) throw new Error('Ingresa el monto');
       delete d.matrimonio;
       d.especial = !!f.especial.checked;
+      const meses = f._mesesElegidos();
+      if (!meses.length) throw new Error('Elige el mes o los meses a los que corresponde el diezmo');
       const comp = f.archivo._payload;
       if (comp) d.archivo = { nombre: comp.nombre, mime: comp.mime, base64: comp.base64 };
       const editId = f.dataset.editId;
@@ -499,13 +532,13 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         const titular = reg?.miembroId || m.id;
         const otro = titular === m.id ? conyuge?.id : m.id;
         const conyugeId = conyuge ? (f.matrimonio?.checked ? otro : '') : (reg?.conyugeId || '');
-        delete d.sumarACaja; delete d.meses;
-        await call('saveDiezmo', { id: editId, miembroId: reg?.miembroId || m.id, conyugeId, ...d });
+        delete d.sumarACaja;
+        await call('saveDiezmo', { id: editId, miembroId: reg?.miembroId || m.id, conyugeId, ...d, mes: meses[0] });
         toast('Diezmo corregido');
         await ctx.refresh();
         return;
       }
-      const r = await call('saveDiezmo', { miembroId: m.id, conyugeId: conyuge && f.matrimonio?.checked ? conyuge.id : '', ...d, meses: +d.meses || 1, sumarACaja: !!f.sumarACaja.checked });
+      const r = await call('saveDiezmo', { miembroId: m.id, conyugeId: conyuge && f.matrimonio?.checked ? conyuge.id : '', ...d, mes: meses[0], mesesLista: meses, sumarACaja: !!f.sumarACaja.checked });
       toast(`${r?.creados > 1 ? `Diezmo repartido en ${r.creados} meses` : d.especial ? 'Diezmo especial registrado' : 'Diezmo registrado'}${f.sumarACaja.checked ? ' y sumado a la caja' : ''}`);
       await ctx.refresh();
     }
