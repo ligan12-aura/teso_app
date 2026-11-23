@@ -7,8 +7,10 @@ import { editarMiembro } from './miembros.js';
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-const CLAVE_PLANTILLA = 'teso_wsp_plantilla_v2';
-const PLANTILLA = `Hola {nombre} 👋, bendiciones.
+const CLAVE_PLANTILLA = 'teso_wsp_plantilla_v3';
+// Frase para quien es irregular o no diezma en el período (constancia: misma regla que Diezmos, 80 % de los meses)
+const FRASE_ANIMO = '¡Te animamos a ser constante con tu diezmo!';
+const PLANTILLA = `Hola {nombre}, bendiciones.
 
 Te compartimos el resumen de tus diezmos {periodo} en la Iglesia Bautista El Redentor:
 
@@ -19,13 +21,25 @@ Te compartimos el resumen de tus diezmos {periodo} en la Iglesia Bautista El Red
 
 {detalle}
 
-¡Gracias por tu fidelidad y por sostener la obra del Señor! 🙏
+{animo}
+
+¡Gracias por tu fidelidad y por sostener la obra del Señor!
 "Cada uno dé como propuso en su corazón… porque Dios ama al dador alegre" (2 Co 9:7)
 
 Tesorería · Iglesia Bautista El Redentor
 (Mensaje confidencial, solo para ti)`;
 
 const leer = (k, def) => { try { return localStorage.getItem(k) ?? def; } catch { return def; } };
+// Mensaje editado con la versión anterior: se conserva, sin emojis y con la frase de ánimo antes del agradecimiento
+function plantillaGuardada() {
+  const actual = leer(CLAVE_PLANTILLA, null);
+  if (actual !== null) return actual;
+  const vieja = leer('teso_wsp_plantilla_v2', null);
+  if (vieja === null) return PLANTILLA;
+  let t = vieja.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').replace(/[ \t]+([,.!?])/g, '$1').replace(/[ \t]+\n/g, '\n');
+  if (!t.includes('{animo}')) t = /¡Gracias/.test(t) ? t.replace(/¡Gracias/, '{animo}\n\n¡Gracias') : t + '\n\n{animo}';
+  return t;
+}
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } };
 
 // Celular chileno → número para WhatsApp (569XXXXXXXX). null si no se puede usar.
@@ -62,12 +76,13 @@ export function filasReporte(data, anio) {
     regulares.filter((d) => delAnio(d) && es(d)).forEach((d) => { meses[+mesDe(d).slice(5, 7) - 1] += d.monto; });
     const esp = especiales.filter((d) => delAnio(d) && es(d)).reduce((a, d) => a + d.monto, 0);
     const personas = pareja ? [x.m, pareja.m] : [x.m];
+    const desde = pareja ? Math.min(x.activoDesde, pareja.activoDesde) : x.activoDesde;
     filas.push({
       id: ids.join('+'),
       nombre: personas.map((p) => p.nombre).join(' y '),
       saludo: personas.map((p) => p.nombre.split(' ')[0]).join(' y '),
       personas: personas.map((p) => ({ id: p.id, nombre: p.nombre, celular: p.celular || '', numero: numeroWsp(p.celular) })),
-      meses, total: meses.reduce((a, v) => a + v, 0), especiales: esp, matrimonio: !!pareja
+      meses, total: meses.reduce((a, v) => a + v, 0), especiales: esp, matrimonio: !!pareja, desde
     });
   });
   return { filas, mesesPeriodo };
@@ -99,6 +114,11 @@ export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
   const dio = totalPeriodo + f.especiales;
   const pct = ing ? (dio * 100) / ing : 0;
   const aporte = ing ? `${pct < 0.1 && dio ? 'menos de 0,1' : pct.toLocaleString('es-CL', { maximumFractionDigits: 1 })}%` : '';
+  // constante = diezmó en al menos el 80 % de los meses evaluados (desde que cuenta); si no, frase de ánimo
+  const desde = Math.max(0, Math.min(f.desde || 0, evaluados));
+  const evalFila = evaluados - desde;
+  const conEnFila = f.meses.slice(desde, evaluados).filter(Boolean).length;
+  const animo = evalFila > 0 && conEnFila / evalFila < 0.8 ? FRASE_ANIMO : '';
   const reemplazos = {
     nombre: f.saludo,
     anio: String(anio),
@@ -109,7 +129,8 @@ export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
     detalle: (conDiezmo.length ? 'Detalle por mes:\n' + conDiezmo.map((i) => `   ${MESES_C[i]}: ${money(f.meses[i])}`).join('\n') : '') +
       (adelantados.length ? `${conDiezmo.length ? '\n' : ''}Además, adelantado: ${adelantados.map((i) => `${MESES_C[i]} ${money(f.meses[i])}`).join(', ')}` : ''),
     matrimonio: f.matrimonio ? '(diezmos del matrimonio)' : '',
-    aporte
+    aporte,
+    animo
   };
   const rellenar = (l) => l.replace(/\{(\w+)\}/g, (m, k) => (k in reemplazos ? reemplazos[k] : m));
   return plantilla.split('\n')
@@ -124,7 +145,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
   const hoyY = +data.hoy.slice(0, 4);
   const anios = [...new Set([hoyY, anioInicial, ...data.diezmos.map((d) => +(d.mes || d.fecha).slice(0, 4))])].filter(Boolean).sort((a, b) => b - a);
   let anio = anioInicial || hoyY;
-  let plantilla = leer(CLAVE_PLANTILLA, PLANTILLA);
+  let plantilla = plantillaGuardada();
   let q = '';
   const claveEnviados = () => `teso_wsp_enviados_${anio}`;
   const enviados = () => { try { return JSON.parse(leer(claveEnviados(), '{}')) || {}; } catch { return {}; } };
@@ -142,7 +163,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
       <details class="wsp-plantilla">
         <summary>${icon('edit', 14)} Editar el mensaje</summary>
         <textarea data-plantilla rows="14">${esc(plantilla)}</textarea>
-        <p class="muted small">Puedes usar: <code>{nombre}</code> <code>{periodo}</code> <code>{total}</code> <code>{meses}</code> <code>{especiales}</code> <code>{detalle}</code> <code>{aporte}</code> <code>{anio}</code>. Si un dato no aplica (por ejemplo, sin diezmos especiales), esa línea se quita sola. <button type="button" class="link-btn" data-restaurar>Volver al mensaje original</button></p>
+        <p class="muted small">Puedes usar: <code>{nombre}</code> <code>{periodo}</code> <code>{total}</code> <code>{meses}</code> <code>{especiales}</code> <code>{detalle}</code> <code>{aporte}</code> <code>{animo}</code> (frase de ánimo para quien es irregular o no diezma) <code>{anio}</code>. Si un dato no aplica (por ejemplo, sin diezmos especiales), esa línea se quita sola. <button type="button" class="link-btn" data-restaurar>Volver al mensaje original</button></p>
       </details>
       <div class="wsp-resumen" data-resumen></div>
       <ul class="wsp-lista" data-lista></ul>
