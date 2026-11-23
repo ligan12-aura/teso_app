@@ -16,7 +16,7 @@ var TesoCore = (function () {
   // Esquema de datos (cada tabla = una hoja del Excel/Google Sheet)
   // ---------------------------------------------------------------
   var TABLES = {
-    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde', 'grupoId', 'ministerioIds'],
+    Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde', 'grupoId', 'ministerioIds', 'email2'],
     Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn', 'presupuestoMensual', 'actividades', 'porMatrimonio'],
     MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo', 'actividadId'],
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'actividadId'],
@@ -194,7 +194,7 @@ var TesoCore = (function () {
   }
   function lideraMin(u, mid) { return !!u && !!mid && idsMinisterios(u).indexOf(String(mid)) >= 0 && (u.rol === 'lider' || ADMIN.indexOf(u.rol) >= 0); }
   function publicUser(u) {
-    return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, ministerioIds: idsMinisterios(u), grupoId: u.grupoId || '', email: u.email, activo: u.activo, debeCambiarPass: u.debeCambiarPass };
+    return { id: u.id, nombre: u.nombre, usuario: u.usuario, rol: u.rol, ministerioId: u.ministerioId, ministerioIds: idsMinisterios(u), grupoId: u.grupoId || '', email: u.email, email2: u.email2 || '', activo: u.activo, debeCambiarPass: u.debeCambiarPass };
   }
 
   // ---------------------------------------------------------------
@@ -306,7 +306,7 @@ var TesoCore = (function () {
       var correo = normalCorreo(idg.email);
       var clave = 'google:' + correo;
       exigirNoBloqueado(clave);
-      var coinciden = all('Usuarios').filter(function (x) { return normalCorreo(x.email) === correo && x.activo; });
+      var coinciden = all('Usuarios').filter(function (x) { return (normalCorreo(x.email) === correo || normalCorreo(x.email2) === correo) && x.activo; });
       // un correo identifica a una sola persona: si está en varios usuarios, no se adivina con qué rol entra
       if (coinciden.length > 1) throw TesoError('La cuenta ' + correo + ' está registrada en más de un usuario (' + coinciden.map(function (x) { return x.usuario; }).join(', ') + '). El administrador debe dejarla en uno solo (Configuración → Usuarios).');
       var u = coinciden[0];
@@ -2236,9 +2236,15 @@ var TesoCore = (function () {
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw TesoError('El correo no parece válido');
       var quedaActivo = p.activo === undefined ? true : toBool(p.activo);
       if (env.soloGoogle && !email && rol !== 'admin' && quedaActivo) throw TesoError('Ingresa el correo de Google con que entrará esta persona');
-      var dupMail = email && all('Usuarios').filter(function (u) { return normalCorreo(u.email) === email && u.id !== p.id; })[0];
+      // correo alternativo (opcional): entra con cualquiera de los dos; ninguno puede estar en otro usuario
+      var email2 = normalCorreo(p.email2);
+      if (email2 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email2)) throw TesoError('El correo alternativo no parece válido');
+      if (email2 && !email) { email = email2; email2 = ''; }
+      if (email2 && email2 === email) email2 = '';
+      var usaCorreo = function (c) { return c && all('Usuarios').filter(function (u) { return u.id !== p.id && (normalCorreo(u.email) === c || normalCorreo(u.email2) === c); })[0]; };
+      var dupMail = usaCorreo(email) || usaCorreo(email2);
       if (dupMail) throw TesoError('Ese correo ya lo usa ' + dupMail.nombre);
-      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, ministerioIds: listaMin.join(','), grupoId: grupoId, email: email, activo: p.activo === undefined ? true : toBool(p.activo) };
+      var d = { nombre: nombre, usuario: usuario, rol: rol, ministerioId: ministerioId, ministerioIds: listaMin.join(','), grupoId: grupoId, email: email, email2: email2, activo: p.activo === undefined ? true : toBool(p.activo) };
       if (p.id === user.id && (!d.activo || ADMIN.indexOf(d.rol) < 0)) throw TesoError('No puedes quitarte a ti mismo el acceso completo ni desactivarte');
       if (p.id === user.id && user.rol === 'admin' && d.rol !== 'admin') throw TesoError('No puedes quitarte a ti mismo el rol de administrador: pídeselo a otro administrador');
       var pass = String(p.password || '');
