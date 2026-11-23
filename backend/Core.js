@@ -2188,9 +2188,22 @@ var TesoCore = (function () {
     // activo, tesorero y pastor pueden hacerlo (para crear el primero).
     function hayAdminActivo() { return all('Usuarios').some(function (u) { return u.rol === 'admin' && toBool(u.activo); }); }
     function puedeGestionarUsuarios(user) { return user.rol === 'admin' || (ADMIN.indexOf(user.rol) >= 0 && !hayAdminActivo()); }
+    function usuarioDesdeCorreo(email, id) {
+      var base = String(email || '').split('@')[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9._-]+/g, '.').replace(/^[._-]+|[._-]+$/g, '').slice(0, 26);
+      if (base.length < 3) base = (base + 'usuario').slice(0, 26);
+      var usados = {};
+      all('Usuarios').forEach(function (u) { if (u.id !== id) usados[u.usuario] = true; });
+      var cand = base, n = 2;
+      while (usados[cand]) cand = base + n++;
+      return cand;
+    }
     function saveUsuario(user, p) {
       if (!puedeGestionarUsuarios(user)) throw TesoError('Solo el administrador puede agregar, modificar o desactivar usuarios', 'FORBIDDEN');
       var usuario = String(p.usuario || '').trim().toLowerCase();
+      // Con el ingreso con Google, quien no es administrador no necesita nombre de usuario para entrar:
+      // si no viene, se genera desde su correo (juan.perez@gmail.com → juan.perez, juan.perez2…)
+      if (!usuario && env.soloGoogle && p.rol !== 'admin') usuario = usuarioDesdeCorreo(p.email, p.id);
       if (!/^[a-z0-9._-]{3,30}$/.test(usuario)) throw TesoError('El usuario debe tener 3-30 caracteres (letras, números, punto o guion)');
       var nombre = String(p.nombre || '').trim();
       if (!nombre) throw TesoError('Ingresa el nombre');

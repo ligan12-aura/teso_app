@@ -257,7 +257,7 @@ function editUsuario(ctx, u = null) {
     body: `
       <label class="field"><span>Nombre completo</span><input name="nombre" value="${esc(u?.nombre || '')}" required></label>
       <div class="form-row">
-        <label class="field"><span>Usuario (para ingresar)</span><input name="usuario" value="${esc(u?.usuario || '')}" autocapitalize="none" required placeholder="ej: alabanza"></label>
+        <label class="field" data-usuario-wrap><span>${conGoogle ? 'Usuario (para el ingreso de respaldo)' : 'Usuario (para ingresar)'}</span><input name="usuario" value="${esc(u?.usuario || '')}" autocapitalize="none" required placeholder="ej: alabanza"></label>
         <label class="field"><span>Rol</span><select name="rol">${[['lider', 'Líder de ministerio'], ['tesorero', 'Tesorero'], ['pastor', 'Pastor'], ['admin', 'Administrador (todo)'], ['secretaria', 'Secretaría (miembros y asistencia)'], ['discipulado', 'Líder de discipulado (asistencia de su grupo)']].map(([v, l]) => `<option value="${v}" ${(u?.rol || 'lider') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
       <p class="muted small" data-rol-ayuda style="margin-top:-6px"></p>
@@ -281,6 +281,9 @@ function editUsuario(ctx, u = null) {
           f.querySelector('[data-pass-wrap]').hidden = !esAdm;
           f.email.required = !esAdm && (!f.activo || f.activo.checked);
           f.password.required = esAdm && !u?.id;
+          // quien entra con Google no necesita nombre de usuario: se genera desde su correo (el existente se conserva)
+          f.querySelector('[data-usuario-wrap]').hidden = !esAdm;
+          f.usuario.required = esAdm;
         } else f.password.required = !u;
         f.querySelector('[data-min]').hidden = f.rol.value !== 'lider';
         f.querySelector('[data-grupo]').hidden = f.rol.value !== 'discipulado';
