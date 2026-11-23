@@ -16,7 +16,7 @@ export function edad(fn, hoy) {
   const [hy, hm, hd] = hoy.split('-').map(Number);
   return hy - y - (hm < m || (hm === m && hd < d) ? 1 : 0);
 }
-export const ESTADOS_CIVILES = [['soltero', 'Soltero/a'], ['casado', 'Casado/a'], ['conviviente', 'Conviviente civil'], ['separado', 'Separado/a'], ['divorciado', 'Divorciado/a'], ['viudo', 'Viudo/a']];
+export const ESTADOS_CIVILES = [['soltero', 'Soltero/a'], ['casado', 'Casado/a'], ['separado', 'Separado/a'], ['divorciado', 'Divorciado/a'], ['viudo', 'Viudo/a']];
 export const estadoCivilTexto = (v) => (ESTADOS_CIVILES.find(([k]) => k === v) || [, ''])[1];
 // RUT chileno: normaliza a 12.345.678-9 y revisa el dígito verificador (null = inválido, '' = vacío)
 export function rutNormal(v) {
@@ -167,7 +167,7 @@ export function editarMiembro(ctx, m = null) {
       <div class="note" data-traslado-nota ${m?.estado === 'trasladado' ? '' : 'hidden'}>${icon('heart', 15)}<span>Sus diezmos cuentan en la estadística hasta la fecha del traslado; desde ahí deja de contarse. También deja de aparecer en la asistencia, los discipulados y los listados de ministerios.</span></div>
       <div class="form-row">
         <label class="field"><span>Fecha de nacimiento</span><input type="date" name="fechaNacimiento" value="${esc(m?.fechaNacimiento || '')}" max="${ctx.data.hoy}"></label>
-        <label class="field"><span>Estado civil</span><select name="estadoCivil"><option value="">— Sin dato —</option>${ESTADOS_CIVILES.map(([k, l]) => `<option value="${k}" ${m?.estadoCivil === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field"><span>Estado civil</span><select name="estadoCivil"><option value="">— Sin dato —</option>${ESTADOS_CIVILES.map(([k, l]) => `<option value="${k}" ${(m?.conyugeId ? 'casado' : m?.estadoCivil) === k ? 'selected' : ''}>${l}</option>`).join('')}</select><small class="hint" data-civil-hint hidden>Tiene cónyuge registrado: queda como casado/a.</small></label>
       </div>
       <div class="form-row">
         <label class="field"><span>Celular</span><input name="celular" inputmode="tel" placeholder="+56 9 1234 5678" value="${esc(m?.celular || '')}"></label>
@@ -227,6 +227,15 @@ export function editarMiembro(ctx, m = null) {
       };
       f.conyugeId.addEventListener('change', syncConyuge);
       syncConyuge();
+      // con cónyuge registrado el estado civil es casado (no se puede cambiar mientras tenga cónyuge)
+      const syncCivil = () => {
+        const con = !!f.conyugeId.value;
+        if (con) f.estadoCivil.value = 'casado';
+        f.estadoCivil.disabled = con;
+        f.querySelector('[data-civil-hint]').hidden = !con;
+      };
+      f.conyugeId.addEventListener('change', syncCivil);
+      syncCivil();
       f.fechaBaja.required = f.estado.value === 'trasladado' || f.estado.value === 'fallecido';
       // al habilitar para diezmar a alguien que no lo estaba, cuenta desde hoy (se puede cambiar la fecha)
       f.habilitadoDiezmo.addEventListener('change', () => {
@@ -245,6 +254,7 @@ export function editarMiembro(ctx, m = null) {
     async onSubmit(f) {
       const d = formData(f);
       if (m) d.id = m.id;
+      if (f.conyugeId.value) d.estadoCivil = 'casado';
       delete d.anioIn;
       d.aniosInactivo = [...f.querySelectorAll('[name=anioIn]')].filter((c) => c.checked).map((c) => c.value).join(',');
       d.terceraEdad = d.estado === 'activo' && f.terceraEdad.checked;

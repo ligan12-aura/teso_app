@@ -1582,10 +1582,10 @@ var TesoCore = (function () {
     function rutRepetido(rut, id) {
       return rut ? all('Miembros').filter(function (m) { return m.rut === rut && m.id !== id; })[0] : null;
     }
-    var ESTADOS_CIVILES = ['soltero', 'casado', 'conviviente', 'separado', 'divorciado', 'viudo'];
+    // (sin "conviviente civil": quien tiene cónyuge registrado queda casado)
+    var ESTADOS_CIVILES = ['soltero', 'casado', 'separado', 'divorciado', 'viudo'];
     function estadoCivilValido(v) {
       var k = normalNombre(v).toLowerCase().replace(/\/a$|\(a\)$/, '');
-      if (/^conviviente/.test(k)) k = 'conviviente';
       if (/^solter/.test(k)) k = 'soltero';
       if (/^casad/.test(k)) k = 'casado';
       if (/^viud/.test(k)) k = 'viudo';
@@ -1594,6 +1594,7 @@ var TesoCore = (function () {
       return ESTADOS_CIVILES.indexOf(k) >= 0 ? k : '';
     }
     // Une a dos miembros como matrimonio (vínculo en ambos sentidos). cid vacío = deshacer.
+    // Quien tiene cónyuge registrado queda con estado civil "casado" (los dos).
     function vincularConyuge(mid, cid) {
       cid = String(cid || '');
       if (cid === mid) throw TesoError('Un miembro no puede ser su propio cónyuge');
@@ -1610,7 +1611,8 @@ var TesoCore = (function () {
           var exOtro = find('Miembros', otro.conyugeId);
           if (exOtro && exOtro.conyugeId === cid) update('Miembros', exOtro.id, { conyugeId: '' });
         }
-        update('Miembros', cid, { conyugeId: mid });
+        update('Miembros', cid, { conyugeId: mid, estadoCivil: 'casado' });
+        return update('Miembros', mid, { conyugeId: cid, estadoCivil: 'casado' });
       }
       return update('Miembros', mid, { conyugeId: cid });
     }
@@ -1732,8 +1734,9 @@ var TesoCore = (function () {
       });
       // cónyuge
       if (!queda.conyugeId && sale.conyugeId && sale.conyugeId !== queda.id) patch.conyugeId = sale.conyugeId;
-      all('Miembros').forEach(function (m) { if (m.conyugeId === sale.id && m.id !== queda.id) update('Miembros', m.id, { conyugeId: patch.conyugeId === m.id || !queda.conyugeId ? queda.id : '' }); });
+      all('Miembros').forEach(function (m) { if (m.conyugeId === sale.id && m.id !== queda.id) { var conQ = patch.conyugeId === m.id || !queda.conyugeId; update('Miembros', m.id, conQ ? { conyugeId: queda.id, estadoCivil: 'casado' } : { conyugeId: '' }); } });
       if (patch.conyugeId === undefined && queda.conyugeId === sale.id) patch.conyugeId = '';
+      if (patch.conyugeId || (patch.conyugeId === undefined && queda.conyugeId)) patch.estadoCivil = 'casado';
       // diezmos
       var diezmos = 0;
       all('Diezmos').forEach(function (d) {
@@ -2292,6 +2295,19 @@ var TesoCore = (function () {
       isWrite: function (a) { return !!(ACTIONS[a] && ACTIONS[a].write); },
       // Uso interno del servidor (no accesible desde la página)
       interno: {
+        // Quien tiene cónyuge registrado (vínculo en ambos sentidos) queda casado; "conviviente" ya no existe:
+        // pasa a casado si tiene cónyuge, si no queda sin dato
+        corregirEstadosCiviles: function () {
+          var porId = {}, n = 0;
+          all('Miembros').forEach(function (m) { porId[m.id] = m; });
+          Object.keys(porId).forEach(function (id) {
+            var m = porId[id], c = m.conyugeId && porId[m.conyugeId];
+            var casado = !!(c && c.conyugeId === m.id);
+            var nuevo = casado ? 'casado' : (m.estadoCivil === 'conviviente' ? '' : m.estadoCivil || '');
+            if (nuevo !== (m.estadoCivil || '')) { update('Miembros', m.id, { estadoCivil: nuevo }); n++; }
+          });
+          return n;
+        },
         resumen: function () {
           var porMes = {};
           all('MovimientosGenerales').forEach(function (m) { var k = m.mes + ' ' + m.origen; porMes[k] = (porMes[k] || 0) + 1; });

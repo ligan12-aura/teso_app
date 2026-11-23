@@ -20,7 +20,7 @@ var PROP_SECRET = 'TOKEN_SECRET';
 var PROP_SCHEMA = 'SCHEMA_VERSION';
 // Súbelo cada vez que cambien las columnas (TABLES) o la hoja Resumen:
 // el servidor se actualiza solo en la siguiente solicitud, sin ejecutar setup().
-var SCHEMA_VERSION = '23';
+var SCHEMA_VERSION = '24';
 
 // =================================================================
 // Instalación inicial — ejecutar UNA vez desde el editor
@@ -171,12 +171,18 @@ function migrarSiHaceFalta_() {
     Object.keys(TesoCore.TABLES).forEach(function (name) { ensureSheet_(ss, name); });
     rellenarGrupos_(ss);
     activarActividadesJovenes_(ss);
+    corregirEstadosCiviles_();
     crearResumen_(ss);
     SpreadsheetApp.flush();
     props.setProperty(PROP_SCHEMA, SCHEMA_VERSION);
   } finally {
     lock.releaseLock();
   }
+}
+
+// Miembros con cónyuge registrado → casados; "conviviente civil" ya no es una opción
+function corregirEstadosCiviles_() {
+  try { TesoCore.create(buildEnv_()).interno.corregirEstadosCiviles(); } catch (e) { console.error('corregirEstadosCiviles', e); }
 }
 
 // El ministerio de jóvenes parte con el listado de integrantes y actividades activado
