@@ -23,7 +23,9 @@ function supabaseConfig_() {
 function supaFetch_(ruta, opciones) {
   var c = supabaseConfig_();
   var o = opciones || {};
-  var headers = Object.assign({ apikey: c.key, Authorization: 'Bearer ' + c.key }, o.headers || {});
+  // clave nueva (sb_secret_…): va solo en "apikey"; la antigua service_role (JWT) también como Bearer
+  var base = /^sb_/.test(c.key) ? { apikey: c.key } : { apikey: c.key, Authorization: 'Bearer ' + c.key };
+  var headers = Object.assign(base, o.headers || {});
   var r = UrlFetchApp.fetch(c.url + ruta, { method: o.method || 'get', headers: headers, payload: o.payload, contentType: o.contentType, muteHttpExceptions: true });
   var code = r.getResponseCode();
   if (code >= 300) throw new Error('Supabase respondió ' + code + ': ' + r.getContentText().slice(0, 300));
