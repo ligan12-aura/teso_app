@@ -140,6 +140,10 @@ function doPost(e) {
   } catch (err) {
     return json_({ ok: false, error: 'Solicitud inválida' });
   }
+  // Tras el traslado a Supabase, este servidor ya no recibe consultas (los datos viven allá)
+  if (PropertiesService.getScriptProperties().getProperty('MIGRADO_SUPABASE') === 'si') {
+    return json_({ ok: false, error: 'La página se trasladó a un servidor nuevo. Recarga la página (Ctrl + F5) para seguir.', code: 'MIGRADO' });
+  }
   migrarSiHaceFalta_();
   var env = buildEnv_();
   var core = TesoCore.create(env);

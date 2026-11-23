@@ -204,17 +204,30 @@ var TesoCore = (function () {
     var store = env.store;
     var files = env.files;
 
-    function all(t) { return store.read(t).map(function (r) { return normalize(t, r); }); }
-    function find(t, id) {
-      var rows = all(t);
-      for (var i = 0; i < rows.length; i++) if (rows[i].id === String(id)) return rows[i];
-      return null;
+    // Cada tabla se lee y normaliza una sola vez por consulta (y se vuelve a leer si se escribe en ella).
+    // Se entregan copias: quien modifique una fila no cambia la memoria.
+    var memo = {};
+    function cargar(t) {
+      if (!memo[t]) {
+        var rows = store.read(t).map(function (r) { return normalize(t, r); });
+        var porId = {};
+        rows.forEach(function (r) { if (!porId[r.id]) porId[r.id] = r; });
+        memo[t] = { rows: rows, porId: porId };
+      }
+      return memo[t];
     }
-    function insert(t, row) { var r = normalize(t, row); store.insert(t, r); return r; }
+    function copia(r) { return Object.assign({}, r); }
+    function all(t) { return cargar(t).rows.map(copia); }
+    function find(t, id) {
+      var r = cargar(t).porId[String(id)];
+      return r ? copia(r) : null;
+    }
+    function insert(t, row) { var r = normalize(t, row); store.insert(t, r); delete memo[t]; return r; }
     function insertMany(t, rows) {
       var rs = rows.map(function (row) { return normalize(t, row); });
       if (store.insertMany) store.insertMany(t, rs);
       else rs.forEach(function (r) { store.insert(t, r); });
+      delete memo[t];
       return rs;
     }
     function update(t, id, patch) {
@@ -222,9 +235,10 @@ var TesoCore = (function () {
       if (!cur) throw TesoError('Registro no encontrado');
       var r = normalize(t, Object.assign({}, cur, patch, { id: cur.id }));
       store.update(t, cur.id, r);
+      delete memo[t];
       return r;
     }
-    function remove(t, id) { store.remove(t, String(id)); }
+    function remove(t, id) { store.remove(t, String(id)); delete memo[t]; }
     function uid() { return String(env.uuid()).replace(/-/g, '').slice(0, 14); }
 
     // ---------------- Autenticación ----------------
@@ -2272,6 +2286,7 @@ var TesoCore = (function () {
     };
 
     function handle(action, payload, token) {
+      memo = {}; // cada consulta parte leyendo los datos actuales
       try {
         var a = ACTIONS[action];
         if (!a) throw TesoError('Acción desconocida: ' + action);

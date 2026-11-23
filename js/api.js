@@ -3,7 +3,10 @@ import { demoEnv } from './demo.js';
 
 // Sin API_URL, o abriendo la página con ?demo, se usa el modo demostración (datos de ejemplo locales)
 export const isDemo = !CONFIG.API_URL || new URLSearchParams(location.search).has('demo');
-const TOKEN_KEY = isDemo ? 'teso_token_demo' : 'teso_token';
+// ?supabase: prueba del servidor nuevo antes del cambio definitivo (su sesión se guarda aparte)
+const pruebaSupabase = !isDemo && !!CONFIG.API_SUPABASE && new URLSearchParams(location.search).has('supabase');
+const API = pruebaSupabase ? CONFIG.API_SUPABASE : CONFIG.API_URL;
+const TOKEN_KEY = isDemo ? 'teso_token_demo' : pruebaSupabase ? 'teso_token_sb' : 'teso_token';
 let core = null;
 
 export const auth = {
@@ -27,7 +30,7 @@ export async function call(action, payload = {}) {
   } else {
     let res;
     try {
-      res = await fetch(CONFIG.API_URL, {
+      res = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action, payload, token: auth.token })

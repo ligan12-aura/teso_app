@@ -1,0 +1,7 @@
+# Configuración mínima del proyecto Supabase de la tesorería
+project_id = "teso-el-redentor"
+
+[functions.api]
+# La función usa el inicio de sesión propio de la app (token de Core.js), no el de Supabase
+verify_jwt = false
+entrypoint = "./functions/api/index.js"
