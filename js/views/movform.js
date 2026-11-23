@@ -15,11 +15,13 @@ export function abrirFormMovimiento(opts) {
   const tipo0 = mov?.tipo || opts.tipo || 'gasto';
   const hoy = data.hoy;
   const esGeneral = ambito === 'general';
+  // actividades de la tesorería general abiertas (o la del movimiento que se edita)
+  const actsGen = esGeneral ? (data.actividades || []).filter((a) => !a.ministerioId && (a.estado !== 'cerrada' || a.id === mov?.actividadId)).sort((a, b) => b.fecha.localeCompare(a.fecha)) : [];
 
   const opt = (c, sel) => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`;
   const catOptions = (tipo, sel) => {
     // en la tesorería general los diezmos se registran solo en el apartado Diezmos
-    const fuera = (c) => c === reservada || (esGeneral && tipo === 'ingreso' && c === 'Diezmos' && sel !== 'Diezmos');
+    const fuera = (c) => c === reservada || (esGeneral && tipo === 'ingreso' && ['Diezmos', 'Diezmos especiales'].includes(c) && sel !== c);
     const list = cats[tipo].filter((c) => !fuera(c));
     const custom = sel && !list.includes(sel);
     const gr = esGeneral && data.grupos ? data.grupos[tipo] : null;
@@ -41,6 +43,7 @@ export function abrirFormMovimiento(opts) {
     <label class="field"><span>Categoría</span><select name="categoria">${catOptions(tipo0, mov?.categoria)}</select></label>
     <div class="pres-hint" data-pres hidden></div>
     <label class="field" data-otra hidden><span>Nombre de la categoría</span><input name="categoriaOtra" maxlength="40"></label>
+    ${esGeneral && !opts.extra?.actividadId && actsGen.length ? `<label class="field"><span>Actividad <small class="muted">(opcional)</small></span><select name="actividadId"><option value="">— Ninguna —</option>${actsGen.map((a) => `<option value="${a.id}" ${a.id === mov?.actividadId ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}</select><small class="hint">Si es un gasto o ingreso de una actividad de la iglesia, queda en su resultado.</small></label>` : ''}
     ${esGeneral ? `<label class="field"><span>Medio</span><select name="medio">${data.medios.map((m) => `<option ${m === (mov?.medio || 'Efectivo') ? 'selected' : ''}>${m}</option>`).join('')}</select></label>` : ''}
     <label class="field"><span>Descripción</span><input name="descripcion" maxlength="300" placeholder="${esGeneral ? 'Ej: Culto dominical, cuenta de luz…' : 'Ej: Colación ensayo, materiales…'}" value="${esc(mov?.descripcion || '')}"></label>
     <div class="field">

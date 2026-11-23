@@ -104,7 +104,7 @@ const tipoHogar = (x) => (x.tipo === 'visita' ? 'visita' : x.esMiembro ? 'miembr
 function ambitoHogar(data, g) {
   const personas = (data.personasHogar || []).filter((x) => x.grupoId === g.id).map((x) => ({
     id: x.id, tipo: tipoHogar(x), nombre: x.nombre, activo: !!x.activo, desde: String(x.creadoEn || '').slice(0, 10),
-    celular: x.celular || '', notas: x.notas || '', miembroId: x.miembroId || ''
+    celular: x.celular || '', notas: x.notas || '', miembroId: x.miembroId || '', terceraEdad: !!x.terceraEdad
   }));
   return {
     clave: 'asist_hogar_' + g.id,
@@ -169,6 +169,8 @@ function analizar(cfg, actividad) {
     const pct = recientes.length ? vinoRec / recientes.length : 0;
     const ultima = vino.length ? sesiones[vino[vino.length - 1]].fecha : '';
     const estado = recientes.length < 3 ? 'nuevo' : pct >= 0.75 ? 'regular' : 'irregular';
+    // miembro activo de tercera edad: no se le marcan ausencias (ni irregular ni faltas seguidas)
+    if (p.terceraEdad) return { ...p, racha: 0, pct, vinoRec, recientes: recientes.length, total: vino.length, ultima, estado: 'tercera' };
     return { ...p, racha, pct, vinoRec, recientes: recientes.length, total: vino.length, ultima, estado };
   });
   return { sesiones, pres, personas };
@@ -290,7 +292,7 @@ function renderAmbito(root, ctx, cfg, cabecera, redibujar) {
         <td class="num">${p.recientes ? `${p.vinoRec}/${p.recientes}` : '—'}</td>
         <td class="num">${p.recientes ? (p.racha >= vista.umbral && p.tipo !== 'visita' ? `<span class="chip-warn">${p.racha}</span>` : p.racha) : '—'}</td>
         <td class="nowrap hide-sm">${p.ultima ? fecha(p.ultima) : '<span class="muted">—</span>'}</td>
-        <td>${p.tipo === 'visita' ? `<span class="badge st-open">Visita · ${p.total ? `${p.total} ${p.total === 1 ? 'vez' : 'veces'}` : 'aún no viene'}</span>` : p.estado === 'nuevo' ? '<span class="badge st-open">Pocos datos</span>' : p.estado === 'regular' ? '<span class="badge st-ok">Regular</span>' : '<span class="badge st-obs">Irregular</span>'}</td></tr>`; }).join('')}</tbody>
+        <td>${p.tipo === 'visita' ? `<span class="badge st-open">Visita · ${p.total ? `${p.total} ${p.total === 1 ? 'vez' : 'veces'}` : 'aún no viene'}</span>` : p.estado === 'tercera' ? '<span class="tag tag-ambar" title="No se le marcan ausencias">Tercera edad</span>' : p.estado === 'nuevo' ? '<span class="badge st-open">Pocos datos</span>' : p.estado === 'regular' ? '<span class="badge st-ok">Regular</span>' : '<span class="badge st-obs">Irregular</span>'}</td></tr>`; }).join('')}</tbody>
     </table></div>` : emptyState(cfg.vacio, 'users')}
   </article>`;
 

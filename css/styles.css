@@ -900,6 +900,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .caja-check input { margin-top: 3px; }
 .tag-verde { background: var(--green-soft); color: var(--green-ink, #1d7550); }
 .tag-gris { background: var(--line-2); color: var(--muted); }
+.tag-ambar { background: var(--amber-soft); color: var(--amber-ink); }
+.dm-tit.dm-tit-esp { margin-top: 22px; }
+.anios-check { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 6px 0 2px; }
 .det-diezmo { display: flex; flex-direction: column; gap: 10px; }
 .det-diezmo [data-detallar] { align-self: flex-start; }
 .det-panel { display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }

@@ -2,11 +2,14 @@
 import { icon, esc, money, moneyShort, modal, formData, toast, confirmar, emptyState, fecha, chart, COLOR, pesos, formatoPesos, cap, mesLargo, fileToPayload, verArchivo, sinTildes } from '../ui.js';
 import { isDemo } from '../api.js';
 import { call } from '../api.js';
-import { editarMiembro } from './miembros.js';
+import { editarMiembro, inactivoEnAnio } from './miembros.js';
 import { importarHistorialDiezmos } from './diezmosImportar.js';
 
 // Un diezmo cuenta para un hermano si lo dio él o su matrimonio
 export const esDeMiembro = (d, mid) => d.miembroId === mid || d.conyugeId === mid;
+// Diezmo especial: ingreso extraordinario (herencia, bono…). Entra a la caja pero no a la estadística del diezmo regular
+export const esEspecial = (d) => d.especial === 'si';
+export const diezmosRegulares = (data) => data.diezmos.filter((d) => !esEspecial(d));
 // Lista para registrar: los matrimonios activos aparecen en una sola fila
 export function filasDiezmantes(miembros) {
   const activos = miembros.filter((m) => m.estado === 'activo').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
@@ -47,6 +50,8 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
   // Meses del año en que el hermano estuvo activo: todos si sigue activo; si se dio de baja,
   // hasta el mes anterior a la baja; inactivo sin fecha de baja = no cuenta en el año
   const mesesActivo = (m) => {
+    // año marcado como inactivo en su ficha (dejó de venir ese año): no se evalúa
+    if (inactivoEnAnio(m, anio)) return 0;
     if (m.estado === 'activo') return 12;
     if (!m.fechaBaja) return 0;
     const y = +m.fechaBaja.slice(0, 4), mo = +m.fechaBaja.slice(5, 7);
@@ -64,10 +69,11 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
   const ultimoDe = {};
   data.diezmos.forEach((d) => [d.miembroId, d.conyugeId].filter(Boolean).forEach((id) => { if (!ultimoDe[id] || d.fecha > ultimoDe[id]) ultimoDe[id] = d.fecha; }));
   const mesDe = (d) => d.mes || d.fecha.slice(0, 7);
+  const regulares = diezmosRegulares(data);
   miembros.forEach((m) => {
     const meses = Array(12).fill(0);
     const pareja = Array(12).fill(false);
-    data.diezmos.forEach((d) => {
+    regulares.forEach((d) => {
       // cuenta en el mes al que corresponde el diezmo (no en el que se dio)
       if (!esDeMiembro(d, m.id) || !mesDe(d).startsWith(String(anio))) return;
       const i = +mesDe(d).slice(5, 7) - 1;
@@ -87,11 +93,12 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
     let racha = 0;
     for (let i = finEval - 1; i >= activoDesde && !meses[i]; i--) racha++;
     // "En el período": estuvo activo algún mes transcurrido del año (entre su ingreso y su baja)
-    const enPeriodo = evaluados > 0 || (m.estado === 'activo' && activoDesde < Math.max(mesesPeriodo, 1) && mesesPeriodo > 0);
+    const inactivoAnio = inactivoEnAnio(m, anio);
+    const enPeriodo = evaluados > 0 || (m.estado === 'activo' && !inactivoAnio && activoDesde < Math.max(mesesPeriodo, 1) && mesesPeriodo > 0);
     const bajaEnAnio = m.estado !== 'activo' && m.fechaBaja && +m.fechaBaja.slice(0, 4) === anio ? +m.fechaBaja.slice(5, 7) : 0;
     // Los no habilitados para diezmar (estudiantes, sin ingresos) no se clasifican ni cuentan en la estadística
     const habilitado = m.habilitadoDiezmo !== 'no';
-    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat: enPeriodo && habilitado ? cat : null, racha, enPeriodo, habilitado, activoDesde, activoHasta, bajaEnAnio, ultimo: ultimoDe[m.id] || '' };
+    porMiembro[m.id] = { m, meses, pareja, conDiezmo, total, cat: enPeriodo && habilitado ? cat : null, racha, enPeriodo, habilitado, inactivoAnio, activoDesde, activoHasta, bajaEnAnio, ultimo: ultimoDe[m.id] || '' };
   });
   return { mesesPeriodo, porMiembro };
 }
@@ -120,10 +127,14 @@ export function render(root, ctx) {
   const nombreDe = Object.fromEntries(data.miembros.map((m) => [m.id, m.nombre]));
   const porId = Object.fromEntries(data.miembros.map((m) => [m.id, m]));
 
-  // ---- Totales y participación de cada mes del año ----
+  // ---- Totales y participación de cada mes del año (solo diezmo regular; los especiales van aparte) ----
   const totales = Array(12).fill(0), registros = Array(12).fill(0);
   const mesDe = (d) => d.mes || d.fecha.slice(0, 7);
-  data.diezmos.forEach((d) => { if (mesDe(d).startsWith(String(anio))) { const i = +mesDe(d).slice(5, 7) - 1; totales[i] += d.monto; registros[i]++; } });
+  const regulares = diezmosRegulares(data);
+  const especiales = data.diezmos.filter(esEspecial);
+  const especialesAnio = especiales.filter((d) => mesDe(d).startsWith(String(anio)));
+  const totalEspAnio = especialesAnio.reduce((a, d) => a + d.monto, 0);
+  regulares.forEach((d) => { if (mesDe(d).startsWith(String(anio))) { const i = +mesDe(d).slice(5, 7) - 1; totales[i] += d.monto; registros[i]++; } });
   const activoEn = (x, i) => x.activoDesde <= i && x.activoHasta > i;
   // Solo cuentan los hermanos activos ese mes y habilitados para diezmar
   const elegibles = (i) => todos.filter((x) => x.habilitado && activoEn(x, i));
@@ -145,16 +156,19 @@ export function render(root, ctx) {
   const fueraConDiezmo = todos.filter((x) => x.habilitado && !activoEn(x, mi) && x.meses[mi] > 0).length;
   const pctMes = elMes.length ? Math.round((diezmaron.length / elMes.length) * 100) : 0;
   const ant = mi ? `${anio}-${pad(mi)}` : `${anio - 1}-12`;
-  const totalAnt = data.diezmos.filter((d) => mesDe(d) === ant).reduce((a, d) => a + d.monto, 0);
+  const totalAnt = regulares.filter((d) => mesDe(d) === ant).reduce((a, d) => a + d.monto, 0);
   const totalMes = totales[mi];
   // Un mes futuro no tiene variación (aún no hay diezmos que comparar)
   const variacion = totalAnt && !futuro ? Math.round(((totalMes - totalAnt) / totalAnt) * 100) : null;
   // mismo mes del año anterior
   const antAnio = `${anio - 1}-${pad(mi + 1)}`;
-  const totalAntAnio = data.diezmos.filter((d) => mesDe(d) === antAnio).reduce((a, d) => a + d.monto, 0);
+  const totalAntAnio = regulares.filter((d) => mesDe(d) === antAnio).reduce((a, d) => a + d.monto, 0);
   const variacionAnio = totalAntAnio && !futuro ? Math.round(((totalMes - totalAntAnio) / totalAntAnio) * 100) : null;
   const lineaVar = (v, etiqueta, monto) => `<b class="${v >= 0 ? 'ingreso' : 'gasto'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v)}%</b> vs. ${etiqueta} (${money(monto)})`;
-  const regsMes = data.diezmos.filter((d) => mesDe(d) === mes)
+  const nombreReg = (d) => (d.conyugeId && nombreDe[d.conyugeId] ? `${nombreDe[d.miembroId] || '—'} y ${nombreDe[d.conyugeId]}` : (nombreDe[d.miembroId] || '—'));
+  const espMes = especiales.filter((d) => mesDe(d) === mes).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const totalEspMes = espMes.reduce((a, d) => a + d.monto, 0);
+  const regsMes = regulares.filter((d) => mesDe(d) === mes)
     .map((d) => ({ d, nombre: d.conyugeId && nombreDe[d.conyugeId] ? `${nombreDe[d.miembroId] || '—'} y ${nombreDe[d.conyugeId]}` : (nombreDe[d.miembroId] || '—') }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es') || a.d.fecha.localeCompare(b.d.fecha));
   // promedio por hermano: el diezmo de un matrimonio cuenta como 2
@@ -188,7 +202,7 @@ export function render(root, ctx) {
       usadosT.add(c.m.id);
       // meses del matrimonio: sus diezmos juntos (el del matrimonio se suma una vez)
       const meses = Array(12).fill(0), pareja = Array(12).fill(false);
-      data.diezmos.forEach((d) => {
+      regulares.forEach((d) => {
         if (!(esDeMiembro(d, x.m.id) || esDeMiembro(d, c.m.id)) || !mesDe(d).startsWith(String(anio))) return;
         const i = +mesDe(d).slice(5, 7) - 1;
         meses[i] += d.monto;
@@ -196,7 +210,7 @@ export function render(root, ctx) {
       });
       const desde = Math.min(x.activoDesde, c.activoDesde), hasta = Math.max(x.activoHasta, c.activoHasta);
       const { cat, racha } = categoriaFila(meses, desde, hasta, anio, data.hoy);
-      filasTabla.push({ ...x, pareja, meses, total: meses.reduce((a, v) => a + v, 0), activoDesde: desde, activoHasta: hasta, cat: x.enPeriodo || c.enPeriodo ? cat : null, racha, enPeriodo: x.enPeriodo || c.enPeriodo, conyuge: c.m, bajaEnAnio: x.bajaEnAnio && c.bajaEnAnio ? Math.max(x.bajaEnAnio, c.bajaEnAnio) : 0, nombreFila: `${x.m.nombre} y ${c.m.nombre}` });
+      filasTabla.push({ ...x, pareja, meses, total: meses.reduce((a, v) => a + v, 0), activoDesde: desde, activoHasta: hasta, cat: x.enPeriodo || c.enPeriodo ? cat : null, racha, enPeriodo: x.enPeriodo || c.enPeriodo, inactivoAnio: x.inactivoAnio && c.inactivoAnio, conyuge: c.m, bajaEnAnio: x.bajaEnAnio && c.bajaEnAnio ? Math.max(x.bajaEnAnio, c.bajaEnAnio) : 0, nombreFila: `${x.m.nombre} y ${c.m.nombre}` });
     } else filasTabla.push({ ...x, nombreFila: x.m.nombre });
   });
   filasTabla.sort((a, b) => a.nombreFila.localeCompare(b.nombreFila, 'es'));
@@ -224,7 +238,7 @@ export function render(root, ctx) {
   ${futuro ? `<div class="note">${icon('sparkle', 16)}<span>${nomMes} aún no llega: las cifras del mes aparecerán cuando se registren diezmos.</span></div>` : ''}
 
   <section class="kpis kpis-4">
-    <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (futuro ? 'mes aún no transcurrido' : totalAnt ? '' : 'sin diezmos el mes anterior') : lineaVar(variacion, mesLargo(ant), totalAnt)}${variacionAnio !== null ? `<br>${lineaVar(variacionAnio, mesLargo(antAnio), totalAntAnio)}` : ''}</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (futuro ? 'mes aún no transcurrido' : totalAnt ? '' : 'sin diezmos el mes anterior') : lineaVar(variacion, mesLargo(ant), totalAnt)}${variacionAnio !== null ? `<br>${lineaVar(variacionAnio, mesLargo(antAnio), totalAntAnio)}` : ''}${totalEspMes ? `<br>${icon('sparkle', 12)} además <b>${money(totalEspMes)}</b> en diezmos especiales` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Diezmaron</span><strong class="kpi-value">${diezmaron.length} <small class="kpi-pct">${pctMes}%</small></strong><span class="kpi-sub">de ${elMes.length} hermanos habilitados para diezmar${noHabConDiezmo ? ` · además ${noHabConDiezmo} no habilitado${noHabConDiezmo > 1 ? 's' : ''}` : ''}${fueraConDiezmo ? ` · además ${fueraConDiezmo} fuera de su período (aún no era miembro o no estaba habilitado, o ya no es miembro)` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.sin.color}"></i> No diezmaron</span><strong class="kpi-value">${futuro ? '—' : noDiezmaron.length}</strong><span class="kpi-sub">${futuro ? 'mes por venir' : 'habilitados sin diezmo registrado'}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('receipt', 15)} Promedio por hermano</span><strong class="kpi-value">${money(promedio)}</strong><span class="kpi-sub">${regsMes.length} diezmo${regsMes.length === 1 ? '' : 's'} · por hermano (un matrimonio cuenta como 2)</span></article>
@@ -232,7 +246,7 @@ export function render(root, ctx) {
 
   <section class="grid-2-1">
     <article class="card">
-      <header class="card-head"><div><h3>Mes a mes · ${anio}</h3><p class="muted">Total diezmado cada mes y % de hermanos habilitados que diezmó · total del año <b>${money(totalAnio)}</b></p></div></header>
+      <header class="card-head"><div><h3>Mes a mes · ${anio}</h3><p class="muted">Total del diezmo regular cada mes y % de hermanos habilitados que diezmó · total del año <b>${money(totalAnio)}</b>${totalEspAnio ? ` · diezmos especiales aparte: <b>${money(totalEspAnio)}</b>` : ''}</p></div></header>
       <div class="chart-box"><canvas id="ch-mes"></canvas></div>
     </article>
     <article class="card">
@@ -249,6 +263,10 @@ export function render(root, ctx) {
         <h4 class="dm-tit">Diezmaron <span class="tag tag-verde">${regsMes.length}</span></h4>
         ${regsMes.length ? `<ul class="dm-lista">${regsMes.map(({ d, nombre }) => `<li><button class="link-btn" data-abrir="${d.miembroId}">${d.conyugeId ? '💍 ' : ''}${esc(nombre)}</button><small class="muted">${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''}</small><b>${money(d.monto)}</b></li>`).join('')}</ul>
         <div class="dm-total"><span>Total del mes</span><b>${money(totalMes)}</b></div>` : emptyState(futuro ? 'Mes por venir' : 'Sin diezmos registrados este mes', 'heart')}
+        ${espMes.length ? `<h4 class="dm-tit dm-tit-esp">${icon('sparkle', 14)} Diezmos especiales <span class="tag tag-ambar">${espMes.length}</span></h4>
+        <p class="muted small">Ingresos extraordinarios: entran a la caja pero no cuentan en el promedio, las comparaciones ni la constancia.</p>
+        <ul class="dm-lista">${espMes.map((d) => `<li><button class="link-btn" data-abrir="${d.miembroId}">${d.conyugeId ? '💍 ' : ''}${esc(nombreReg(d))}</button><small class="muted">${fecha(d.fecha)}${d.notas ? ` · ${esc(d.notas)}` : ''}</small><b>${money(d.monto)}</b></li>`).join('')}</ul>
+        <div class="dm-total"><span>Total especiales</span><b>${money(totalEspMes)}</b></div>` : ''}
       </section>
       <section>
         <h4 class="dm-tit">No diezmaron <span class="tag tag-gris">${futuro ? 0 : noDiezmaron.length}</span></h4>
@@ -271,9 +289,9 @@ export function render(root, ctx) {
       <tbody>${lista.map((x) => `
         <tr class="${!x.enPeriodo || !x.habilitado ? 'inactive' : ''}">
           <td class="dg-nombre">${x.conyuge ? `💍 <button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button> y <button class="link-btn dg-ficha" data-ficha="${x.conyuge.id}">${esc(x.conyuge.nombre)}</button>` : `<button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>`}${x.m.estado === 'activo' && x.habilitado && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
-          ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${i === mi ? 'sel' : ''} ${((x.m.estado !== 'activo' && i >= x.activoHasta) || i < x.activoDesde) && i < mesesPeriodo ? 'baja' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" data-pareja="${x.conyuge ? 1 : 0}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
+          ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${i === mi ? 'sel' : ''} ${(x.inactivoAnio || (x.m.estado !== 'activo' && i >= x.activoHasta) || i < x.activoDesde) && i < mesesPeriodo ? 'baja' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" data-pareja="${x.conyuge ? 1 : 0}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
           <td class="num strong">${x.total ? money(x.total) : '—'}</td>
-          <td>${x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : x.m.estado !== 'activo' ? `<span class="badge st-open">${{ trasladado: 'Trasladado', fallecido: 'Fallecido' }[x.m.estado] || 'Inactivo'}</span>` : !x.habilitado ? '<span class="tag tag-gris" title="Estudiante o sin ingresos: no se cuenta en la estadística">No habilitado</span>' : '<span class="muted">—</span>'}${x.bajaEnAnio ? `<small class="dg-baja">${{ trasladado: 'traslado', fallecido: 'fallecimiento' }[x.m.estado] || 'baja'} ${MESES_C[x.bajaEnAnio - 1].toLowerCase()}</small>` : ''}</td>
+          <td>${x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : x.inactivoAnio && x.m.estado === 'activo' ? `<span class="badge st-open" title="Marcado como inactivo en ${anio} en su ficha: ese año no se evalúa">Inactivo en ${anio}</span>` : x.m.estado !== 'activo' ? `<span class="badge st-open">${{ trasladado: 'Trasladado', fallecido: 'Fallecido' }[x.m.estado] || 'Inactivo'}</span>` : !x.habilitado ? '<span class="tag tag-gris" title="Estudiante o sin ingresos: no se cuenta en la estadística">No habilitado</span>' : '<span class="muted">—</span>'}${x.bajaEnAnio ? `<small class="dg-baja">${{ trasladado: 'traslado', fallecido: 'fallecimiento' }[x.m.estado] || 'baja'} ${MESES_C[x.bajaEnAnio - 1].toLowerCase()}</small>` : ''}</td>
         </tr>`).join('')}</tbody>
       <tfoot><tr><td class="dg-nombre"><b>Total</b></td>${totales.map((v, i) => `<td class="num ${i === mi ? 'sel' : ''}"><b>${v ? moneyShort(v) : ''}</b></td>`).join('')}<td class="num"><b>${money(totalAnio)}</b></td><td></td></tr></tfoot>
     </table></div>` : emptyState(data.miembros.length ? 'Nadie coincide con los filtros' : 'Aún no hay miembros registrados', 'users')}
@@ -359,7 +377,7 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
   return modal({
     title: `${esc(m.nombre)} · ${cap(mesLargo(mes))}`,
     body: `
-      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${d.fecha.slice(0, 7) !== mes ? `Entregado el ${fecha(d.fecha)}` : fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.conyugeId ? `<br><small class="muted">💍 Matrimonio: ${esc(nombreDe[d.miembroId] || '')} y ${esc(nombreDe[d.conyugeId] || '')}</small>` : ''}${conyugePareja && !d.conyugeId ? `<br><small class="muted">Diezmo de ${esc(nombreDe[d.miembroId] || '')}</small>` : ''}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}</span><b>${money(d.monto)}</b>${d.archivoId ? `<button type="button" class="chip-btn" data-ver="${d.id}">${icon('receipt', 14)} Comprobante</button>` : ''}<button type="button" class="icon-btn sm" data-editar="${d.id}" title="Corregir" aria-label="Corregir">${icon('edit', 15)}</button><button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
+      ${regs.length ? `<ul class="diezmo-regs">${regs.map((d) => `<li><span>${d.fecha.slice(0, 7) !== mes ? `Entregado el ${fecha(d.fecha)}` : fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''} ${etiquetaCaja(data, d)}${d.conyugeId ? `<br><small class="muted">💍 Matrimonio: ${esc(nombreDe[d.miembroId] || '')} y ${esc(nombreDe[d.conyugeId] || '')}</small>` : ''}${conyugePareja && !d.conyugeId ? `<br><small class="muted">Diezmo de ${esc(nombreDe[d.miembroId] || '')}</small>` : ''}${d.notas ? `<br><small class="muted">${esc(d.notas)}</small>` : ''}${esEspecial(d) ? ' <span class="tag tag-ambar">Especial</span>' : ''}</span><b>${money(d.monto)}</b>${d.archivoId ? `<button type="button" class="chip-btn" data-ver="${d.id}">${icon('receipt', 14)} Comprobante</button>` : ''}<button type="button" class="icon-btn sm" data-editar="${d.id}" title="Corregir" aria-label="Corregir">${icon('edit', 15)}</button><button type="button" class="icon-btn sm danger" data-borrar="${d.id}" title="Eliminar">${icon('trash', 15)}</button></li>`).join('')}</ul>
         <p class="muted small">Total del mes: <b>${money(regs.reduce((a, d) => a + d.monto, 0))}</b>. Puedes agregar otro diezmo abajo o corregir uno con ${icon('edit', 12)}.</p>` : '<p class="muted">Sin diezmos registrados este mes.</p>'}
       <div class="note" data-editando hidden>${icon('edit', 16)}<span>Corrigiendo el diezmo del <b data-ed-fecha></b>. <button type="button" class="link-btn" data-cancelar-ed>Cancelar corrección</button></span></div>
       <div class="form-row">
@@ -384,6 +402,7 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
           </div>
         </label>
       </div>
+      <label class="check especial-check"><input type="checkbox" name="especial"> <span>${icon('sparkle', 13)} <b>Diezmo especial</b> (ingreso extraordinario: herencia, bono, venta…)<br><small class="muted">Entra a la caja como “Diezmos especiales”, aparte del diezmo regular: no cuenta en promedios, comparaciones ni constancia.</small></span></label>
       ${conyuge ? `<label class="check pareja-check"><input type="checkbox" name="matrimonio" checked> <span>💍 <b>Diezmo del matrimonio</b> con ${esc(conyuge.nombre)}<br><small class="muted">Cuenta como diezmo de ambos hermanos.</small></span></label>` : ''}
       <label class="check caja-check"><input type="checkbox" name="sumarACaja" checked> <span><b>Sumar a la caja</b> (crea el ingreso en la tesorería general, en la fecha en que se entregó)<br><small class="muted">Desmárcalo solo si ese dinero ya se registró en la tesorería por otra vía.</small></span></label>`,
     submitLabel: 'Registrar diezmo',
@@ -399,6 +418,9 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         f.querySelector('[data-reparto]').textContent = `Se registra un diezmo en cada mes, de ${MES_N[+ini.slice(5, 7) - 1]} a ${MES_N[+fin.slice(5, 7) - 1]} ${fin.slice(0, 4)}${monto ? `: ${money(Math.floor(monto / n))} por mes` : ''}.`;
       };
       ['input', 'change'].forEach((ev) => { f.monto.addEventListener(ev, reparto); f.meses.addEventListener(ev, reparto); f.mes.addEventListener(ev, reparto); });
+      // un diezmo especial es de una sola vez: no se reparte en meses
+      const syncEspecial = () => { const esp = f.especial.checked; if (esp) { f.meses.value = '1'; reparto(); } f.querySelector('[data-varios]').hidden = esp || !!f.dataset.editId; };
+      f.especial.addEventListener('change', syncEspecial);
       const file = f.archivo;
       const prev = f.querySelector('.upload-preview');
       file.addEventListener('change', async () => {
@@ -425,6 +447,7 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         cajaCheck.hidden = false;
         f.fecha.readOnly = false;
         f.monto.value = ''; f.notas.value = ''; f.fecha.value = fechaDef; f.mes.value = mes;
+        f.especial.checked = false;
         f.querySelector('[data-varios]').hidden = false;
         btnGuardar.textContent = 'Registrar diezmo';
       };
@@ -440,6 +463,7 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         f.meses.value = '1'; f.querySelector('[data-varios]').hidden = true; reparto();
         if ([...f.medio.options].some((o) => o.value === reg.medio)) f.medio.value = reg.medio;
         f.notas.value = reg.notas || '';
+        f.especial.checked = esEspecial(reg);
         if (f.matrimonio) f.matrimonio.checked = !!reg.conyugeId;
         // el diezmo de un culto queda en la fecha del culto; "Sumar a la caja" no aplica al corregir
         const deCulto = reg.movGeneralId && data.movGenerales.some((x) => x.id === reg.movGeneralId && x.origen !== 'diezmo');
@@ -463,6 +487,7 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
       d.monto = pesos(d.monto);
       if (!d.monto) throw new Error('Ingresa el monto');
       delete d.matrimonio;
+      d.especial = !!f.especial.checked;
       const comp = f.archivo._payload;
       if (comp) d.archivo = { nombre: comp.nombre, mime: comp.mime, base64: comp.base64 };
       const editId = f.dataset.editId;
@@ -478,7 +503,7 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         return;
       }
       const r = await call('saveDiezmo', { miembroId: m.id, conyugeId: conyuge && f.matrimonio?.checked ? conyuge.id : '', ...d, meses: +d.meses || 1, sumarACaja: !!f.sumarACaja.checked });
-      toast(`${r?.creados > 1 ? `Diezmo repartido en ${r.creados} meses` : 'Diezmo registrado'}${f.sumarACaja.checked ? ' y sumado a la caja' : ''}`);
+      toast(`${r?.creados > 1 ? `Diezmo repartido en ${r.creados} meses` : d.especial ? 'Diezmo especial registrado' : 'Diezmo registrado'}${f.sumarACaja.checked ? ' y sumado a la caja' : ''}`);
       await ctx.refresh();
     }
   });

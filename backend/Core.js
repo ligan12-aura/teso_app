@@ -18,19 +18,20 @@ var TesoCore = (function () {
   var TABLES = {
     Usuarios: ['id', 'nombre', 'usuario', 'rol', 'ministerioId', 'email', 'activo', 'debeCambiarPass', 'salt', 'hash', 'creadoEn', 'sesionDesde', 'grupoId', 'ministerioIds'],
     Ministerios: ['id', 'nombre', 'color', 'icono', 'itemMensual', 'activo', 'creadoEn', 'presupuestoMensual', 'actividades', 'porMatrimonio'],
-    MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo'],
+    MovimientosGenerales: ['id', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'medio', 'archivoId', 'ministerioId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'grupo', 'actividadId'],
     MovimientosMinisterios: ['id', 'ministerioId', 'fecha', 'mes', 'tipo', 'categoria', 'descripcion', 'monto', 'archivoId', 'origen', 'refId', 'creadoPor', 'creadoEn', 'actualizadoEn', 'actividadId'],
     Rendiciones: ['id', 'ministerioId', 'mes', 'estado', 'comentarioLider', 'fechaEnvio', 'comentarioTesorero', 'fechaRevision', 'revisadoPor'],
     Transferencias: ['id', 'ministerioId', 'mes', 'monto', 'fecha', 'movGeneralId', 'movMinisterioId', 'creadoPor', 'creadoEn'],
     Config: ['id', 'valor'],
-    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil', 'trasladoA', 'rut', 'habilitadoDesde'],
-    Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId'],
+    Miembros: ['id', 'nombre', 'estado', 'fechaNacimiento', 'celular', 'email', 'domicilio', 'notas', 'creadoEn', 'actualizadoEn', 'conyugeId', 'fechaBaja', 'habilitadoDiezmo', 'fechaIngreso', 'estadoCivil', 'trasladoA', 'rut', 'habilitadoDesde', 'terceraEdad', 'aniosInactivo'],
+    Diezmos: ['id', 'miembroId', 'fecha', 'mes', 'monto', 'medio', 'notas', 'creadoPor', 'creadoEn', 'actualizadoEn', 'movGeneralId', 'conyugeId', 'refId', 'archivoId', 'especial'],
     // Listado propio de un ministerio (p. ej. jóvenes): pueden o no ser miembros de la iglesia
     // En un ministerio "por matrimonio" (p. ej. Familia) cada integrante es un matrimonio: miembroId2 / nombre2 = su cónyuge
     Integrantes: ['id', 'ministerioId', 'nombre', 'celular', 'email', 'fechaNacimiento', 'miembroId', 'notas', 'activo', 'creadoEn', 'actualizadoEn', 'miembroId2', 'nombre2'],
-    // Actividades con cuota de un ministerio y sus inscritos (confirmados y pagos)
+    // Actividades con cuota de un ministerio (o de la tesorería general si ministerioId está vacío) y sus inscritos.
+    // En las de la tesorería general los inscritos son miembros (miembroId); en las de un ministerio, integrantes.
     Actividades: ['id', 'ministerioId', 'nombre', 'fecha', 'cuota', 'descripcion', 'estado', 'creadoPor', 'creadoEn', 'actualizadoEn'],
-    Inscripciones: ['id', 'actividadId', 'integranteId', 'pagoMonto', 'fechaPago', 'movId', 'creadoEn', 'actualizadoEn'],
+    Inscripciones: ['id', 'actividadId', 'integranteId', 'pagoMonto', 'fechaPago', 'movId', 'creadoEn', 'actualizadoEn', 'miembroId'],
     // Asistencia: una fila por reunión (culto, escuela dominical u otra actividad) con los presentes
     // en una sola celda: "m:<miembro>,i:<integrante>,v:<visita>"
     Asistencias: ['id', 'fecha', 'actividad', 'notas', 'presentes', 'creadoPor', 'creadoEn', 'actualizadoEn'],
@@ -58,7 +59,7 @@ var TesoCore = (function () {
       ['Actividades y administración', ['Reuniones y directorio', 'Eventos y celebraciones', 'Gastos bancarios', 'Gastos varios', 'Otros gastos']]
     ],
     ingreso: [
-      ['Diezmos y ofrendas', ['Diezmos', 'Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo']],
+      ['Diezmos y ofrendas', ['Diezmos', 'Diezmos especiales', 'Ofrendas', 'Ofrenda misionera', 'Ofrenda pro-templo']],
       ['Ofrendas especiales', ['Ofrendas solidarias', 'Donaciones']],
       ['Otros ingresos', ['Actividades', 'Reintegros', 'Otros ingresos']]
     ]
@@ -83,6 +84,10 @@ var TesoCore = (function () {
   var SALDO_INICIAL = 'Saldo inicial';
   // Las cuotas de actividades se registran solo desde la actividad
   var CUOTA = 'Cuota de actividad';
+  // En la tesorería general las cuotas de una actividad entran como ingreso de esta categoría
+  var CUOTA_GENERAL = 'Actividades';
+  // Diezmos (regulares y especiales): solo desde el apartado Diezmos
+  var CAT_DIEZMOS = ['Diezmos', 'Diezmos especiales'];
   var MEDIOS = ['Efectivo', 'Transferencia', 'Depósito', 'Cheque', 'Tarjeta'];
   var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
   var MAX_ARCHIVO_B64 = 11 * 1024 * 1024; // ~8 MB reales
@@ -429,7 +434,7 @@ var TesoCore = (function () {
       all('Miembros').forEach(function (m) { mb[m.id] = m; });
       return all('PersonasHogar').map(function (x) {
         var m = x.miembroId ? mb[x.miembroId] : null;
-        return Object.assign({}, x, { nombre: m ? m.nombre : x.nombre, celular: m ? (m.celular || x.celular) : x.celular, esMiembro: !!m, activo: toBool(x.activo) });
+        return Object.assign({}, x, { nombre: m ? m.nombre : x.nombre, celular: m ? (m.celular || x.celular) : x.celular, esMiembro: !!m, activo: toBool(x.activo), terceraEdad: !!m && m.estado === 'activo' && m.terceraEdad === 'si' });
       });
     }
     function saveGrupoHogar(user, p) {
@@ -568,7 +573,9 @@ var TesoCore = (function () {
       var out = all('Miembros').map(function (m) {
         miembros[m.id] = true;
         // sin "Miembro desde", cuenta desde que se registró (si vino antes, la página cuenta desde su primera asistencia)
-        return { id: 'm:' + m.id, tipo: 'miembro', nombre: m.nombre, activo: m.estado === 'activo', desde: m.fechaIngreso || String(m.creadoEn || '').slice(0, 10), celular: m.celular || '', ministerios: [], alias: alias[m.id] || [] };
+        var anioHoy = env.today().slice(0, 4);
+        var inactivoHoy = String(m.aniosInactivo || '').split(',').indexOf(anioHoy) >= 0;
+        return { id: 'm:' + m.id, tipo: 'miembro', nombre: m.nombre, activo: m.estado === 'activo' && !inactivoHoy, terceraEdad: m.estado === 'activo' && m.terceraEdad === 'si', desde: m.fechaIngreso || String(m.creadoEn || '').slice(0, 10), celular: m.celular || '', ministerios: [], alias: alias[m.id] || [] };
       });
       var porNombre = {};
       integ.forEach(function (i) {
@@ -1067,13 +1074,17 @@ var TesoCore = (function () {
     function actividadDe(user, id, aunqueDesactivado) {
       var a = find('Actividades', id);
       if (!a) throw TesoError('Actividad no encontrada');
+      // actividad de la tesorería general: solo tesorería / pastor / administración
+      if (!a.ministerioId) { if (!esAdmin(user)) throw TesoError('No tienes permiso para esta acción', 'FORBIDDEN'); return a; }
       ministerioConActividades(user, a.ministerioId, aunqueDesactivado);
       return a;
     }
     function saveActividad(user, p) {
       var actual = p.id ? find('Actividades', p.id) : null;
       if (p.id && !actual) throw TesoError('Actividad no encontrada');
-      var m = ministerioConActividades(user, actual ? actual.ministerioId : p.ministerioId);
+      var general = actual ? !actual.ministerioId : toBool(p.general);
+      if (general && !esAdmin(user)) throw TesoError('No tienes permiso para esta acción', 'FORBIDDEN');
+      var m = general ? { id: '' } : ministerioConActividades(user, actual ? actual.ministerioId : p.ministerioId);
       var nombre = String(p.nombre || '').replace(/\s+/g, ' ').trim();
       if (!nombre) throw TesoError('Escribe el nombre de la actividad');
       if (nombre.length > 80) throw TesoError('El nombre es demasiado largo');
@@ -1093,7 +1104,7 @@ var TesoCore = (function () {
     }
     function deleteActividad(user, p) {
       var a = actividadDe(user, p.id);
-      var movs = all('MovimientosMinisterios').filter(function (x) { return x.actividadId === a.id; });
+      var movs = all(a.ministerioId ? 'MovimientosMinisterios' : 'MovimientosGenerales').filter(function (x) { return x.actividadId === a.id; });
       if (movs.length) throw TesoError('La actividad tiene pagos o gastos registrados. Anula los pagos y elimina los gastos antes de borrarla.');
       all('Inscripciones').forEach(function (x) { if (x.actividadId === a.id) remove('Inscripciones', x.id); });
       remove('Actividades', a.id);
@@ -1102,6 +1113,7 @@ var TesoCore = (function () {
     // Deja como confirmados exactamente a los integrantes indicados (no se puede quitar a quien ya pagó)
     function setConfirmados(user, p) {
       var a = actividadDe(user, p.actividadId);
+      if (!a.ministerioId) return setConfirmadosGeneral(a, p);
       var ids = {};
       (p.integranteIds || []).forEach(function (id) { ids[String(id)] = 1; });
       var integ = {};
@@ -1123,12 +1135,41 @@ var TesoCore = (function () {
       if (nuevos.length) insertMany('Inscripciones', nuevos);
       return { confirmados: Object.keys(ids).length };
     }
+    // Actividad de la tesorería general: los confirmados son miembros de la iglesia
+    function setConfirmadosGeneral(a, p) {
+      var ids = {};
+      (p.miembroIds || []).forEach(function (id) { ids[String(id)] = 1; });
+      Object.keys(ids).forEach(function (id) { if (!find('Miembros', id)) throw TesoError('Hay un miembro que ya no está en el registro'); });
+      var existentes = all('Inscripciones').filter(function (x) { return x.actividadId === a.id; });
+      var pagadoFuera = existentes.filter(function (x) { return !ids[x.miembroId] && x.movId; })[0];
+      if (pagadoFuera) { var mb = find('Miembros', pagadoFuera.miembroId); throw TesoError((mb ? mb.nombre : 'Un miembro') + ' ya pagó su cuota: anula el pago antes de quitarlo de la actividad.'); }
+      var ya = {};
+      existentes.forEach(function (x) {
+        ya[x.miembroId] = 1;
+        if (!ids[x.miembroId]) remove('Inscripciones', x.id);
+      });
+      var now = env.now();
+      var nuevos = Object.keys(ids).filter(function (id) { return !ya[id]; }).map(function (id) {
+        return { id: uid(), actividadId: a.id, integranteId: '', miembroId: id, pagoMonto: 0, fechaPago: '', movId: '', creadoEn: now, actualizadoEn: now };
+      });
+      if (nuevos.length) insertMany('Inscripciones', nuevos);
+      return { confirmados: Object.keys(ids).length };
+    }
     // El pago de la cuota entra como ingreso del ministerio en la fecha en que se recibió
+    // (en una actividad de la tesorería general, como ingreso "Actividades" de la tesorería)
     function registrarPagoCuota(user, p) {
       var ins = find('Inscripciones', p.inscripcionId);
       if (!ins) throw TesoError('Inscripción no encontrada');
       var a = actividadDe(user, ins.actividadId);
       if (ins.movId) throw TesoError('Ya tiene su cuota pagada. Si hubo un error, anula el pago y regístralo de nuevo.');
+      if (!a.ministerioId) {
+        var mbG = find('Miembros', ins.miembroId);
+        var montoG = p.monto === undefined || p.monto === '' ? a.cuota : p.monto;
+        var dg = datosGeneral({ tipo: 'ingreso', fecha: p.fecha, monto: montoG, medio: p.medio || 'Efectivo', categoria: CUOTA_GENERAL, descripcion: 'Cuota ' + a.nombre + (mbG ? ' · ' + mbG.nombre : '') });
+        var nowG = env.now();
+        var movG = insert('MovimientosGenerales', Object.assign(dg, { id: uid(), archivoId: '', origen: 'cuota', refId: ins.id, actividadId: a.id, creadoPor: user.id, creadoEn: nowG, actualizadoEn: nowG }));
+        return update('Inscripciones', ins.id, { pagoMonto: dg.monto, fechaPago: dg.fecha, movId: movG.id, actualizadoEn: nowG });
+      }
       var it = find('Integrantes', ins.integranteId);
       var nombre = it ? nombreIntegrante(it) : '';
       var monto = p.monto === undefined || p.monto === '' ? a.cuota : p.monto;
@@ -1146,6 +1187,10 @@ var TesoCore = (function () {
       if (!ins) throw TesoError('Inscripción no encontrada');
       var a = actividadDe(user, ins.actividadId, true);
       if (!ins.movId) throw TesoError('Esta inscripción no tiene un pago registrado');
+      if (!a.ministerioId) {
+        if (find('MovimientosGenerales', ins.movId)) remove('MovimientosGenerales', ins.movId);
+        return update('Inscripciones', ins.id, { pagoMonto: 0, fechaPago: '', movId: '', actualizadoEn: env.now() });
+      }
       var mov = find('MovimientosMinisterios', ins.movId);
       if (mov) {
         exigirEditable(user, a.ministerioId, mov.mes);
@@ -1248,9 +1293,18 @@ var TesoCore = (function () {
       d.ministerioId = p.ministerioId ? String(p.ministerioId) : '';
       return d;
     }
+    // Actividad de la tesorería general (ministerioId vacío) a la que se asocia un movimiento
+    function actividadGeneralValida(aid) {
+      aid = String(aid || '');
+      if (!aid) return '';
+      var a = find('Actividades', aid);
+      if (!a || a.ministerioId) throw TesoError('Actividad no encontrada');
+      return aid;
+    }
     function addMovGeneral(user, p) {
       var d = datosGeneral(p);
-      if (d.tipo === 'ingreso' && d.categoria === 'Diezmos') throw TesoError('Los diezmos se registran en el apartado Diezmos (así quedan por hermano y entran a la caja).');
+      d.actividadId = actividadGeneralValida(p.actividadId);
+      if (d.tipo === 'ingreso' && CAT_DIEZMOS.indexOf(d.categoria) >= 0) throw TesoError('Los diezmos se registran en el apartado Diezmos (así quedan por hermano y entran a la caja).');
       if (d.tipo === 'gasto') exigirPresupuestoGeneral(d.mes, d.monto);
       var now = env.now();
       d.archivoId = guardarArchivo(p.archivo, ['Comprobantes tesorería', d.mes]);
@@ -1259,7 +1313,7 @@ var TesoCore = (function () {
     function addMovGeneralLote(user, p) {
       if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
       var items = (p.items || []).filter(function (it) { return Number(it.monto) > 0; });
-      if (items.some(function (it) { return it.categoria === 'Diezmos'; })) throw TesoError('Los diezmos se registran en el apartado Diezmos, no en el culto.');
+      if (items.some(function (it) { return CAT_DIEZMOS.indexOf(it.categoria) >= 0; })) throw TesoError('Los diezmos se registran en el apartado Diezmos, no en el culto.');
       if (!items.length) throw TesoError('Ingresa al menos un monto');
       // Validar el detalle por hermano antes de guardar nada
       items.forEach(function (it) {
@@ -1277,7 +1331,7 @@ var TesoCore = (function () {
         var mp = { fecha: p.fecha, tipo: 'ingreso', categoria: it.categoria, monto: it.monto, medio: it.medio || p.medio, descripcion: it.descripcion || p.descripcion };
         datosGeneral(mp);
         var det = (it.detalle || []).filter(function (x) { return Number(x.monto) > 0; }).map(function (x) {
-          return datosDiezmo({ miembroId: x.miembroId, conyugeId: x.conyugeId, fecha: p.fecha, monto: x.monto, medio: it.medio || p.medio, notas: 'Culto · ' + (p.descripcion || '') });
+          return datosDiezmo({ miembroId: x.miembroId, conyugeId: x.conyugeId, fecha: p.fecha, monto: x.monto, medio: it.medio || p.medio, notas: 'Culto · ' + (p.descripcion || ''), especial: '' });
         });
         return { mp: mp, det: det };
       });
@@ -1298,6 +1352,7 @@ var TesoCore = (function () {
       if (!mov) throw TesoError('Movimiento no encontrado');
       if (mov.origen === 'transferencia') throw TesoError('Este movimiento es la transferencia de un ítem; anúlalo desde el detalle del ministerio (botón Anular en el panel de rendición).');
       if (mov.origen === 'diezmo') throw TesoError('Este ingreso corresponde a un diezmo registrado por hermano; corrígelo o elimínalo en el apartado Diezmos.');
+      if (mov.origen === 'cuota') throw TesoError('Este ingreso es el pago de una cuota: anúlalo desde la actividad (Tesorería → Actividades).');
       return mov;
     }
     function diezmosDeMov(movId) {
@@ -1306,7 +1361,8 @@ var TesoCore = (function () {
     function updateMovGeneral(user, p) {
       var mov = movGeneralManual(p.id);
       var d = datosGeneral(p, mov.origen === 'importado');
-      if (d.tipo === 'ingreso' && d.categoria === 'Diezmos' && mov.categoria !== 'Diezmos') throw TesoError('Los diezmos se registran en el apartado Diezmos (así quedan por hermano y entran a la caja).');
+      d.actividadId = p.actividadId === undefined ? (mov.actividadId || '') : actividadGeneralValida(p.actividadId);
+      if (d.tipo === 'ingreso' && CAT_DIEZMOS.indexOf(d.categoria) >= 0 && mov.categoria !== d.categoria) throw TesoError('Los diezmos se registran en el apartado Diezmos (así quedan por hermano y entran a la caja).');
       // Un culto con diezmos por hermano: sigue siendo un ingreso de la misma categoría
       // y no puede quedar por debajo de lo identificado; si cambia la fecha, los diezmos la siguen
       var vinculados = diezmosDeMov(mov.id);
@@ -1485,8 +1541,24 @@ var TesoCore = (function () {
         celular: String(p.celular || '').trim().slice(0, 30), email: email.slice(0, 120),
         domicilio: String(p.domicilio || '').trim().slice(0, 200), notas: String(p.notas || '').trim().slice(0, 300),
         estadoCivil: estadoCivilValido(p.estadoCivil),
-        rut: rutValido(p.rut)
+        rut: rutValido(p.rut),
+        // activo con condición de tercera edad (no se le marcan ausencias)
+        terceraEdad: estado === 'activo' && toBool(p.terceraEdad) ? 'si' : '',
+        aniosInactivo: aniosValidos(p.aniosInactivo)
       };
+    }
+    // Años en que el miembro estuvo inactivo (p. ej. "2026"): ese año no cuenta en la constancia de diezmos.
+    // Acepta "2026, 2028" o una lista; quedan ordenados y sin repetir.
+    function aniosValidos(v) {
+      var lista = Array.isArray(v) ? v : String(v || '').split(/[^0-9]+/);
+      var tope = Number(env.today().slice(0, 4)), out = [];
+      lista.forEach(function (x) {
+        var y = Number(String(x).trim());
+        if (!String(x).trim()) return;
+        if (!(y >= 1950 && y <= tope)) throw TesoError('Año de inactividad inválido: ' + x);
+        if (out.indexOf(y) < 0) out.push(y);
+      });
+      return out.sort().join(',');
     }
     // RUT chileno: se guarda como 12.345.678-9 y se revisa el dígito verificador
     function rutNormal(v) {
@@ -1551,6 +1623,8 @@ var TesoCore = (function () {
         if (!previo) throw TesoError('Miembro no encontrado');
         if (p.estadoCivil === undefined) d.estadoCivil = previo.estadoCivil || '';
         if (p.rut === undefined) d.rut = previo.rut || '';
+        if (p.terceraEdad === undefined) d.terceraEdad = d.estado === 'activo' ? (previo.terceraEdad || '') : '';
+        if (p.aniosInactivo === undefined) d.aniosInactivo = previo.aniosInactivo || '';
         // al pasar de "no habilitado" a habilitado, cuenta desde hoy si no se indicó otra fecha
         if (p.habilitadoDesde === undefined && d.habilitadoDiezmo === 'si') d.habilitadoDesde = previo.habilitadoDiezmo === 'no' ? env.today() : (previo.habilitadoDesde || '');
         else if (d.habilitadoDiezmo === 'si' && previo.habilitadoDiezmo === 'no' && !d.habilitadoDesde) d.habilitadoDesde = env.today();
@@ -1642,6 +1716,20 @@ var TesoCore = (function () {
       // si una de las dos fichas está activa, queda activa
       if (queda.estado !== 'activo' && sale.estado === 'activo') { patch.estado = 'activo'; patch.fechaBaja = ''; patch.trasladoA = ''; }
       if (queda.habilitadoDiezmo === 'no' && sale.habilitadoDiezmo !== 'no') patch.habilitadoDiezmo = 'si';
+      if (!queda.terceraEdad && sale.terceraEdad === 'si' && (patch.estado || queda.estado) === 'activo') patch.terceraEdad = 'si';
+      // inactivo un año solo si ambas fichas lo estaban (una de las dos sí participó)
+      if (queda.aniosInactivo || sale.aniosInactivo) {
+        var aS = String(sale.aniosInactivo || '').split(',');
+        patch.aniosInactivo = String(queda.aniosInactivo || '').split(',').filter(function (y) { return y && aS.indexOf(y) >= 0; }).join(',');
+      }
+      all('Inscripciones').forEach(function (x) {
+        if (x.miembroId !== sale.id) return;
+        var dup = all('Inscripciones').filter(function (y) { return y.actividadId === x.actividadId && y.miembroId === queda.id; })[0];
+        if (!dup) update('Inscripciones', x.id, { miembroId: queda.id, actualizadoEn: now });
+        else if (!x.movId) remove('Inscripciones', x.id);
+        else if (!dup.movId) { remove('Inscripciones', dup.id); update('Inscripciones', x.id, { miembroId: queda.id, actualizadoEn: now }); }
+        else update('Inscripciones', x.id, { miembroId: queda.id, actualizadoEn: now });
+      });
       // cónyuge
       if (!queda.conyugeId && sale.conyugeId && sale.conyugeId !== queda.id) patch.conyugeId = sale.conyugeId;
       all('Miembros').forEach(function (m) { if (m.conyugeId === sale.id && m.id !== queda.id) update('Miembros', m.id, { conyugeId: patch.conyugeId === m.id || !queda.conyugeId ? queda.id : '' }); });
@@ -1707,6 +1795,9 @@ var TesoCore = (function () {
       var conCultos = asistenciasCon('m:' + mb.id);
       var integEnl = all('Integrantes').filter(function (i) { return i.miembroId === mb.id; })[0];
       if (conCultos.length && !integEnl) throw TesoError('Tiene asistencias registradas: márcalo como inactivo en vez de eliminarlo.');
+      var insMb = all('Inscripciones').filter(function (x) { return x.miembroId === mb.id; });
+      if (insMb.some(function (x) { return x.movId; })) throw TesoError('Tiene cuotas pagadas en actividades de la tesorería: márcalo como inactivo en vez de eliminarlo.');
+      insMb.forEach(function (x) { remove('Inscripciones', x.id); });
       if (mb.conyugeId) { var c = find('Miembros', mb.conyugeId); if (c && c.conyugeId === mb.id) update('Miembros', c.id, { conyugeId: '' }); }
       if (conCultos.length) reemplazarPresente(conCultos, 'm:' + mb.id, 'i:' + integEnl.id);
       // Los integrantes de ministerios enlazados a esta ficha quedan como no miembros con sus datos
@@ -1815,7 +1906,8 @@ var TesoCore = (function () {
       // mes al que corresponde el diezmo (p. ej. se da el 11 de septiembre por julio); por defecto, el mes de la fecha
       var mes = String(p.mes || '').trim() || p.fecha.slice(0, 7);
       if (!isMonth(mes) || mes < '2000-01' || mes > sumarMeses(env.today().slice(0, 7), 12)) throw TesoError('Mes al que corresponde inválido');
-      return { miembroId: mb.id, conyugeId: conyugeId, fecha: p.fecha, mes: mes, monto: monto, medio: String(p.medio || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 200) };
+      // especial: ingreso extraordinario (herencia, bono…), aparte del diezmo regular de cada mes
+      return { miembroId: mb.id, conyugeId: conyugeId, fecha: p.fecha, mes: mes, monto: monto, medio: String(p.medio || '').trim().slice(0, 30), notas: String(p.notas || '').trim().slice(0, 200), especial: toBool(p.especial) || p.especial === 'si' ? 'si' : '' };
     }
     function sumarMeses(m, n) {
       var y = +m.slice(0, 4), mo = +m.slice(5, 7) - 1 + n;
@@ -1830,11 +1922,13 @@ var TesoCore = (function () {
       return out;
     }
     // Ingreso en la tesorería general vinculado a un diezmo: entra a la caja en la fecha en que se dio
+    function catDiezmo(d) { return d.especial === 'si' ? 'Diezmos especiales' : 'Diezmos'; }
+    function descDiezmo(d) { return (d.especial === 'si' ? 'Diezmo especial' : 'Diezmo') + (d.medio ? ' · ' + d.medio.toLowerCase() : ''); }
     function ingresoDeDiezmo(user, d, diezmoId) {
       var now = env.now();
       return insert('MovimientosGenerales', {
-        id: uid(), fecha: d.fecha, mes: d.fecha.slice(0, 7), tipo: 'ingreso', categoria: 'Diezmos', grupo: grupoDe('ingreso', 'Diezmos'),
-        descripcion: 'Diezmo' + (d.medio ? ' · ' + d.medio.toLowerCase() : ''), monto: d.monto, medio: d.medio, archivoId: '', ministerioId: '',
+        id: uid(), fecha: d.fecha, mes: d.fecha.slice(0, 7), tipo: 'ingreso', categoria: catDiezmo(d), grupo: grupoDe('ingreso', catDiezmo(d)),
+        descripcion: descDiezmo(d), monto: d.monto, medio: d.medio, archivoId: '', ministerioId: '',
         origen: 'diezmo', refId: diezmoId, creadoPor: user.id, creadoEn: now, actualizadoEn: now
       });
     }
@@ -1860,11 +1954,14 @@ var TesoCore = (function () {
         if (archivoNuevo) { borrarArchivo(actual.archivoId); d.archivoId = archivoNuevo; }
         else if (p.quitarArchivo) { borrarArchivo(actual.archivoId); d.archivoId = ''; }
         var g = movDeDiezmo(actual);
-        if (g) update('MovimientosGenerales', g.id, { fecha: d.fecha, mes: d.fecha.slice(0, 7), monto: d.monto, medio: d.medio, descripcion: 'Diezmo' + (d.medio ? ' · ' + d.medio.toLowerCase() : ''), actualizadoEn: now });
+        // un diezmo que es parte del total de un culto no puede ser especial (el culto es diezmo regular)
+        if (culto && culto.origen !== 'diezmo' && d.especial === 'si') throw TesoError('Este diezmo es parte del total de un culto: no se puede marcar como especial.');
+        if (g) update('MovimientosGenerales', g.id, { fecha: d.fecha, mes: d.fecha.slice(0, 7), monto: d.monto, medio: d.medio, categoria: catDiezmo(d), grupo: grupoDe('ingreso', catDiezmo(d)), descripcion: descDiezmo(d), actualizadoEn: now });
         return update('Diezmos', p.id, Object.assign(d, { actualizadoEn: now }));
       }
       // diezmo de varios meses: un registro por mes, con el monto repartido
       var n = Math.max(1, Math.min(12, Math.round(Number(p.meses) || 1)));
+      if (n > 1 && d.especial === 'si') throw TesoError('Un diezmo especial es un ingreso de una sola vez: no se reparte en varios meses.');
       if (n > 1) {
         if (d.monto < n) throw TesoError('El monto es muy bajo para repartirlo en ' + n + ' meses');
         var partes = repartirMeses(d.monto, n);
@@ -1888,12 +1985,12 @@ var TesoCore = (function () {
       var now = env.now();
       var filas = items.map(function (it, i) {
         try {
-          return Object.assign(datosDiezmo({ miembroId: it.miembroId, conyugeId: it.conyugeId, fecha: p.fecha, mes: it.mes || p.mes, monto: it.monto, medio: p.medio, notas: it.notas }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: '' });
+          return Object.assign(datosDiezmo({ miembroId: it.miembroId, conyugeId: it.conyugeId, fecha: p.fecha, mes: it.mes || p.mes, monto: it.monto, medio: p.medio, notas: it.notas, especial: it.especial }), { id: uid(), creadoPor: user.id, creadoEn: now, actualizadoEn: now, movGeneralId: '' });
         } catch (e) { throw TesoError('Fila ' + (i + 1) + ': ' + e.message); }
       });
       if (p.sumarACaja) {
         var movs = filas.map(function (f) {
-          var g = { id: uid(), fecha: f.fecha, mes: f.fecha.slice(0, 7), tipo: 'ingreso', categoria: 'Diezmos', grupo: grupoDe('ingreso', 'Diezmos'), descripcion: 'Diezmo' + (f.medio ? ' · ' + f.medio.toLowerCase() : ''), monto: f.monto, medio: f.medio, archivoId: '', ministerioId: '', origen: 'diezmo', refId: f.id, creadoPor: user.id, creadoEn: now, actualizadoEn: now };
+          var g = { id: uid(), fecha: f.fecha, mes: f.fecha.slice(0, 7), tipo: 'ingreso', categoria: catDiezmo(f), grupo: grupoDe('ingreso', catDiezmo(f)), descripcion: descDiezmo(f), monto: f.monto, medio: f.medio, archivoId: '', ministerioId: '', origen: 'diezmo', refId: f.id, creadoPor: user.id, creadoEn: now, actualizadoEn: now };
           f.movGeneralId = g.id;
           return g;
         });

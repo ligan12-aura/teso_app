@@ -3,6 +3,7 @@ import { call } from '../api.js';
 import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe, presupuestoGeneralMensual } from '../calc.js';
 import { PALETA } from '../ui.js';
 import { abrirFormMovimiento } from './movform.js';
+import { renderSeccion as renderActividades, tabsTesoreria, actividadesGenerales } from './actividadesGeneral.js';
 
 const filtros = { periodo: 'mes', tipo: '', categoria: '', grupo: '', q: '' };
 
@@ -49,7 +50,10 @@ export function registrarCulto(ctx) {
 }
 
 export function render(root, ctx) {
+  // Tesorería → Actividades (y el detalle de una actividad)
+  if (['actividades', 'actividad'].includes(ctx.params?.[0])) return renderActividades(root, ctx);
   const { data, mes } = ctx;
+  const actNom = Object.fromEntries(actividadesGenerales(data).map((a) => [a.id, a.nombre]));
   const anio = mes.slice(0, 4);
   const enPeriodo = (m) => (filtros.periodo === 'mes' ? m.mes === mes : m.mes.startsWith(anio));
   const periodoMovs = data.movGenerales.filter(enPeriodo);
@@ -89,6 +93,7 @@ export function render(root, ctx) {
       ${filtros.periodo === 'mes' ? monthPicker(mes) : `<div class="month-picker"><button class="icon-btn" data-y="-1">${icon('chevL')}</button><span class="mp-label">Año ${anio}</span><button class="icon-btn" data-y="1">${icon('chevR')}</button></div>`}
     </div>
   </section>
+  ${tabsTesoreria('')}
 
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${COLOR.ingreso}"></i> Ingresos</span><strong class="kpi-value">${money(s.ingresos)}</strong></article>
@@ -131,13 +136,13 @@ export function render(root, ctx) {
           <tr>
             <td class="nowrap">${fecha(m.fecha)}</td>
             <td><span class="cat-pill ${m.tipo}">${esc(m.categoria)}</span><small class="grp">${esc(grupoDe(m.tipo, m.categoria))}</small></td>
-            <td class="desc">${esc(m.descripcion)}${m.origen === 'transferencia' && minName[m.ministerioId] ? ` <a class="tag" href="#/ministerio/${m.ministerioId}">${esc(minName[m.ministerioId].icono)} Ítem</a>` : ''}</td>
+            <td class="desc">${esc(m.descripcion)}${m.origen === 'transferencia' && minName[m.ministerioId] ? ` <a class="tag" href="#/ministerio/${m.ministerioId}">${esc(minName[m.ministerioId].icono)} Ítem</a>` : ''}${m.actividadId && actNom[m.actividadId] ? ` <a class="tag" href="#/general/actividad/${m.actividadId}">${icon('calendar', 12)} ${esc(actNom[m.actividadId])}</a>` : ''}</td>
             <td class="hide-sm muted">${esc(m.medio)}</td>
             <td class="num ${m.tipo} strong">${m.tipo === 'ingreso' ? '+' : '−'}${money(m.monto)}</td>
             <td class="num hide-sm muted">${saldoTras.has(m.id) ? money(saldoTras.get(m.id)) : ''}</td>
             <td class="row-actions">
               ${m.archivoId ? `<button class="icon-btn sm" data-ver="${m.id}" title="Ver comprobante">${icon('receipt', 16)}</button>` : ''}
-              ${m.origen !== 'transferencia' && m.origen !== 'diezmo' ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="${m.origen === 'diezmo' ? 'Diezmo por hermano: se corrige en el apartado Diezmos' : 'Transferencia de ítem: se anula desde el detalle del ministerio'}">${icon('lock', 15)}</span>`}
+              ${!['transferencia', 'diezmo', 'cuota'].includes(m.origen) ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="${m.origen === 'diezmo' ? 'Diezmo por hermano: se corrige en el apartado Diezmos' : m.origen === 'cuota' ? 'Cuota de una actividad: se anula desde la actividad' : 'Transferencia de ítem: se anula desde el detalle del ministerio'}">${icon('lock', 15)}</span>`}
             </td>
           </tr>`).join('')}
         </tbody>

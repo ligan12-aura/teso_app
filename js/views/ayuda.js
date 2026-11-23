@@ -77,7 +77,10 @@ const TEMAS = {
         <li><b>Actividades y administración:</b> reuniones, celebraciones, gastos bancarios y varios.</li>
       </ul>
       <p>La tarjeta <b>Gastos por tipo</b> muestra cuánto se gastó en cada uno; toca un tipo para filtrar el libro. Arriba, la franja de <b>presupuesto</b> muestra cuánto queda disponible en el mes.</p>
-      ${tip(`Los movimientos con ${icon('lock', 13)} son transferencias de ítems a ministerios. No se editan aquí: si hubo un error, se anulan desde el ministerio.`, 'warn')}`
+      <h4>Actividades de la iglesia</h4>
+      <p>En la pestaña <b>Actividades</b> (arriba, junto a Movimientos) se crean las actividades de la iglesia: aniversario, retiro, venta… Igual que en los ministerios:</p>
+      ${pasos(`Presiona ${btn('plus', 'Nueva actividad')}: nombre, fecha y cuota por persona (0 = sin cuota).`, `Con ${btn('users', 'Elegir confirmados')} marca a los <b>miembros</b> que participan.`, `Cuando alguien paga, presiona <b>Registrar pago</b>: entra como ingreso “Actividades” de la tesorería general con esa fecha. Si fue un error, usa <b>Anular</b>.`, `Registra sus gastos (y otros ingresos) con ${btn('camera', 'Gasto')} u <b>Otro ingreso</b> dentro de la actividad, o desde el libro eligiendo la actividad en el formulario. La actividad muestra entradas, salidas y su resultado.`)}
+      ${tip(`Los movimientos con ${icon('lock', 13)} son transferencias de ítems a ministerios, diezmos o cuotas de actividades. No se editan aquí: se corrigen desde el ministerio, el apartado Diezmos o la actividad.`, 'warn')}`
     },
     {
       id: 'ministerios', titulo: 'Ministerios', ico: 'grid', html: `
@@ -112,7 +115,7 @@ const TEMAS = {
       id: 'diezmos', titulo: 'Diezmos', ico: 'heart', html: `
       <p>Control de los diezmos de cada hermano, mes a mes. Es <b>información confidencial</b>: solo la ven el administrador, el tesorero y el pastor.</p>
       <h4>Registrar</h4>
-      ${pasos(`Todos los diezmos se registran aquí, nunca en el culto: toca la celda del hermano en el mes, o usa ${btn('plus', 'Registrar diezmos')} para varios a la vez (por ejemplo, los sobres del domingo).`, `<b>Fecha de entrega y mes al que corresponde:</b> la fecha es el día en que lo dio (así entra a la caja); el mes es al que corresponde. Por ejemplo, lo da el 11 de septiembre pero es el diezmo de julio: se ve en la columna de julio.`, `<b>Diezmo de varios meses:</b> al tocar la celda, elige en “¿Cuántos meses cubre?” (por ejemplo 3). El monto se reparte en partes iguales entre esos meses.`, `Con <b>Sumar a la caja</b> marcado se crea también el ingreso en la tesorería general. Puedes adjuntar la <b>foto o captura del comprobante</b>; se ve con el botón “Comprobante”. Si corriges o eliminas un diezmo sumado a la caja, su ingreso en la tesorería se actualiza o se elimina solo.`)}
+      ${pasos(`Todos los diezmos se registran aquí, nunca en el culto: toca la celda del hermano en el mes, o usa ${btn('plus', 'Registrar diezmos')} para varios a la vez (por ejemplo, los sobres del domingo).`, `<b>Fecha de entrega y mes al que corresponde:</b> la fecha es el día en que lo dio (así entra a la caja); el mes es al que corresponde. Por ejemplo, lo da el 11 de septiembre pero es el diezmo de julio: se ve en la columna de julio.`, `<b>Diezmo de varios meses:</b> al tocar la celda, elige en “¿Cuántos meses cubre?” (por ejemplo 3). El monto se reparte en partes iguales entre esos meses.`, `Con <b>Sumar a la caja</b> marcado se crea también el ingreso en la tesorería general. Puedes adjuntar la <b>foto o captura del comprobante</b>; se ve con el botón “Comprobante”. Si corriges o eliminas un diezmo sumado a la caja, su ingreso en la tesorería se actualiza o se elimina solo.`, `<b>Diezmo especial:</b> si es por un ingreso fuera de lo normal (herencia, bono, venta de un bien…), marca <b>Diezmo especial</b>. Entra a la caja como “Diezmos especiales” y se ve aparte en el mes, pero <b>no cuenta</b> en el total del diezmo regular, el promedio, las comparaciones con otros meses ni la constancia del hermano.`)}
       <h4>Categorías (solo hermanos activos y habilitados para diezmar)</h4>
       <p>En la ficha de cada miembro se indica si está <b>habilitado para diezmar</b>. Los no habilitados (por ejemplo, estudiantes o quienes no tienen ingresos) no se cuentan en la estadística ni aparecen en la tabla por hermano; si igual dan un diezmo, se registra y suma al total del mes. Al habilitar a alguien se guarda la fecha (<b>Habilitado desde</b>): cuenta en el análisis desde ese mes; antes, como no habilitado.</p>
       <p><b>💍 Matrimonios:</b> en la tabla por hermano aparecen en una sola fila. En el gráfico de categorías y en el promedio cuentan como 2 hermanos.</p>
@@ -120,6 +123,7 @@ const TEMAS = {
         <li><span class="badge st-ok">Constante</span> diezmó en al menos el 80% de los meses transcurridos del año.</li>
         <li><span class="badge st-obs">Irregular</span> diezmó algunos meses. Si lleva 2 o más meses sin diezmar se indica bajo su nombre.</li>
         <li><span class="badge st-sin">No diezma</span> no tiene diezmos en el año.</li>
+        <li><span class="badge st-open">Inactivo en 2026</span> en su ficha se marcó ese año como inactivo: ese año no se evalúa (ni constante ni irregular).</li>
       </ul>
       <h4>Estadística del mes</h4>
       <p>Elige el <b>mes y el año</b> arriba (con las flechas o las listas). Verás el total diezmado y su variación frente al mes anterior, cuántos hermanos activos diezmaron y cuántos no, el promedio por hermano (un matrimonio cuenta como 2) y las listas de <b>quiénes diezmaron</b> y <b>quiénes no</b> ese mes. El gráfico <b>Mes a mes</b> muestra el total de cada mes del año y el % de hermanos que diezmó; toca una barra para ir a ese mes.</p>`
@@ -131,6 +135,8 @@ const TEMAS = {
         <li><b>Activo / Inactivo:</b> al marcar a alguien inactivo se registra su <b>fecha de baja</b>. En el resumen de diezmos cuenta como activo hasta el mes anterior a la baja, y desde ahí deja de contar; su historial se conserva. Un miembro con diezmos no se puede eliminar: se marca inactivo.</li>
         <li><b>Trasladado a otra iglesia:</b> en la ficha elige el estado “Trasladado a otra iglesia”, la <b>fecha del traslado</b> (obligatoria) y la iglesia de destino. Sus diezmos cuentan en la estadística mientras fue miembro (hasta el mes anterior al traslado) y desde ahí deja de contarse, sin aparecer como que dejó de diezmar. También sale de la asistencia, los discipulados y los listados de ministerios. Filtra a los trasladados con “Trasladados”.</li>
         <li><b>Fallecido:</b> elige ese estado con la <b>fecha de fallecimiento</b>. Como en un traslado, sus diezmos cuentan hasta esa fecha, sale de la asistencia y los grupos, y su ficha se conserva.</li>
+        <li><b>Inactivo año a año:</b> en la ficha, en “Años en que estuvo inactivo”, marca los años en que dejó de venir. Por ejemplo, Juan estuvo activo en 2025, en 2026 dejó de ir y en 2027 volvió: marca solo <b>2026</b>. Ese año no cuenta en la constancia de sus diezmos ni como activo; los demás años, sí. Si marcas el año en curso, aparece como “Inactivo en 2026”. Al volver a poner Activo a alguien que estaba inactivo, la ficha propone marcar los años en que estuvo alejado.</li>
+        <li><b>Tercera edad:</b> en un miembro activo, marca “Activo con condición de tercera edad”. Se ve la etiqueta en la lista (filtro “Tercera edad”) y en la asistencia no se le marcan ausencias: no aparece como irregular ni con faltas seguidas.</li>
         <li><b>Ficha:</b> fecha de nacimiento, celular, correo, domicilio, notas y <b>cónyuge</b>. ${btn('edit', '')} abre la ficha.</li>
         <li><b>💍 Matrimonio:</b> al elegir el cónyuge, ambos quedan unidos. Al registrar diezmos, el matrimonio aparece en una sola fila y su diezmo cuenta para los dos hermanos.</li>
         <li><b>Ficha incompleta:</b> filtra a quienes les falta algún dato, para ir completándolos.</li>
@@ -146,7 +152,7 @@ const TEMAS = {
         <li><b>Quiénes aparecen:</b> los miembros activos, las personas de los listados de los ministerios (por ejemplo Jóvenes) que no son miembros, y las visitas.</li>
         <li><b>Visitas:</b> si viene alguien nuevo, escribe su nombre en “¿Vino alguien nuevo?” y queda marcado y guardado para la próxima vez. También puedes agregarlo con ${btn('user', 'Agregar visita')}.</li>
         <li><b>Faltaron varias veces seguidas:</b> la app muestra solos a quienes llevan 3 o más reuniones seguidas sin venir (puedes cambiar el número), con la fecha de la última vez que vinieron y su celular, para llamarlos o visitarlos.</li>
-        <li><b>Regular / irregular:</b> regular es quien vino a 3 de cada 4 de las últimas 8 reuniones o más; irregular, quien vino menos. Con menos de 3 reuniones registradas aparece “Pocos datos”.</li>
+        <li><b>Regular / irregular:</b> regular es quien vino a 3 de cada 4 de las últimas 8 reuniones o más; irregular, quien vino menos. Con menos de 3 reuniones registradas aparece “Pocos datos”. Los miembros de <b>tercera edad</b> aparecen como “Tercera edad” y no reciben alertas de ausencia.</li>
       </ul>
       <h4>Discipulados en hogares</h4>
       <ul class="hp-list">

@@ -32,11 +32,20 @@ export function rutNormal(v) {
 }
 const fichaCompleta = (m) => !!(m.fechaNacimiento && m.celular && m.email && m.domicilio);
 
+// Años en que estuvo inactivo (aunque hoy esté activo): "2026,2027" → [2026, 2027]
+export const aniosInactivo = (m) => String(m?.aniosInactivo || '').split(',').filter(Boolean).map(Number);
+export const inactivoEnAnio = (m, anio) => aniosInactivo(m).includes(Number(anio));
+// Activo hoy: estado activo y el año en curso no está marcado como inactivo
+export const activoHoy = (m, hoy) => m.estado === 'activo' && !inactivoEnAnio(m, hoy.slice(0, 4));
+
 export function render(root, ctx) {
   const { data } = ctx;
   const hoy = data.hoy;
+  const anioHoy = hoy.slice(0, 4);
   const miembros = [...data.miembros].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-  const activos = miembros.filter((m) => m.estado === 'activo');
+  const activos = miembros.filter((m) => activoHoy(m, hoy));
+  const inactivosAnio = miembros.filter((m) => m.estado === 'activo' && !activoHoy(m, hoy));
+  const terceraEdad = activos.filter((m) => m.terceraEdad === 'si');
   const trasladados = miembros.filter((m) => m.estado === 'trasladado');
   const fallecidos = miembros.filter((m) => m.estado === 'fallecido');
   const completas = miembros.filter(fichaCompleta).length;
@@ -48,8 +57,9 @@ export function render(root, ctx) {
   // RUT: también se encuentra escrito sin puntos ni guion (123456785 → 12.345.678-5)
   const qRut = q.replace(/[.\-\s]/g, '');
   const lista = miembros.filter((m) => {
-    if (filtros.estado === 'activos' && m.estado !== 'activo') return false;
-    if (filtros.estado === 'inactivos' && m.estado !== 'inactivo') return false;
+    if (filtros.estado === 'activos' && !activoHoy(m, hoy)) return false;
+    if (filtros.estado === 'inactivos' && !(m.estado === 'inactivo' || (m.estado === 'activo' && !activoHoy(m, hoy)))) return false;
+    if (filtros.estado === 'tercera' && !(m.estado === 'activo' && m.terceraEdad === 'si')) return false;
     if (filtros.estado === 'trasladados' && m.estado !== 'trasladado') return false;
     if (filtros.estado === 'fallecidos' && m.estado !== 'fallecido') return false;
     if (filtros.estado === 'incompletas' && fichaCompleta(m)) return false;
@@ -69,8 +79,8 @@ export function render(root, ctx) {
 
   <section class="kpis kpis-4">
     <article class="kpi"><span class="kpi-label">${icon('users', 15)} Miembros</span><strong class="kpi-value">${miembros.length}</strong><span class="kpi-sub">en el registro</span></article>
-    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--green)"></i> Activos</span><strong class="kpi-value">${activos.length}</strong><span class="kpi-sub">${miembros.length ? Math.round((activos.length / miembros.length) * 100) : 0}% del total</span></article>
-    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:#9aa3b2"></i> Inactivos</span><strong class="kpi-value">${miembros.length - activos.length - trasladados.length - fallecidos.length}</strong><span class="kpi-sub">alejados${trasladados.length ? ` · ${trasladados.length} trasladado${trasladados.length === 1 ? '' : 's'} a otra iglesia` : ''}${fallecidos.length ? ` · ${fallecidos.length} fallecido${fallecidos.length === 1 ? '' : 's'}` : ''}</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:var(--green)"></i> Activos</span><strong class="kpi-value">${activos.length}</strong><span class="kpi-sub">${miembros.length ? Math.round((activos.length / miembros.length) * 100) : 0}% del total${terceraEdad.length ? ` · ${terceraEdad.length} de tercera edad` : ''}</span></article>
+    <article class="kpi"><span class="kpi-label"><i class="dot" style="background:#9aa3b2"></i> Inactivos</span><strong class="kpi-value">${miembros.length - activos.length - trasladados.length - fallecidos.length}</strong><span class="kpi-sub">alejados${inactivosAnio.length ? ` (${inactivosAnio.length} solo en ${anioHoy})` : ''}${trasladados.length ? ` · ${trasladados.length} trasladado${trasladados.length === 1 ? '' : 's'} a otra iglesia` : ''}${fallecidos.length ? ` · ${fallecidos.length} fallecido${fallecidos.length === 1 ? '' : 's'}` : ''}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('checkCircle', 15)} Fichas completas</span><strong class="kpi-value">${miembros.length ? Math.round((completas / miembros.length) * 100) : 0}%</strong><span class="kpi-sub">${completas} de ${miembros.length} con nacimiento, celular, correo y domicilio</span></article>
   </section>
 
@@ -86,16 +96,18 @@ export function render(root, ctx) {
     <div class="filters">
       <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar por nombre, RUT, celular, correo…" value="${esc(filtros.q)}" data-q></div>
       <div class="seg seg-sm">
-        ${[['todos', 'Todos'], ['activos', 'Activos'], ['inactivos', 'Inactivos'], ...(trasladados.length || filtros.estado === 'trasladados' ? [['trasladados', 'Trasladados']] : []), ...(fallecidos.length || filtros.estado === 'fallecidos' ? [['fallecidos', 'Fallecidos']] : []), ['incompletas', 'Ficha incompleta'], ['nohab', 'No habilitados']].map(([k, l]) => `<label><input type="radio" name="fest" value="${k}" ${filtros.estado === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
+        ${[['todos', 'Todos'], ['activos', 'Activos'], ['inactivos', 'Inactivos'], ...(terceraEdad.length || filtros.estado === 'tercera' ? [['tercera', 'Tercera edad']] : []), ...(trasladados.length || filtros.estado === 'trasladados' ? [['trasladados', 'Trasladados']] : []), ...(fallecidos.length || filtros.estado === 'fallecidos' ? [['fallecidos', 'Fallecidos']] : []), ['incompletas', 'Ficha incompleta'], ['nohab', 'No habilitados']].map(([k, l]) => `<label><input type="radio" name="fest" value="${k}" ${filtros.estado === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
     </div>
     ${miembros.length ? (lista.length ? `<div class="table-wrap"><table class="table miembros-table">
       <thead><tr><th>Nombre</th><th>Estado</th><th>Nacimiento</th><th>Celular</th><th class="hide-sm">Correo</th><th class="hide-sm">Domicilio</th><th></th></tr></thead>
       <tbody>${lista.map((m) => {
         const e = edad(m.fechaNacimiento, hoy);
-        return `<tr class="${m.estado !== 'activo' ? 'inactive' : ''}">
-          <td><b>${esc(m.nombre)}</b>${m.estadoCivil ? ` <small class="muted">· ${estadoCivilTexto(m.estadoCivil)}</small>` : ''}${m.rut ? `<br><small class="muted">RUT ${esc(m.rut)}</small>` : ''}${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.habilitadoDiezmo === 'no' ? '<br><span class="tag tag-gris">No habilitado para diezmar</span>' : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
-          <td>${m.estado === 'activo' ? `<span class="badge st-ok">Activo</span>${m.fechaIngreso ? `<br><small class="muted">desde ${fecha(m.fechaIngreso)}</small>` : ''}` : m.estado === 'fallecido' ? `<span class="badge st-open">Fallecido</span><br><small class="muted">${fecha(m.fechaBaja)}</small>` : m.estado === 'trasladado' ? `<span class="badge st-obs">Trasladado</span><br><small class="muted">${m.trasladoA ? `a ${esc(m.trasladoA)} · ` : ''}${fecha(m.fechaBaja)}</small>` : `<span class="badge st-open">Inactivo</span>${m.fechaBaja ? `<br><small class="muted">desde ${fecha(m.fechaBaja)}</small>` : ''}`}</td>
+        const anios = aniosInactivo(m);
+        const otrosAnios = anios.filter((y) => String(y) !== anioHoy || m.estado !== 'activo');
+        return `<tr class="${!activoHoy(m, hoy) ? 'inactive' : ''}">
+          <td><b>${esc(m.nombre)}</b>${m.estadoCivil ? ` <small class="muted">· ${estadoCivilTexto(m.estadoCivil)}</small>` : ''}${m.rut ? `<br><small class="muted">RUT ${esc(m.rut)}</small>` : ''}${m.conyugeId && nombreDe[m.conyugeId] ? `<br><small class="pareja-tag">💍 Matrimonio con ${esc(nombreDe[m.conyugeId])}</small>` : ''}${m.estado === 'activo' && m.terceraEdad === 'si' ? '<br><span class="tag tag-ambar">Tercera edad</span>' : ''}${m.habilitadoDiezmo === 'no' ? '<br><span class="tag tag-gris">No habilitado para diezmar</span>' : ''}${m.notas ? `<br><small class="muted">${esc(m.notas)}</small>` : ''}</td>
+          <td>${m.estado === 'activo' && !activoHoy(m, hoy) ? `<span class="badge st-open">Inactivo en ${anioHoy}</span>` : m.estado === 'activo' ? `<span class="badge st-ok">Activo</span>${m.fechaIngreso ? `<br><small class="muted">desde ${fecha(m.fechaIngreso)}</small>` : ''}` : m.estado === 'fallecido' ? `<span class="badge st-open">Fallecido</span><br><small class="muted">${fecha(m.fechaBaja)}</small>` : m.estado === 'trasladado' ? `<span class="badge st-obs">Trasladado</span><br><small class="muted">${m.trasladoA ? `a ${esc(m.trasladoA)} · ` : ''}${fecha(m.fechaBaja)}</small>` : `<span class="badge st-open">Inactivo</span>${m.fechaBaja ? `<br><small class="muted">desde ${fecha(m.fechaBaja)}</small>` : ''}`}${otrosAnios.length ? `<br><small class="muted" title="Años en que estuvo inactivo">inactivo en ${otrosAnios.join(', ')}</small>` : ''}</td>
           <td class="nowrap">${m.fechaNacimiento ? `${fecha(m.fechaNacimiento)}<br><small class="muted">${e} años</small>` : '<span class="falta">—</span>'}</td>
           <td class="nowrap">${m.celular ? `<a class="link" href="tel:${esc(m.celular.replace(/[^\d+]/g, ''))}">${esc(m.celular)}</a>` : '<span class="falta">—</span>'}</td>
           <td class="hide-sm">${m.email ? `<a class="link" href="mailto:${esc(m.email)}">${esc(m.email)}</a>` : '<span class="falta">—</span>'}</td>
@@ -118,6 +130,12 @@ export function render(root, ctx) {
 }
 
 export function editarMiembro(ctx, m = null) {
+  // años que se pueden marcar como inactivos: desde 2024 (o el más antiguo ya marcado) hasta el actual
+  const anioHoy = +ctx.data.hoy.slice(0, 4);
+  const marcados = aniosInactivo(m);
+  const desdeAnio = Math.min(2024, ...marcados, m?.fechaIngreso ? +m.fechaIngreso.slice(0, 4) : 9999);
+  const listaAnios = [];
+  for (let y = anioHoy; y >= desdeAnio; y--) listaAnios.push(y);
   // Personas de los listados de ministerios (p. ej. Jóvenes) que aún no son miembros: al elegir una,
   // queda enlazada a esta ficha y no hay que ir a cambiarla al listado
   const minNom = Object.fromEntries((ctx.data.ministerios || []).map((x) => [x.id, x.nombre]));
@@ -138,6 +156,12 @@ export function editarMiembro(ctx, m = null) {
         <label class="field"><span>Miembro desde <small class="muted">(opcional)</small></span><input type="date" name="fechaIngreso" value="${esc(m?.fechaIngreso || '')}" max="${ctx.data.hoy}"><small class="hint">Déjalo vacío si ya era miembro: sus diezmos anteriores siguen contando.</small></label>
         <label class="field" data-baja ${m && m.estado !== 'activo' ? '' : 'hidden'}><span data-baja-lbl>${m?.estado === 'trasladado' ? 'Fecha del traslado' : m?.estado === 'fallecido' ? 'Fecha de fallecimiento' : 'Fecha de baja (desde cuándo no asiste)'}</span><input type="date" name="fechaBaja" value="${esc(m?.fechaBaja || '')}" max="${ctx.data.hoy}"></label>
         <label class="field" data-traslado ${m?.estado === 'trasladado' ? '' : 'hidden'}><span>Iglesia de destino</span><input name="trasladoA" maxlength="100" value="${esc(m?.trasladoA || '')}" placeholder="Ej.: Iglesia Bautista de Temuco"></label>
+      </div>
+      <label class="check" data-tercera ${!m || m.estado === 'activo' ? '' : 'hidden'}><input type="checkbox" name="terceraEdad" ${m?.terceraEdad === 'si' ? 'checked' : ''}> <span>Activo con condición de <b>tercera edad</b> <small class="muted">(no se le marcan ausencias en la asistencia)</small></span></label>
+      <div class="field anios-inactivo">
+        <span>Años en que estuvo inactivo <small class="muted">(opcional)</small></span>
+        <div class="anios-check">${listaAnios.map((y) => `<label class="check"><input type="checkbox" name="anioIn" value="${y}" ${marcados.includes(y) ? 'checked' : ''}> ${y}</label>`).join('')}</div>
+        <small class="hint" data-anios-hint>Ej.: estuvo activo en 2025, dejó de venir en 2026 y volvió en 2027 → marca solo 2026. Ese año no cuenta en sus diezmos ni como activo.</small>
       </div>
       <label class="check" data-traslado-conyuge hidden><input type="checkbox" name="trasladarConyuge" checked> <span>Su cónyuge, <b data-conyuge-nombre></b>, también se traslada (misma fecha e iglesia)</span></label>
       <div class="note" data-traslado-nota ${m?.estado === 'trasladado' ? '' : 'hidden'}>${icon('heart', 15)}<span>Sus diezmos cuentan en la estadística hasta la fecha del traslado; desde ahí deja de contarse. También deja de aparecer en la asistencia, los discipulados y los listados de ministerios.</span></div>
@@ -184,6 +208,14 @@ export function editarMiembro(ctx, m = null) {
         f.fechaBaja.required = e === 'trasladado' || e === 'fallecido';
         if (e !== 'activo' && !f.fechaBaja.value) f.fechaBaja.value = ctx.data.hoy;
         if (e === 'trasladado') f.trasladoA.focus();
+        f.querySelector('[data-tercera]').hidden = e !== 'activo';
+        // vuelve a estar activo: se proponen como inactivos los años completos que estuvo alejado
+        if (e === 'activo' && m?.estado === 'inactivo' && m.fechaBaja) {
+          const desde = +m.fechaBaja.slice(0, 4) + (m.fechaBaja.slice(5) <= '01-31' ? 0 : 1);
+          const propuestos = [];
+          f.querySelectorAll('[name=anioIn]').forEach((c) => { const y = +c.value; if (y >= desde && y < anioHoy && !c.checked) { c.checked = true; propuestos.push(y); } });
+          if (propuestos.length) f.querySelector('[data-anios-hint]').innerHTML = `Se marcaron <b>${propuestos.sort().join(', ')}</b> como años inactivos (estuvo alejado desde ${fecha(m.fechaBaja)}). Revisa y ajusta si hace falta.`;
+        }
         syncConyuge();
       });
       // casilla "su cónyuge también se traslada": solo al pasar a trasladado y si el cónyuge no lo está ya
@@ -213,6 +245,9 @@ export function editarMiembro(ctx, m = null) {
     async onSubmit(f) {
       const d = formData(f);
       if (m) d.id = m.id;
+      delete d.anioIn;
+      d.aniosInactivo = [...f.querySelectorAll('[name=anioIn]')].filter((c) => c.checked).map((c) => c.value).join(',');
+      d.terceraEdad = d.estado === 'activo' && f.terceraEdad.checked;
       if (d.rut && rutNormal(d.rut) === null) throw new Error('Revisa el RUT: el dígito verificador no calza');
       // solo cuenta si la casilla está a la vista (traslado de alguien con cónyuge activo)
       d.trasladarConyuge = !f.querySelector('[data-traslado-conyuge]').hidden && f.trasladarConyuge.checked;
