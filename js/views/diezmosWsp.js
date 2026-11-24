@@ -14,10 +14,9 @@ Te compartimos el resumen de tus diezmos {{2}} en la Iglesia Bautista El Redento
 
 • Total diezmado: {{3}}
 • Meses con diezmo: {{4}}
-• Tu aporte: {{5}} de los ingresos de la iglesia en este período
-• Detalle: {{6}}
+• Detalle: {{5}}
 
-{{7}}
+{{6}}
 
 "Cada uno dé como propuso en su corazón, no con tristeza ni por necesidad, porque Dios ama al dador alegre" (2 Corintios 9:7)
 
@@ -182,10 +181,10 @@ function datosMensaje(f, anio, mesesPeriodo, hoy, data) {
   return { reemplazos, lineaDetalle };
 }
 
-// 7 datos de la plantilla de Meta, en orden
+// 6 datos de la plantilla de Meta, en orden
 export function parametrosMeta(f, anio, mesesPeriodo, hoy, data) {
   const { reemplazos: r, lineaDetalle } = datosMensaje(f, anio, mesesPeriodo, hoy, data);
-  return [r.nombre, r.periodo, r.total, r.meses, r.aporte || 'un porcentaje no disponible', lineaDetalle,
+  return [r.nombre, r.periodo, r.total, r.meses, lineaDetalle,
     r.animo ? `${r.animo} ¡Gracias por tu fidelidad!` : '¡Gracias por tu fidelidad y por sostener la obra del Señor!'];
 }
 export const textoMeta = (params) => PLANTILLA_META.replace(/\{\{(\d)\}\}/g, (m, n) => params[+n - 1] ?? m);
