@@ -4,6 +4,25 @@
 import { icon, esc, money, modal, toast, sinTildes, coincide } from '../ui.js';
 import { resumenDiezmos, esDeMiembro, esEspecial, diezmosRegulares } from './diezmos.js';
 import { editarMiembro } from './miembros.js';
+import { call, isDemo } from '../api.js';
+
+// Envío automático (API oficial de WhatsApp): el texto es esta plantilla, aprobada por Meta con el nombre
+// "resumen_diezmos" (idioma español). Cada {{n}} lo completa la página con los datos del hermano.
+export const PLANTILLA_META = `Hola {{1}}, bendiciones.
+
+Te compartimos el resumen de tus diezmos {{2}} en la Iglesia Bautista El Redentor:
+
+• Total diezmado: {{3}}
+• Meses con diezmo: {{4}}
+• Tu aporte: {{5}} de los ingresos de la iglesia en este período
+• Detalle: {{6}}
+
+{{7}}
+
+"Cada uno dé como propuso en su corazón, no con tristeza ni por necesidad, porque Dios ama al dador alegre" (2 Corintios 9:7)
+
+Tesorería · Iglesia Bautista El Redentor
+Mensaje confidencial, solo para ti.`;
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -125,7 +144,7 @@ export function periodoFila(f, anio, mesesPeriodo, hoy) {
   };
 }
 
-export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
+function datosMensaje(f, anio, mesesPeriodo, hoy, data) {
   const pf = periodoFila(f, anio, mesesPeriodo, hoy);
   const evaluados = pf.evaluados;
   mesesPeriodo = evaluados;
@@ -154,6 +173,25 @@ export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
     aporte,
     animo
   };
+  // detalle en una sola línea (la plantilla de Meta no admite saltos de línea en sus datos)
+  const lineaDetalle = [
+    conDiezmo.length ? conDiezmo.map((i) => `${MESES_C[i]} ${money(f.meses[i])}`).join(', ') : 'sin diezmos registrados en el período',
+    f.especiales ? `diezmos especiales ${money(f.especiales)}` : '',
+    adelantados.length ? `adelantado: ${adelantados.map((i) => `${MESES_C[i]} ${money(f.meses[i])}`).join(', ')}` : ''
+  ].filter(Boolean).join(' · ');
+  return { reemplazos, lineaDetalle };
+}
+
+// 7 datos de la plantilla de Meta, en orden
+export function parametrosMeta(f, anio, mesesPeriodo, hoy, data) {
+  const { reemplazos: r, lineaDetalle } = datosMensaje(f, anio, mesesPeriodo, hoy, data);
+  return [r.nombre, r.periodo, r.total, r.meses, r.aporte || 'un porcentaje no disponible', lineaDetalle,
+    r.animo ? `${r.animo} ¡Gracias por tu fidelidad!` : '¡Gracias por tu fidelidad y por sostener la obra del Señor!'];
+}
+export const textoMeta = (params) => PLANTILLA_META.replace(/\{\{(\d)\}\}/g, (m, n) => params[+n - 1] ?? m);
+
+export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
+  const { reemplazos } = datosMensaje(f, anio, mesesPeriodo, hoy, data);
   const rellenar = (l) => l.replace(/\{(\w+)\}/g, (m, k) => (k in reemplazos ? reemplazos[k] : m));
   return plantilla.split('\n')
     // una línea con un dato que no aplica (sin especiales, sin aporte…) se quita entera
@@ -170,14 +208,20 @@ export function abrirReportesWsp(ctx, anioInicial) {
   let plantilla = plantillaGuardada();
   let q = '';
   const claveEnviados = () => `teso_wsp_enviados_${anio}`;
-  const enviados = () => { try { return JSON.parse(leer(claveEnviados(), '{}')) || {}; } catch { return {}; } };
-  const marcarEnviado = (k) => { const e = enviados(); e[k] = new Date().toISOString().slice(0, 10); guardar(claveEnviados(), JSON.stringify(e)); };
+  // automático: el servidor envía con la API oficial y guarda los envíos (los ve todo el equipo)
+  const srv = { activo: false, enviados: {} };
+  const enviados = () => { if (srv.activo) return srv.enviados; try { return JSON.parse(leer(claveEnviados(), '{}')) || {}; } catch { return {}; } };
+  const marcarEnviado = (k) => { const e = enviados(); e[k] = new Date().toISOString().slice(0, 10); if (!srv.activo) guardar(claveEnviados(), JSON.stringify(e)); };
+  const cargarEstado = async () => {
+    if (isDemo) return;
+    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; } catch { srv.activo = false; }
+  };
 
   return modal({
     title: 'Reportes de diezmos por WhatsApp',
     wide: true,
     body: `
-      <p class="muted small">Un resumen personal para cada hermano activo y habilitado para diezmar (un matrimonio recibe uno solo, en el celular de cada uno). Al tocar <b>Enviar</b> se abre WhatsApp con el mensaje listo: lo envías tú desde tu WhatsApp. Solo diezmo regular en el total; los especiales van aparte.</p>
+      <p class="muted small" data-intro>Un resumen personal para cada hermano activo y habilitado para diezmar (un matrimonio recibe uno solo, en el celular de cada uno). Al tocar <b>Enviar</b> se abre WhatsApp con el mensaje listo: lo envías tú desde tu WhatsApp. Solo diezmo regular en el total; los especiales van aparte.</p>
       <div class="pick-tools">
         <select data-anio aria-label="Año">${anios.map((y) => `<option ${y === anio ? 'selected' : ''}>${y}</option>`).join('')}</select>
         <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
@@ -194,6 +238,12 @@ export function abrirReportesWsp(ctx, anioInicial) {
     onOpen(f, { close }) {
       const lista = f.querySelector('[data-lista]');
       const vista = f.querySelector('[data-vista]');
+      const modoAuto = () => {
+        f.querySelector('[data-intro]').innerHTML = srv.activo
+          ? 'Un resumen personal para cada hermano activo y habilitado para diezmar (un matrimonio recibe uno solo, en el celular de cada uno). Al tocar <b>Enviar</b>, el mensaje sale <b>automáticamente</b> desde el WhatsApp de la iglesia, con la plantilla aprobada por Meta. Los envíos quedan registrados para todo el equipo.'
+          : f.querySelector('[data-intro]').innerHTML;
+        f.querySelector('.wsp-plantilla').hidden = srv.activo;
+      };
       const pintar = () => {
         const { filas, mesesPeriodo } = filasReporte(data, anio);
         const env = enviados();
@@ -201,11 +251,28 @@ export function abrirReportesWsp(ctx, anioInicial) {
         const vis = filas.filter((x) => !qq || coincide(x.nombre, qq));
         const conNum = filas.filter((x) => x.personas.some((p) => p.numero));
         const listos = filas.filter((x) => x.personas.some((p) => env[x.id + ':' + p.id]));
-        f.querySelector('[data-resumen]').innerHTML = `<span><b>${filas.length}</b> ${filas.length === 1 ? 'resumen' : 'resúmenes'} ${periodoTexto(anio, mesesPeriodo, data.hoy)}</span><span><b>${conNum.length}</b> con celular</span>${filas.length - conNum.length ? `<span class="falta"><b>${filas.length - conNum.length}</b> sin celular</span>` : ''}<span><b>${listos.length}</b> enviado${listos.length === 1 ? '' : 's'}</span>${Object.keys(env).length ? `<button type="button" class="link-btn" data-reiniciar>${icon('undo', 13)} Reiniciar envíos</button>` : ''}`;
-        f.querySelector('[data-reiniciar]')?.addEventListener('click', () => {
+        f.querySelector('[data-resumen]').innerHTML = `<span><b>${filas.length}</b> ${filas.length === 1 ? 'resumen' : 'resúmenes'} ${periodoTexto(anio, mesesPeriodo, data.hoy)}</span><span><b>${conNum.length}</b> con celular</span>${filas.length - conNum.length ? `<span class="falta"><b>${filas.length - conNum.length}</b> sin celular</span>` : ''}<span><b>${listos.length}</b> enviado${listos.length === 1 ? '' : 's'}</span>${Object.keys(env).length ? `<button type="button" class="link-btn" data-reiniciar>${icon('undo', 13)} Reiniciar envíos</button>` : ''}${srv.activo ? `<button type="button" class="btn btn-primary btn-sm" data-todos>${icon('send', 14)} Enviar a todos los pendientes</button>` : ''}`;
+        f.querySelector('[data-reiniciar]')?.addEventListener('click', async () => {
           if (!confirm(`¿Reiniciar los envíos de ${anio}? Todos los botones vuelven a decir “Enviar”. No borra ningún mensaje ya enviado por WhatsApp.`)) return;
-          try { localStorage.removeItem(claveEnviados()); } catch { /* sin almacenamiento */ }
+          if (srv.activo) { try { await call('wspReiniciar', { anio }); srv.enviados = {}; } catch (e) { return toast(e.message, 'err'); } }
+          else { try { localStorage.removeItem(claveEnviados()); } catch { /* sin almacenamiento */ } }
           toast('Envíos reiniciados');
+          pintar();
+        });
+        // envío automático a todos los que aún no lo reciben (uno por uno, con avance)
+        f.querySelector('[data-todos]')?.addEventListener('click', async (e) => {
+          const pend = [];
+          filas.forEach((x) => x.personas.forEach((p) => { if (p.numero && !env[x.id + ':' + p.id]) pend.push({ x, p }); }));
+          if (!pend.length) return toast('No hay envíos pendientes');
+          if (!confirm(`Se enviará el resumen de ${anio} por WhatsApp a ${pend.length} celular${pend.length === 1 ? '' : 'es'}. ¿Continuar?`)) return;
+          const b = e.currentTarget; b.disabled = true;
+          let ok = 0; const fallas = [];
+          for (const [i, { x, p }] of pend.entries()) {
+            b.textContent = `Enviando ${i + 1} de ${pend.length}…`;
+            try { await enviarAuto(x, p); ok++; } catch (er) { fallas.push(`${p.nombre}: ${er.message}`); }
+          }
+          toast(`${ok} enviado${ok === 1 ? '' : 's'}${fallas.length ? ` · ${fallas.length} con error` : ''}`, fallas.length ? 'err' : undefined);
+          if (fallas.length) alert('No se enviaron:\n' + fallas.join('\n'));
           pintar();
         });
         lista.innerHTML = vis.length ? vis.map((x) => `<li>
@@ -220,13 +287,21 @@ export function abrirReportesWsp(ctx, anioInicial) {
         lista.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => {
           const x = filaDe(b.dataset.ver);
           vista.hidden = false;
-          vista.innerHTML = `<header><b>Mensaje para ${esc(x.nombre)}</b><button type="button" class="icon-btn sm" data-cerrar-vista aria-label="Cerrar vista previa">${icon('x', 15)}</button></header><pre>${esc(armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data))}</pre>`;
+          const texto = srv.activo ? textoMeta(parametrosMeta(x, anio, mesesPeriodo, data.hoy, data)) : armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data);
+          vista.innerHTML = `<header><b>Mensaje para ${esc(x.nombre)}</b><button type="button" class="icon-btn sm" data-cerrar-vista aria-label="Cerrar vista previa">${icon('x', 15)}</button></header><pre>${esc(texto)}</pre>`;
           vista.querySelector('[data-cerrar-vista]').addEventListener('click', () => { vista.hidden = true; });
           vista.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }));
-        lista.querySelectorAll('[data-enviar]').forEach((b) => b.addEventListener('click', () => {
+        lista.querySelectorAll('[data-enviar]').forEach((b) => b.addEventListener('click', async () => {
           const x = filaDe(b.dataset.enviar);
           const p = x.personas.find((y) => y.id === b.dataset.persona);
+          if (srv.activo) {
+            if (env[x.id + ':' + p.id] && !confirm(`A ${p.nombre} ya se le envió el resumen. ¿Enviarlo de nuevo?`)) return;
+            b.disabled = true; b.classList.add('loading');
+            try { await enviarAuto(x, p); toast(`Enviado a ${p.nombre}`); } catch (er) { toast(er.message, 'err'); }
+            pintar();
+            return;
+          }
           const url = `https://wa.me/${p.numero}?text=${encodeURIComponent(armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data))}`;
           window.open(url, '_blank', 'noopener');
           marcarEnviado(x.id + ':' + p.id);
@@ -238,13 +313,19 @@ export function abrirReportesWsp(ctx, anioInicial) {
           if (m) editarMiembro(ctx, m);
         }));
       };
-      f.querySelector('[data-anio]').addEventListener('change', (e) => { anio = +e.target.value; vista.hidden = true; pintar(); });
+      async function enviarAuto(x, p) {
+        const { mesesPeriodo } = filasReporte(data, anio);
+        const r = await call('enviarWhatsapp', { anio, clave: x.id + ':' + p.id, miembroId: p.id, parametros: parametrosMeta(x, anio, mesesPeriodo, data.hoy, data) });
+        srv.enviados[x.id + ':' + p.id] = r.fecha || data.hoy;
+      }
+      f.querySelector('[data-anio]').addEventListener('change', async (e) => { anio = +e.target.value; vista.hidden = true; await cargarEstado(); pintar(); });
       const bq = f.querySelector('[data-buscar]');
       bq.addEventListener('input', () => { q = bq.value; pintar(); });
       const ta = f.querySelector('[data-plantilla]');
       ta.addEventListener('input', () => { plantilla = ta.value; guardar(CLAVE_PLANTILLA, plantilla); vista.hidden = true; });
       f.querySelector('[data-restaurar]').addEventListener('click', () => { plantilla = PLANTILLA; ta.value = PLANTILLA; guardar(CLAVE_PLANTILLA, PLANTILLA); toast('Se restauró el mensaje original'); });
       pintar();
+      cargarEstado().then(() => { modoAuto(); pintar(); });
     }
   });
 }

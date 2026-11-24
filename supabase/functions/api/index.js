@@ -87,6 +87,92 @@ async function guardarCambios(version, versionLimites, { guardar, borrar }) {
   throw new Error('No se pudo guardar: ' + error.message);
 }
 
+// ---------------- WhatsApp (API oficial de Meta: WhatsApp Cloud API) ----------------
+// Reportes de diezmos enviados desde el servidor con una plantilla aprobada por Meta. Solo tesorería, pastor y
+// administración; solo al celular registrado en la ficha del miembro; cada envío queda registrado (tabla _wsp).
+const WSP_TOKEN = Deno.env.get('WSP_TOKEN') || '';
+const WSP_PHONE_ID = Deno.env.get('WSP_PHONE_ID') || '';
+const WSP_PLANTILLA = Deno.env.get('WSP_PLANTILLA') || 'resumen_diezmos';
+const WSP_IDIOMA = Deno.env.get('WSP_IDIOMA') || 'es';
+const WSP_ACCIONES = { wspEstado: 1, enviarWhatsapp: 1, wspReiniciar: 1 };
+function numeroWsp(cel) {
+  const d = String(cel || '').replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('569')) return d;
+  if (d.length === 9 && d.startsWith('9')) return '56' + d;
+  if (d.length === 8) return '569' + d;
+  if (d.length >= 10 && d.length <= 15 && !d.startsWith('0')) return d;
+  return null;
+}
+// Meta no acepta saltos de línea ni tabulaciones en los datos de una plantilla, ni datos vacíos
+const datoPlantilla = (t) => (String(t ?? '').replace(/\s*\n\s*/g, ' · ').replace(/\t/g, ' ').replace(/ {4,}/g, '   ').trim().slice(0, 600) || '—');
+
+async function whatsapp(action, body) {
+  for (let intento = 1; intento <= INTENTOS; intento++) {
+    const { version, version_limites: versionLimites, filas } = await leer();
+    const alm = crearAlmacen(filas);
+    const core = TesoCore.create({
+      store: alm.store, files: {}, today: hoy, now: () => new Date().toISOString(), uuid: () => crypto.randomUUID(), secret: SECRETO,
+      crypto: {
+        sha256Hex: (s) => createHash('sha256').update(String(s), 'utf8').digest('hex'),
+        hmacHex: (m, k) => createHmac('sha256', String(k)).update(String(m), 'utf8').digest('hex')
+      },
+      limites: crearLimites(alm.store)
+    });
+    const yo = core.handle('me', {}, body.token);
+    if (!yo.ok) return yo;
+    const u = yo.data.user;
+    if (['admin', 'tesorero', 'pastor'].indexOf(u.rol) < 0) return { ok: false, error: 'No tienes permiso para esta acción', code: 'FORBIDDEN' };
+    const p = body.payload || {};
+    const anio = /^\d{4}$/.test(String(p.anio)) ? String(p.anio) : '';
+    if (!anio) return { ok: false, error: 'Año inválido', code: 'ERR' };
+    const activo = !!(WSP_TOKEN && WSP_PHONE_ID);
+    const deAnio = alm.store.read('_wsp').filter((x) => x.anio === anio);
+
+    if (action === 'wspEstado') {
+      const enviados = {};
+      deAnio.forEach((x) => { enviados[x.clave] = String(x.t || '').slice(0, 10); });
+      return { ok: true, data: { activo, enviados } };
+    }
+    if (action === 'wspReiniciar') {
+      deAnio.forEach((x) => alm.store.remove('_wsp', x.id));
+      try { await guardarCambios(version, versionLimites, alm.cambios()); } catch (e) { if (e === CONFLICTO && intento < INTENTOS) continue; throw e; }
+      return { ok: true, data: { reiniciados: deAnio.length } };
+    }
+    // enviarWhatsapp
+    if (!activo) return { ok: false, error: 'El envío automático por WhatsApp aún no está configurado.', code: 'ERR' };
+    const clave = String(p.clave || '').slice(0, 200);
+    const mb = alm.store.read('Miembros').find((x) => x.id === String(p.miembroId || ''));
+    if (!mb || !clave) return { ok: false, error: 'Miembro no encontrado', code: 'ERR' };
+    const numero = numeroWsp(mb.celular);
+    if (!numero) return { ok: false, error: `${mb.nombre} no tiene un celular válido en su ficha.`, code: 'ERR' };
+    const params = (Array.isArray(p.parametros) ? p.parametros : []).slice(0, 10).map(datoPlantilla);
+    if (intento === 1) {
+      // el mensaje se envía una sola vez; si al registrar el envío otra consulta guardó antes, solo se repite el registro
+      const res = await fetch(`https://graph.facebook.com/v21.0/${WSP_PHONE_ID}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${WSP_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp', to: numero, type: 'template',
+          template: { name: WSP_PLANTILLA, language: { code: WSP_IDIOMA }, components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }] }
+        })
+      }).catch(() => null);
+      const r = res && (await res.json().catch(() => null));
+      if (!res || !res.ok) {
+        const m = r?.error?.error_user_msg || r?.error?.message || 'sin respuesta';
+        console.error('whatsapp', JSON.stringify(r?.error || {}));
+        return { ok: false, error: `WhatsApp no envió el mensaje a ${mb.nombre}: ${m}`, code: 'ERR' };
+      }
+      body._wamid = r?.messages?.[0]?.id || '';
+    }
+    const id = anio + ':' + clave;
+    const reg = { id, anio, clave, miembroId: mb.id, numero: numero.slice(-4), wamid: body._wamid, t: new Date().toISOString(), por: u.id };
+    if (alm.store.read('_wsp').some((x) => x.id === id)) alm.store.update('_wsp', id, reg); else alm.store.insert('_wsp', reg);
+    try { await guardarCambios(version, versionLimites, alm.cambios()); } catch (e) { if (e === CONFLICTO && intento < INTENTOS) continue; throw e; }
+    return { ok: true, data: { enviado: true, fecha: reg.t.slice(0, 10) } };
+  }
+  return { ok: false, error: 'El sistema está ocupado en este momento. Espera unos segundos e intenta de nuevo.', code: 'OCUPADO' };
+}
+
 async function descargar(info) {
   const { data, error } = await supa.storage.from(BUCKET).download(info.ruta);
   if (error || !data) throw new Error('No se pudo leer el comprobante');
@@ -107,6 +193,13 @@ Deno.serve(async (req) => {
   const idg = action === 'loginGoogle' ? await identidadGoogle(cred) : action === 'loginMicrosoft' ? await identidadMicrosoft(cred) : null;
   if (action === 'loginGoogle' && !idg) return json({ ok: false, error: 'No se pudo verificar tu cuenta de Google. Intenta de nuevo.', code: 'ERR' });
   if (action === 'loginMicrosoft' && !idg) return json({ ok: false, error: 'No se pudo verificar tu cuenta de Microsoft. Intenta de nuevo.', code: 'ERR' });
+
+  if (WSP_ACCIONES[action]) {
+    try { return json(await whatsapp(action, body)); } catch (e) {
+      console.error(action, e && e.stack ? e.stack : e);
+      return json({ ok: false, error: e && e.ocupado ? 'El sistema está ocupado en este momento. Espera unos segundos e intenta de nuevo.' : 'Ocurrió un error inesperado. Intenta de nuevo en unos minutos.', code: 'ERR' });
+    }
+  }
 
   const t0 = Date.now(), marcas = [];
   const marca = (k) => marcas.push(`${k};dur=${Date.now() - t0}`);
