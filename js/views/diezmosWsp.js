@@ -198,9 +198,24 @@ export function parametrosMeta(f, anio, mesesPeriodo, hoy, data) {
 }
 export const textoMeta = (params) => PLANTILLA_META.replace(/\{\{(\d)\}\}/g, (m, n) => params[+n - 1] ?? m);
 
+// A un matrimonio se le habla en plural (Les compartimos… sus diezmos… solo para ustedes)
+const PLURAL = [
+  [/\b(T|t)e compartimos\b/g, (m, t) => (t === 'T' ? 'Les' : 'les') + ' compartimos'],
+  [/\b(T|t)e animamos a ser constante\b/g, (m, t) => (t === 'T' ? 'Los' : 'los') + ' animamos a ser constantes'],
+  [/\b(T|t)e animamos\b/g, (m, t) => (t === 'T' ? 'Los' : 'los') + ' animamos'],
+  [/\bpara ti\b/g, 'para ustedes'],
+  [/\b(T|t)us\b/g, (m, t) => (t === 'T' ? 'Sus' : 'sus')],
+  [/\b(T|t)u\b/g, (m, t) => (t === 'T' ? 'Su' : 'su')]
+];
+const enPlural = (t) => PLURAL.reduce((acc, [re, por]) => acc.replace(re, por), t);
+
 export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
   const { reemplazos } = datosMensaje(f, anio, mesesPeriodo, hoy, data);
   const rellenar = (l) => l.replace(/\{(\w+)\}/g, (m, k) => (k in reemplazos ? reemplazos[k] : m));
+  if (f.matrimonio) {
+    plantilla = enPlural(plantilla);
+    if (reemplazos.animo) reemplazos.animo = enPlural(reemplazos.animo);
+  }
   return plantilla.split('\n')
     // una línea con un dato que no aplica (sin especiales, sin aporte…) se quita entera
     .filter((l) => !/\{(\w+)\}/.test(l) || ![...l.matchAll(/\{(\w+)\}/g)].some(([, k]) => k in reemplazos && !reemplazos[k]))
