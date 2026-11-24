@@ -115,16 +115,23 @@ export function filasReporte(data, anio) {
   return { filas, mesesPeriodo };
 }
 
-function periodoTexto(anio, mesesPeriodo, hoy) {
+// desde = mes (0-11) en que el hermano empieza a contar (miembro o habilitado para diezmar desde)
+function periodoTexto(anio, mesesPeriodo, hoy, desde = 0) {
   const hoyY = +hoy.slice(0, 4);
-  if (anio < hoyY || mesesPeriodo >= 12) return `del año ${anio}`;
+  const completo = anio < hoyY || mesesPeriodo >= 12;
+  if (desde > 0) {
+    const fin = completo ? 11 : mesesPeriodo - 1;
+    return desde >= fin ? `de ${MESES[Math.min(desde, 11)]} de ${anio}` : `de ${MESES[desde]} a ${MESES[fin]} de ${anio}`;
+  }
+  if (completo) return `del año ${anio}`;
   return mesesPeriodo <= 1 ? `de enero de ${anio}` : `de enero a ${MESES[mesesPeriodo - 1]} de ${anio}`;
 }
 
-// Ingresos de la tesorería general en los primeros n meses del año
-function ingresosIglesia(data, anio, n) {
+// Ingresos de la tesorería general desde el mes "desde" (0 = enero) hasta el mes n del año
+function ingresosIglesia(data, anio, n, desde = 0) {
   const hasta = `${anio}-${String(n).padStart(2, '0')}`;
-  return (data.movGenerales || []).filter((m) => m.tipo === 'ingreso' && m.mes >= `${anio}-01` && m.mes <= hasta).reduce((a, m) => a + m.monto, 0);
+  const inicio = `${anio}-${String(desde + 1).padStart(2, '0')}`;
+  return (data.movGenerales || []).filter((m) => m.tipo === 'ingreso' && m.mes >= inicio && m.mes <= hasta).reduce((a, m) => a + m.monto, 0);
 }
 
 // Período de una fila: meses evaluados del año (el mes en curso solo si ya tiene diezmo), desde que cuenta
@@ -133,11 +140,12 @@ export function periodoFila(f, anio, mesesPeriodo, hoy) {
   let evaluados = Math.max(1, Math.min(12, mesesPeriodo));
   if (anio === +hoy.slice(0, 4) && evaluados > 1 && !f.meses[evaluados - 1]) evaluados--;
   const desde = Math.max(0, Math.min(f.desde || 0, evaluados));
+  // solo cuentan los meses desde que es miembro o está habilitado (lo anterior no entra en su resumen)
   const enPeriodo = f.meses.slice(0, evaluados);
   return {
     evaluados, desde, evalFila: evaluados - desde,
-    total: enPeriodo.reduce((a, v) => a + v, 0),
-    conDiezmo: enPeriodo.map((v, i) => (v ? i : -1)).filter((i) => i >= 0),
+    total: enPeriodo.slice(desde).reduce((a, v) => a + v, 0),
+    conDiezmo: enPeriodo.map((v, i) => (v && i >= desde ? i : -1)).filter((i) => i >= 0),
     conEnFila: f.meses.slice(desde, evaluados).filter(Boolean).length,
     adelantados: f.meses.map((v, i) => (v && i >= evaluados ? i : -1)).filter((i) => i >= 0)
   };
@@ -150,7 +158,7 @@ function datosMensaje(f, anio, mesesPeriodo, hoy, data) {
   const totalPeriodo = pf.total;
   const adelantados = pf.adelantados;
   // aporte: lo que dio en el período (diezmo regular y especial) sobre todos los ingresos de la iglesia en esos meses
-  const ing = data ? ingresosIglesia(data, anio, evaluados) : 0;
+  const ing = data ? ingresosIglesia(data, anio, evaluados, pf.desde) : 0;
   const conDiezmo = pf.conDiezmo;
   const dio = totalPeriodo + f.especiales;
   const pct = ing ? (dio * 100) / ing : 0;
@@ -161,7 +169,7 @@ function datosMensaje(f, anio, mesesPeriodo, hoy, data) {
   const reemplazos = {
     nombre: f.saludo,
     anio: String(anio),
-    periodo: periodoTexto(anio, mesesPeriodo, hoy),
+    periodo: periodoTexto(anio, mesesPeriodo, hoy, f.desde || 0),
     total: money(totalPeriodo),
     // se cuentan desde que es miembro o está habilitado para diezmar (como en Diezmos)
     meses: conEnFila ? `${conEnFila} de ${evalFila}` : evalFila ? `aún no registramos diezmos en ${evalFila === 1 ? 'el mes' : `los ${evalFila} meses`}` : 'aún sin meses por evaluar',
