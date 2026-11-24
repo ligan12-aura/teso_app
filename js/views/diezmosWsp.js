@@ -199,6 +199,16 @@ export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
     .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n').trim();
 }
 
+// Constante / irregular / no diezma en el período, con el mismo criterio que la vista Diezmos
+// (constante = diezmó en al menos el 80 % de los meses evaluados desde que cuenta)
+const CATEGORIAS = [['todos', 'Todos'], ['constante', 'Constantes'], ['irregular', 'Irregulares'], ['sin', 'No diezman']];
+const ETIQUETA_CAT = { constante: 'Constante', irregular: 'Irregular', sin: 'No diezma' };
+export function categoriaFila(f, anio, mesesPeriodo, hoy) {
+  const { evalFila, conEnFila } = periodoFila(f, anio, mesesPeriodo, hoy);
+  if (evalFila <= 0) return null;
+  return conEnFila === 0 ? 'sin' : conEnFila / evalFila >= 0.8 ? 'constante' : 'irregular';
+}
+
 export function abrirReportesWsp(ctx, anioInicial) {
   const { data } = ctx;
   const hoyY = +data.hoy.slice(0, 4);
@@ -206,6 +216,8 @@ export function abrirReportesWsp(ctx, anioInicial) {
   let anio = anioInicial || hoyY;
   let plantilla = plantillaGuardada();
   let q = '';
+  let cat = 'todos';
+  const sel = new Set(); // filas elegidas para el envío en grupo (modo automático)
   const claveEnviados = () => `teso_wsp_enviados_${anio}`;
   // automático: el servidor envía con la API oficial y guarda los envíos (los ve todo el equipo)
   const srv = { activo: false, enviados: {} };
@@ -224,6 +236,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
       <div class="pick-tools">
         <select data-anio aria-label="Año">${anios.map((y) => `<option ${y === anio ? 'selected' : ''}>${y}</option>`).join('')}</select>
         <div class="search">${icon('search', 16)}<input type="search" placeholder="Buscar hermano…" data-buscar></div>
+        <div class="seg seg-sm" data-cats></div>
       </div>
       <details class="wsp-plantilla">
         <summary>${icon('edit', 14)} Editar el mensaje</summary>
@@ -231,6 +244,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
         <p class="muted small">Puedes usar: <code>{nombre}</code> <code>{periodo}</code> <code>{total}</code> <code>{meses}</code> <code>{especiales}</code> <code>{detalle}</code> <code>{aporte}</code> <code>{animo}</code> (frase de ánimo para quien es irregular o no diezma) <code>{anio}</code>. Si un dato no aplica (por ejemplo, sin diezmos especiales), esa línea se quita sola. <button type="button" class="link-btn" data-restaurar>Volver al mensaje original</button></p>
       </details>
       <div class="wsp-resumen" data-resumen></div>
+      <div class="wsp-grupo" data-grupo hidden></div>
       <ul class="wsp-lista" data-lista></ul>
       <div class="wsp-vista" data-vista hidden></div>`,
     hideFooter: true,
@@ -239,7 +253,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
       const vista = f.querySelector('[data-vista]');
       const modoAuto = () => {
         f.querySelector('[data-intro]').innerHTML = srv.activo
-          ? 'Un resumen personal para cada hermano activo y habilitado para diezmar (un matrimonio recibe uno solo, en el celular de cada uno). Al tocar <b>Enviar</b>, el mensaje sale <b>automáticamente</b> desde el WhatsApp de la iglesia, con la plantilla aprobada por Meta. Los envíos quedan registrados para todo el equipo.'
+          ? 'Un resumen personal para cada hermano activo y habilitado para diezmar (un matrimonio recibe uno solo, en el celular de cada uno). Filtra por constantes, irregulares o quienes no diezman, marca a los hermanos (o todos a la vez) y toca <b>Enviar a seleccionados</b>; también puedes enviar uno por uno. El mensaje sale <b>automáticamente</b> desde el WhatsApp de la iglesia, con la plantilla aprobada por Meta. Los envíos quedan registrados para todo el equipo.'
           : f.querySelector('[data-intro]').innerHTML;
         f.querySelector('.wsp-plantilla').hidden = srv.activo;
       };
@@ -247,10 +261,31 @@ export function abrirReportesWsp(ctx, anioInicial) {
         const { filas, mesesPeriodo } = filasReporte(data, anio);
         const env = enviados();
         const qq = sinTildes(q);
-        const vis = filas.filter((x) => !qq || coincide(x.nombre, qq));
+        const catDe = new Map(filas.map((x) => [x.id, categoriaFila(x, anio, mesesPeriodo, data.hoy)]));
+        const cuenta = (k) => (k === 'todos' ? filas.length : filas.filter((x) => catDe.get(x.id) === k).length);
+        f.querySelector('[data-cats]').innerHTML = CATEGORIAS.map(([k, l]) => `<label><input type="radio" name="wcat" value="${k}" ${cat === k ? 'checked' : ''}><span>${l} (${cuenta(k)})</span></label>`).join('');
+        f.querySelectorAll('[name="wcat"]').forEach((r) => r.addEventListener('change', () => { cat = r.value; sel.clear(); pintar(); }));
+        const vis = filas.filter((x) => (cat === 'todos' || catDe.get(x.id) === cat) && (!qq || coincide(x.nombre, qq)));
+        const conCel = (x) => x.personas.some((p) => p.numero);
+        for (const id of [...sel]) if (!filas.some((x) => x.id === id)) sel.delete(id);
         const conNum = filas.filter((x) => x.personas.some((p) => p.numero));
         const listos = filas.filter((x) => x.personas.some((p) => env[x.id + ':' + p.id]));
-        f.querySelector('[data-resumen]').innerHTML = `<span><b>${filas.length}</b> ${filas.length === 1 ? 'resumen' : 'resúmenes'} ${periodoTexto(anio, mesesPeriodo, data.hoy)}</span><span><b>${conNum.length}</b> con celular</span>${filas.length - conNum.length ? `<span class="falta"><b>${filas.length - conNum.length}</b> sin celular</span>` : ''}<span><b>${listos.length}</b> enviado${listos.length === 1 ? '' : 's'}</span>${Object.keys(env).length ? `<button type="button" class="link-btn" data-reiniciar>${icon('undo', 13)} Reiniciar envíos</button>` : ''}${srv.activo ? `<button type="button" class="btn btn-primary btn-sm" data-todos>${icon('send', 14)} Enviar a todos los pendientes</button>` : ''}`;
+        f.querySelector('[data-resumen]').innerHTML = `<span><b>${filas.length}</b> ${filas.length === 1 ? 'resumen' : 'resúmenes'} ${periodoTexto(anio, mesesPeriodo, data.hoy)}</span><span><b>${conNum.length}</b> con celular</span>${filas.length - conNum.length ? `<span class="falta"><b>${filas.length - conNum.length}</b> sin celular</span>` : ''}<span><b>${listos.length}</b> enviado${listos.length === 1 ? '' : 's'}</span>${Object.keys(env).length ? `<button type="button" class="link-btn" data-reiniciar>${icon('undo', 13)} Reiniciar envíos</button>` : ''}`;
+        // envío en grupo: se marcan hermanos (o todos los de la lista) y se envía a todos de una vez
+        const grupo = f.querySelector('[data-grupo]');
+        grupo.hidden = !srv.activo;
+        if (srv.activo) {
+          const elegibles = vis.filter(conCel);
+          const todosMarcados = elegibles.length > 0 && elegibles.every((x) => sel.has(x.id));
+          const nombreCat = cat === 'todos' ? '' : ` ${CATEGORIAS.find(([k]) => k === cat)[1].toLowerCase()}`;
+          grupo.innerHTML = `<label class="check"><input type="checkbox" data-marcar-todos ${todosMarcados ? 'checked' : ''} ${elegibles.length ? '' : 'disabled'}> Seleccionar todos los${nombreCat} de la lista (${elegibles.length})</label>
+            <button type="button" class="btn btn-primary btn-sm" data-enviar-sel ${sel.size ? '' : 'disabled'}>${icon('send', 14)} Enviar a ${sel.size} seleccionado${sel.size === 1 ? '' : 's'}</button>`;
+          grupo.querySelector('[data-marcar-todos]').addEventListener('change', (e) => {
+            elegibles.forEach((x) => (e.target.checked ? sel.add(x.id) : sel.delete(x.id)));
+            pintar();
+          });
+          grupo.querySelector('[data-enviar-sel]').addEventListener('click', (e) => enviarGrupo(e.currentTarget, filas));
+        }
         f.querySelector('[data-reiniciar]')?.addEventListener('click', async () => {
           if (!confirm(`¿Reiniciar los envíos de ${anio}? Todos los botones vuelven a decir “Enviar”. No borra ningún mensaje ya enviado por WhatsApp.`)) return;
           if (srv.activo) { try { await call('wspReiniciar', { anio }); srv.enviados = {}; } catch (e) { return toast(e.message, 'err'); } }
@@ -258,24 +293,9 @@ export function abrirReportesWsp(ctx, anioInicial) {
           toast('Envíos reiniciados');
           pintar();
         });
-        // envío automático a todos los que aún no lo reciben (uno por uno, con avance)
-        f.querySelector('[data-todos]')?.addEventListener('click', async (e) => {
-          const pend = [];
-          filas.forEach((x) => x.personas.forEach((p) => { if (p.numero && !env[x.id + ':' + p.id]) pend.push({ x, p }); }));
-          if (!pend.length) return toast('No hay envíos pendientes');
-          if (!confirm(`Se enviará el resumen de ${anio} por WhatsApp a ${pend.length} celular${pend.length === 1 ? '' : 'es'}. ¿Continuar?`)) return;
-          const b = e.currentTarget; b.disabled = true;
-          let ok = 0; const fallas = [];
-          for (const [i, { x, p }] of pend.entries()) {
-            b.textContent = `Enviando ${i + 1} de ${pend.length}…`;
-            try { await enviarAuto(x, p); ok++; } catch (er) { fallas.push(`${p.nombre}: ${er.message}`); }
-          }
-          toast(`${ok} enviado${ok === 1 ? '' : 's'}${fallas.length ? ` · ${fallas.length} con error` : ''}`, fallas.length ? 'err' : undefined);
-          if (fallas.length) alert('No se enviaron:\n' + fallas.join('\n'));
-          pintar();
-        });
         lista.innerHTML = vis.length ? vis.map((x) => `<li>
-          <div class="wsp-quien"><b>${x.matrimonio ? '💍 ' : ''}${esc(x.nombre)}</b><small class="muted">${(() => { const pf = periodoFila(x, anio, mesesPeriodo, data.hoy); return `${money(pf.total)}${x.especiales ? ` · especiales ${money(x.especiales)}` : ''} · ${pf.conEnFila} de ${pf.evalFila} mes${pf.evalFila === 1 ? '' : 'es'} con diezmo${pf.adelantados.length ? ' · más adelantado' : ''}`; })()}</small></div>
+          ${srv.activo ? `<input type="checkbox" class="wsp-sel" data-sel="${esc(x.id)}" ${sel.has(x.id) ? 'checked' : ''} ${conCel(x) ? '' : 'disabled'} aria-label="Seleccionar a ${esc(x.nombre)}">` : ''}
+          <div class="wsp-quien"><b>${x.matrimonio ? '💍 ' : ''}${esc(x.nombre)}</b><small class="muted">${(() => { const pf = periodoFila(x, anio, mesesPeriodo, data.hoy); const c = catDe.get(x.id); return `${c ? `<span class="wsp-cat ${c}">${ETIQUETA_CAT[c]}</span> ` : ''}${money(pf.total)}${x.especiales ? ` · especiales ${money(x.especiales)}` : ''} · ${pf.conEnFila} de ${pf.evalFila} mes${pf.evalFila === 1 ? '' : 'es'} con diezmo${pf.adelantados.length ? ' · más adelantado' : ''}`; })()}</small></div>
           <div class="wsp-acciones">
             <button type="button" class="link-btn" data-ver="${esc(x.id)}">${icon('eye', 14)} Ver</button>
             ${x.personas.map((p) => p.numero
@@ -283,6 +303,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
               : `<button type="button" class="link-btn falta" data-ficha="${p.id}" title="${p.celular ? 'El celular no tiene un formato válido' : 'Sin celular en su ficha'}">${icon('alert', 13)} ${p.celular ? 'Revisar' : 'Agregar'} celular${x.personas.length > 1 ? ` de ${esc(p.nombre.split(' ')[0])}` : ''}</button>`).join('')}
           </div></li>`).join('') : `<li class="muted">${filas.length ? 'Nadie coincide con la búsqueda' : 'No hay hermanos habilitados con diezmos en este año'}</li>`;
         const filaDe = (id) => filas.find((x) => x.id === id);
+        lista.querySelectorAll('[data-sel]').forEach((c) => c.addEventListener('change', () => { if (c.checked) sel.add(c.dataset.sel); else sel.delete(c.dataset.sel); pintar(); }));
         lista.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => {
           const x = filaDe(b.dataset.ver);
           vista.hidden = false;
@@ -312,12 +333,33 @@ export function abrirReportesWsp(ctx, anioInicial) {
           if (m) editarMiembro(ctx, m);
         }));
       };
+      // envía a cada celular de las filas elegidas; quien ya lo recibió este año se omite
+      async function enviarGrupo(b, filas) {
+        const env = enviados();
+        const todos = [];
+        filas.filter((x) => sel.has(x.id)).forEach((x) => x.personas.forEach((p) => { if (p.numero) todos.push({ x, p }); }));
+        const pend = todos.filter(({ x, p }) => !env[x.id + ':' + p.id]);
+        const ya = todos.length - pend.length;
+        if (!pend.length) return toast(ya ? 'Todos los seleccionados ya recibieron el resumen' : 'No hay celulares para enviar');
+        if (!confirm(`Se enviará el resumen de ${anio} por WhatsApp a ${pend.length} celular${pend.length === 1 ? '' : 'es'}${ya ? ` (se omiten ${ya} que ya lo recibieron)` : ''}. ¿Continuar?`)) return;
+        b.disabled = true;
+        let ok = 0; const fallas = []; const conError = new Set();
+        for (const [i, { x, p }] of pend.entries()) {
+          b.textContent = `Enviando ${i + 1} de ${pend.length}…`;
+          try { await enviarAuto(x, p); ok++; } catch (er) { fallas.push(`${p.nombre}: ${er.message}`); conError.add(x.id); }
+        }
+        // quedan marcados solo los que fallaron, para reintentar
+        sel.clear(); conError.forEach((id) => sel.add(id));
+        toast(`${ok} enviado${ok === 1 ? '' : 's'}${fallas.length ? ` · ${fallas.length} con error` : ''}`, fallas.length ? 'err' : undefined);
+        if (fallas.length) alert('No se enviaron:\n' + fallas.join('\n'));
+        pintar();
+      }
       async function enviarAuto(x, p) {
         const { mesesPeriodo } = filasReporte(data, anio);
         const r = await call('enviarWhatsapp', { anio, clave: x.id + ':' + p.id, miembroId: p.id, parametros: parametrosMeta(x, anio, mesesPeriodo, data.hoy, data) });
         srv.enviados[x.id + ':' + p.id] = r.fecha || data.hoy;
       }
-      f.querySelector('[data-anio]').addEventListener('change', async (e) => { anio = +e.target.value; vista.hidden = true; await cargarEstado(); pintar(); });
+      f.querySelector('[data-anio]').addEventListener('change', async (e) => { anio = +e.target.value; vista.hidden = true; sel.clear(); await cargarEstado(); pintar(); });
       const bq = f.querySelector('[data-buscar]');
       bq.addEventListener('input', () => { q = bq.value; pintar(); });
       const ta = f.querySelector('[data-plantilla]');
