@@ -101,9 +101,10 @@ export function filasReporte(data, anio) {
     const es = (d) => ids.some((id) => esDeMiembro(d, id));
     const meses = Array(12).fill(0);
     regulares.filter((d) => delAnio(d) && es(d)).forEach((d) => { meses[+mesDe(d).slice(5, 7) - 1] += d.monto; });
-    const esp = especiales.filter((d) => delAnio(d) && es(d)).reduce((a, d) => a + d.monto, 0);
     const personas = pareja ? [x.m, pareja.m] : [x.m];
     const desde = pareja ? Math.min(x.activoDesde, pareja.activoDesde) : x.activoDesde;
+    // especiales: también solo desde que es miembro o está habilitado para diezmar
+    const esp = especiales.filter((d) => delAnio(d) && es(d) && +mesDe(d).slice(5, 7) - 1 >= (desde || 0)).reduce((a, d) => a + d.monto, 0);
     filas.push({
       id: ids.join('+'),
       nombre: personas.map((p) => p.nombre).join(' y '),
