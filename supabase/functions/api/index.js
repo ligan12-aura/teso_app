@@ -95,7 +95,25 @@ const WSP_TOKEN = Deno.env.get('WSP_TOKEN') || '';
 const WSP_PHONE_ID = Deno.env.get('WSP_PHONE_ID') || '';
 const WSP_PLANTILLA = Deno.env.get('WSP_PLANTILLA') || 'resumen_diezmos';
 const WSP_IDIOMA = Deno.env.get('WSP_IDIOMA') || 'es';
-const WSP_ACCIONES = { wspEstado: 1, enviarWhatsapp: 1, wspReiniciar: 1 };
+const WSP_ACCIONES = { wspEstado: 1, enviarWhatsapp: 1, wspReiniciar: 1, wspRespuestas: 1, wspRespuestasLeidas: 1 };
+// Respuesta automática a quien escriba al número de la iglesia (una vez al día por persona; gratis dentro de 24 h)
+const WSP_RESPUESTA = Deno.env.get('WSP_RESPUESTA') || 'Hola, este número es solo para envíos automáticos de la Tesorería de la Iglesia Bautista El Redentor y aquí no se revisan los mensajes. Para cualquier duda o consulta, contacta directamente al tesorero Miguel Argomedo: +56 9 8519 5729. ¡Bendiciones!';
+
+async function enviarTextoWsp(numero, texto) {
+  const res = await fetch(`https://graph.facebook.com/v21.0/${WSP_PHONE_ID}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${WSP_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: numero, type: 'text', text: { body: texto } })
+  }).catch(() => null);
+  if (!res || !res.ok) console.error('respuesta automática no enviada', res ? JSON.stringify(await res.json().catch(() => ({}))) : 'sin respuesta');
+}
+const textoEntrante = (m) => {
+  if (m.type === 'text') return (m.text && m.text.body) || '';
+  if (m.type === 'button') return (m.button && m.button.text) || '[botón]';
+  if (m.type === 'interactive') return (m.interactive && ((m.interactive.button_reply && m.interactive.button_reply.title) || (m.interactive.list_reply && m.interactive.list_reply.title))) || '[respuesta]';
+  if (m.type === 'reaction') return `[reaccionó ${(m.reaction && m.reaction.emoji) || ''}]`;
+  return { image: '[foto]', audio: '[audio]', video: '[video]', document: '[documento]', sticker: '[sticker]', location: '[ubicación]', contacts: '[contacto]' }[m.type] || `[${m.type || 'mensaje'}]`;
+};
 // Avisos de entrega (webhook de Meta): WSP_VERIFICAR es la clave que se escribe en Meta al conectar el aviso;
 // WSP_APP_SECRET es la clave secreta de la app de Meta, con la que se comprueba que cada aviso viene de Meta.
 const WSP_VERIFICAR = Deno.env.get('WSP_VERIFICAR') || '';
@@ -108,13 +126,38 @@ async function avisoMeta(texto, firma) {
   const recibido = Buffer.from(String(firma || ''));
   if (recibido.length !== esperado.length || !timingSafeEqual(recibido, esperado)) { console.error('aviso de WhatsApp con firma inválida'); return; }
   let body; try { body = JSON.parse(texto); } catch { return; }
-  const estados = [];
-  (body.entry || []).forEach((e) => (e.changes || []).forEach((c) => ((c.value && c.value.statuses) || []).forEach((st) => estados.push(st))));
-  if (!estados.length) return;
+  const estados = [], entrantes = [];
+  (body.entry || []).forEach((e) => (e.changes || []).forEach((c) => {
+    const v = c.value || {};
+    (v.statuses || []).forEach((st) => estados.push(st));
+    const perfil = {};
+    (v.contacts || []).forEach((k) => { perfil[k.wa_id] = (k.profile && k.profile.name) || ''; });
+    (v.messages || []).forEach((m) => entrantes.push({ m, perfil: perfil[m.from] || '' }));
+  }));
+  if (!estados.length && !entrantes.length) return;
+  let contestar = [];
   for (let intento = 1; intento <= INTENTOS; intento++) {
     const { version, version_limites: versionLimites, filas } = await leer();
     const alm = crearAlmacen(filas);
     let cambio = false;
+    contestar = [];
+    // respuestas de los hermanos: se guardan para verlas en la página y se contestan una vez al día
+    const dia = hoy();
+    for (const { m, perfil } of entrantes) {
+      if (!m.id || alm.store.read('_wsp_resp').some((x) => x.id === m.id)) continue;
+      const de = String(m.from || '').replace(/\D/g, '');
+      const mb = alm.store.read('Miembros').find((x) => numeroWsp(x.celular) === de);
+      alm.store.insert('_wsp_resp', {
+        id: m.id, de, perfil: String(perfil).slice(0, 80), miembroId: mb ? mb.id : '', nombre: mb ? mb.nombre : '',
+        texto: String(textoEntrante(m)).slice(0, 2000), t: new Date((+m.timestamp || Date.now() / 1000) * 1000).toISOString(), leido: false
+      });
+      cambio = true;
+      const ya = alm.store.read('_wsp_auto').find((x) => x.id === de);
+      if (de && (!ya || ya.dia !== dia) && !contestar.includes(de)) {
+        if (ya) alm.store.update('_wsp_auto', de, { id: de, dia }); else alm.store.insert('_wsp_auto', { id: de, dia });
+        contestar.push(de);
+      }
+    }
     for (const st of estados) {
       const r = alm.store.read('_wsp').find((x) => x.wamid && x.wamid === st.id);
       if (!r) continue;
@@ -127,8 +170,9 @@ async function avisoMeta(texto, firma) {
       cambio = true;
     }
     if (!cambio) return;
-    try { await guardarCambios(version, versionLimites, alm.cambios()); return; } catch (e) { if (e === CONFLICTO && intento < INTENTOS) continue; throw e; }
+    try { await guardarCambios(version, versionLimites, alm.cambios()); break; } catch (e) { if (e === CONFLICTO && intento < INTENTOS) continue; throw e; }
   }
+  if (WSP_TOKEN && WSP_PHONE_ID) for (const de of contestar) await enviarTextoWsp(de, WSP_RESPUESTA);
 }
 function numeroWsp(cel) {
   const d = String(cel || '').replace(/\D/g, '');
@@ -158,6 +202,18 @@ async function whatsapp(action, body) {
     const u = yo.data.user;
     if (['admin', 'tesorero', 'pastor'].indexOf(u.rol) < 0) return { ok: false, error: 'No tienes permiso para esta acción', code: 'FORBIDDEN' };
     const p = body.payload || {};
+    // respuestas recibidas (las más recientes primero) y marcarlas como leídas
+    if (action === 'wspRespuestas') {
+      const lista = alm.store.read('_wsp_resp').slice().sort((a, b) => String(b.t).localeCompare(String(a.t))).slice(0, 200)
+        .map((x) => ({ id: x.id, nombre: x.nombre || '', perfil: x.perfil || '', numero: x.de ? '+' + x.de : '', texto: x.texto, t: x.t, leido: !!x.leido }));
+      return { ok: true, data: { respuestas: lista } };
+    }
+    if (action === 'wspRespuestasLeidas') {
+      const sin = alm.store.read('_wsp_resp').filter((x) => !x.leido);
+      sin.forEach((x) => alm.store.update('_wsp_resp', x.id, { ...x, leido: true, leidoPor: u.id }));
+      if (sin.length) { try { await guardarCambios(version, versionLimites, alm.cambios()); } catch (e) { if (e === CONFLICTO && intento < INTENTOS) continue; throw e; } }
+      return { ok: true, data: { marcadas: sin.length } };
+    }
     const anio = /^\d{4}$/.test(String(p.anio)) ? String(p.anio) : '';
     if (!anio) return { ok: false, error: 'Año inválido', code: 'ERR' };
     const activo = !!(WSP_TOKEN && WSP_PHONE_ID);
@@ -169,7 +225,7 @@ async function whatsapp(action, body) {
         enviados[x.clave] = String(x.t || '').slice(0, 10);
         if (x.estado) estados[x.clave] = { estado: x.estado, error: x.error || '' };
       });
-      return { ok: true, data: { activo, enviados, estados, avisos: !!(WSP_APP_SECRET && WSP_VERIFICAR), plantilla: WSP_PLANTILLA } };
+      return { ok: true, data: { activo, enviados, estados, avisos: !!(WSP_APP_SECRET && WSP_VERIFICAR), plantilla: WSP_PLANTILLA, sinLeer: alm.store.read('_wsp_resp').filter((x) => !x.leido).length } };
     }
     if (action === 'wspReiniciar') {
       deAnio.forEach((x) => alm.store.remove('_wsp', x.id));

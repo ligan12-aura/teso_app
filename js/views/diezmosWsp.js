@@ -272,7 +272,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
   const marcarEnviado = (k) => { const e = enviados(); e[k] = new Date().toISOString().slice(0, 10); if (!srv.activo) guardar(claveEnviados(), JSON.stringify(e)); };
   const cargarEstado = async () => {
     if (isDemo) return;
-    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; srv.estados = r.estados || {}; srv.plantilla = r.plantilla || ''; } catch { srv.activo = false; }
+    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; srv.estados = r.estados || {}; srv.plantilla = r.plantilla || ''; srv.sinLeer = r.sinLeer || 0; } catch { srv.activo = false; }
   };
 
   return modal({
@@ -290,6 +290,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
         <textarea data-plantilla rows="14">${esc(plantilla)}</textarea>
         <p class="muted small">Puedes usar: <code>{nombre}</code> <code>{periodo}</code> <code>{total}</code> <code>{meses}</code> <code>{especiales}</code> <code>{detalle}</code> <code>{aporte}</code> <code>{animo}</code> (frase de ánimo para quien es irregular o no diezma) <code>{anio}</code>. Si un dato no aplica (por ejemplo, sin diezmos especiales), esa línea se quita sola. <button type="button" class="link-btn" data-restaurar>Volver al mensaje original</button></p>
       </details>
+      <details class="wsp-resp" data-resp hidden><summary data-resp-tit>Respuestas recibidas</summary><div data-resp-lista><p class="muted small">Cargando…</p></div></details>
       <div class="wsp-resumen" data-resumen></div>
       <div class="wsp-grupo" data-grupo hidden></div>
       <ul class="wsp-lista" data-lista></ul>
@@ -421,7 +422,21 @@ export function abrirReportesWsp(ctx, anioInicial) {
       ta.addEventListener('input', () => { plantilla = ta.value; guardar(CLAVE_PLANTILLA, plantilla); vista.hidden = true; });
       f.querySelector('[data-restaurar]').addEventListener('click', () => { plantilla = PLANTILLA; ta.value = PLANTILLA; guardar(CLAVE_PLANTILLA, PLANTILLA); toast('Se restauró el mensaje original'); });
       pintar();
-      cargarEstado().then(() => { modoAuto(); pintar(); });
+      // respuestas que los hermanos escriben al número de la iglesia (reciben una respuesta automática)
+      const caja = f.querySelector('[data-resp]');
+      const titResp = () => { f.querySelector('[data-resp-tit]').innerHTML = `${icon('send', 14)} Respuestas recibidas${srv.sinLeer ? ` <span class="tag tag-ambar">${srv.sinLeer} nueva${srv.sinLeer === 1 ? '' : 's'}</span>` : ''}`; };
+      caja.addEventListener('toggle', async () => {
+        if (!caja.open) return;
+        const cont = f.querySelector('[data-resp-lista]');
+        try {
+          const { respuestas } = await call('wspRespuestas', {});
+          cont.innerHTML = respuestas.length
+            ? `<ul class="wsp-resp-lista">${respuestas.map((r) => `<li class="${r.leido ? '' : 'nueva'}"><div><b>${esc(r.nombre || r.perfil || 'Sin ficha')}</b> <small class="muted">${esc(r.numero)} · ${esc(new Date(r.t).toLocaleString('es-CL', { dateStyle: 'medium', timeStyle: 'short' }))}${r.nombre ? '' : ' · no coincide con ninguna ficha'}</small></div><p>${esc(r.texto)}</p></li>`).join('')}</ul><p class="muted small">A cada persona que escribe se le contesta automáticamente (una vez al día) que el número no se revisa y que consulte al tesorero.</p>`
+            : '<p class="muted small">Nadie ha respondido a los mensajes.</p>';
+          if (srv.sinLeer) { await call('wspRespuestasLeidas', {}); srv.sinLeer = 0; titResp(); }
+        } catch (e) { cont.innerHTML = `<p class="muted small">${esc(e.message)}</p>`; }
+      });
+      cargarEstado().then(() => { modoAuto(); caja.hidden = !srv.activo; titResp(); pintar(); });
     }
   });
 }
