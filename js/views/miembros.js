@@ -176,7 +176,7 @@ export function editarMiembro(ctx, m = null) {
       <label class="field"><span>Domicilio</span><input name="domicilio" placeholder="Calle, número, comuna" value="${esc(m?.domicilio || '')}"></label>
       <label class="field"><span>💍 Cónyuge (diezman como matrimonio)</span><select name="conyugeId"><option value="">— Sin cónyuge registrado —</option>${[...ctx.data.miembros].filter((x) => x.id !== m?.id).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map((x) => `<option value="${x.id}" ${x.id === m?.conyugeId ? 'selected' : ''}>${esc(x.nombre)}${x.conyugeId && x.conyugeId !== m?.id ? ' (ya tiene cónyuge)' : ''}${x.estado !== 'activo' ? ` · ${x.estado}` : ''}</option>`).join('')}</select></label>
       <label class="field"><span>Habilitado para diezmar</span><select name="habilitadoDiezmo"><option value="si" ${m?.habilitadoDiezmo !== 'no' ? 'selected' : ''}>Sí · trabaja o tiene ingresos</option><option value="no" ${m?.habilitadoDiezmo === 'no' ? 'selected' : ''}>No · estudiante o sin ingresos</option></select><small class="hint">Los no habilitados no se cuentan en la estadística de diezmos.</small></label>
-      <label class="field" data-hab-desde ${m && m.habilitadoDiezmo !== 'no' && m.habilitadoDesde ? '' : 'hidden'}><span>Habilitado desde</span><input type="date" name="habilitadoDesde" value="${esc(m?.habilitadoDesde || '')}" max="${ctx.data.hoy}"><small class="hint">En los diezmos cuenta desde esta fecha; antes, como no habilitado.</small></label>
+      <label class="field" data-hab-desde ${m?.habilitadoDiezmo === 'no' ? 'hidden' : ''}><span>Habilitado desde <small class="muted">(opcional)</small></span><input type="date" name="habilitadoDesde" value="${esc(m?.habilitadoDesde || '')}" max="${ctx.data.hoy}"><small class="hint">En los diezmos y en su resumen por WhatsApp cuenta desde esta fecha (por ejemplo, desde que empezó a trabajar). Vacío: desde que es miembro.</small></label>
       <label class="field"><span>Notas</span><input name="notas" maxlength="300" value="${esc(m?.notas || '')}"></label>
       ${m && esAdmin(ctx.user) ? `<p class="ficha-extra"><button type="button" class="link-btn" data-unir>${icon('users', 14)} Es la misma persona que otro miembro…</button></p>` : ''}
       ${m && ctx.user?.rol !== 'secretaria' ? `<button type="button" class="link-btn danger-link" data-borrar>${icon('trash', 14)} Eliminar miembro</button>` : ''}`,
@@ -243,7 +243,7 @@ export function editarMiembro(ctx, m = null) {
       f.habilitadoDiezmo.addEventListener('change', () => {
         const caja = f.querySelector('[data-hab-desde]');
         const recien = f.habilitadoDiezmo.value === 'si' && m?.habilitadoDiezmo === 'no';
-        caja.hidden = f.habilitadoDiezmo.value !== 'si' || (!recien && !f.habilitadoDesde.value);
+        caja.hidden = f.habilitadoDiezmo.value !== 'si';
         if (recien && !f.habilitadoDesde.value) f.habilitadoDesde.value = ctx.data.hoy;
       });
       f.querySelector('[data-unir]')?.addEventListener('click', () => { close(null); unirMiembro(ctx, m); });
