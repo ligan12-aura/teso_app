@@ -95,6 +95,9 @@ const WSP_TOKEN = Deno.env.get('WSP_TOKEN') || '';
 const WSP_PHONE_ID = Deno.env.get('WSP_PHONE_ID') || '';
 const WSP_PLANTILLA = Deno.env.get('WSP_PLANTILLA') || 'resumen_diezmos';
 const WSP_IDIOMA = Deno.env.get('WSP_IDIOMA') || 'es';
+// Plantilla opcional en plural para los matrimonios (Les compartimos… sus diezmos…); sin ella se usa la general
+const WSP_PLANTILLA_PLURAL = Deno.env.get('WSP_PLANTILLA_PLURAL') || '';
+const MAX_RESPUESTAS = 300; // respuestas guardadas (las más antiguas se borran)
 const WSP_ACCIONES = { wspEstado: 1, enviarWhatsapp: 1, wspReiniciar: 1, wspRespuestas: 1, wspRespuestasLeidas: 1 };
 // Respuesta automática a quien escriba al número de la iglesia (una vez al día por persona; gratis dentro de 24 h)
 const WSP_RESPUESTA = Deno.env.get('WSP_RESPUESTA') || 'Hola, este número es solo para envíos automáticos de la Tesorería de la Iglesia Bautista El Redentor y aquí no se revisan los mensajes. Para cualquier duda o consulta, contacta directamente al tesorero Miguel Argomedo: +56 9 8519 5729. ¡Bendiciones!';
@@ -152,6 +155,10 @@ async function avisoMeta(texto, firma) {
         texto: String(textoEntrante(m)).slice(0, 2000), t: new Date((+m.timestamp || Date.now() / 1000) * 1000).toISOString(), leido: false
       });
       cambio = true;
+      // se guardan solo las más recientes; las marcas de respuesta automática de días anteriores se borran
+      const resp = alm.store.read('_wsp_resp');
+      if (resp.length > MAX_RESPUESTAS) resp.slice().sort((a, b) => String(a.t).localeCompare(String(b.t))).slice(0, resp.length - MAX_RESPUESTAS).forEach((x) => alm.store.remove('_wsp_resp', x.id));
+      alm.store.read('_wsp_auto').filter((x) => x.dia !== dia).map((x) => x.id).forEach((id) => alm.store.remove('_wsp_auto', id));
       const ya = alm.store.read('_wsp_auto').find((x) => x.id === de);
       if (de && (!ya || ya.dia !== dia) && !contestar.includes(de)) {
         if (ya) alm.store.update('_wsp_auto', de, { id: de, dia }); else alm.store.insert('_wsp_auto', { id: de, dia });
@@ -225,7 +232,7 @@ async function whatsapp(action, body) {
         enviados[x.clave] = String(x.t || '').slice(0, 10);
         if (x.estado) estados[x.clave] = { estado: x.estado, error: x.error || '' };
       });
-      return { ok: true, data: { activo, enviados, estados, avisos: !!(WSP_APP_SECRET && WSP_VERIFICAR), plantilla: WSP_PLANTILLA, sinLeer: alm.store.read('_wsp_resp').filter((x) => !x.leido).length } };
+      return { ok: true, data: { activo, enviados, estados, avisos: !!(WSP_APP_SECRET && WSP_VERIFICAR), plantilla: WSP_PLANTILLA, plantillaPlural: WSP_PLANTILLA_PLURAL, sinLeer: alm.store.read('_wsp_resp').filter((x) => !x.leido).length } };
     }
     if (action === 'wspReiniciar') {
       deAnio.forEach((x) => alm.store.remove('_wsp', x.id));
@@ -247,7 +254,7 @@ async function whatsapp(action, body) {
         headers: { Authorization: `Bearer ${WSP_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messaging_product: 'whatsapp', to: numero, type: 'template',
-          template: { name: WSP_PLANTILLA, language: { code: WSP_IDIOMA }, components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }] }
+          template: { name: p.plural && WSP_PLANTILLA_PLURAL ? WSP_PLANTILLA_PLURAL : WSP_PLANTILLA, language: { code: WSP_IDIOMA }, components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }] }
         })
       }).catch(() => null);
       const r = res && (await res.json().catch(() => null));

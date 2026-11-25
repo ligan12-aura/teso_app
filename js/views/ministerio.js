@@ -300,8 +300,9 @@ function renderInterno(root, ctx) {
   }));
   root.querySelector('[data-transferir]')?.addEventListener('click', () => transferirItem(ctx, m, mesSig));
   root.querySelector('[data-anular]')?.addEventListener('click', async (e) => {
+    const id = e.currentTarget.dataset.anular; // e.currentTarget deja de existir después del await
     if (await confirmar('Se eliminará el egreso en tesorería general y el ingreso en el ministerio asociados a esta transferencia.', { titulo: 'Anular transferencia', boton: 'Anular', danger: true })) {
-      accion('anularTransferencia', { id: e.currentTarget.dataset.anular }, 'Transferencia anulada');
+      accion('anularTransferencia', { id }, 'Transferencia anulada');
     }
   });
 

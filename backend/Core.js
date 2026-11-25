@@ -1335,6 +1335,8 @@ var TesoCore = (function () {
     function anularTransferencia(user, p) {
       var t = find('Transferencias', p.id);
       if (!t) throw TesoError('Transferencia no encontrada');
+      // quien lidera el ministerio (aunque sea tesorero) no anula las transferencias de su propio ministerio
+      if (lideraMin(user, t.ministerioId)) throw TesoError('No puedes anular una transferencia de un ministerio que lideras: debe hacerlo otro tesorero, el pastor o el administrador.');
       remove('MovimientosGenerales', t.movGeneralId);
       remove('MovimientosMinisterios', t.movMinisterioId);
       remove('Transferencias', t.id);
@@ -2254,11 +2256,11 @@ var TesoCore = (function () {
       var email = normalCorreo(p.email);
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw TesoError('El correo no parece válido');
       var quedaActivo = p.activo === undefined ? true : toBool(p.activo);
-      if (env.soloGoogle && !email && rol !== 'admin' && quedaActivo) throw TesoError('Ingresa el correo de Google con que entrará esta persona');
       // correo alternativo (opcional): entra con cualquiera de los dos; ninguno puede estar en otro usuario
       var email2 = normalCorreo(p.email2);
       if (email2 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email2)) throw TesoError('El correo alternativo no parece válido');
       if (email2 && !email) { email = email2; email2 = ''; }
+      if (env.soloGoogle && !email && rol !== 'admin' && quedaActivo) throw TesoError('Ingresa el correo de Google con que entrará esta persona');
       if (email2 && email2 === email) email2 = '';
       var usaCorreo = function (c) { return c && all('Usuarios').filter(function (u) { return u.id !== p.id && (normalCorreo(u.email) === c || normalCorreo(u.email2) === c); })[0]; };
       var dupMail = usaCorreo(email) || usaCorreo(email2);

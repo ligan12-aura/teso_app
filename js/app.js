@@ -163,8 +163,13 @@ function renderLogin(msg = '') {
   });
   if (conGoogle) botonGoogle(form);
   form.querySelector('[data-microsoft]')?.addEventListener('click', async (e) => {
-    e.currentTarget.classList.add('loading');
-    try { await iniciarMicrosoft(); } catch { e.currentTarget.classList.remove('loading'); }
+    const b = e.currentTarget; // e.currentTarget deja de existir después del await
+    b.classList.add('loading');
+    try { await iniciarMicrosoft(); } catch (ex) {
+      b.classList.remove('loading');
+      const err = form.querySelector('.form-error');
+      if (err) { err.textContent = (ex && ex.message) || 'No se pudo abrir el ingreso con Microsoft'; err.hidden = false; }
+    }
   });
   form.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', () => {
     form.usuario.value = b.dataset.u; form.password.value = 'demo'; form.requestSubmit();

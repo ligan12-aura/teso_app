@@ -92,7 +92,7 @@ export function filasReporte(data, anio) {
   const especiales = data.diezmos.filter(esEspecial);
   const mesDe = (d) => d.mes || d.fecha.slice(0, 7);
   const delAnio = (d) => mesDe(d).startsWith(String(anio));
-  const lista = Object.values(porMiembro).filter((x) => x.habilitado && x.m.estado === 'activo' && (x.enPeriodo || x.total > 0));
+  const lista = Object.values(porMiembro).filter((x) => x.habilitado && x.m.estado === 'activo' && !x.inactivoAnio && (x.enPeriodo || x.total > 0));
   const enLista = new Set(lista.map((x) => x.m.id));
   const usados = new Set();
   const filas = [];
@@ -124,7 +124,7 @@ export function filasReporte(data, anio) {
 // desde = mes (0-11) en que el hermano empieza a contar (miembro o habilitado para diezmar desde)
 function periodoTexto(anio, mesesPeriodo, hoy, desde = 0) {
   const hoyY = +hoy.slice(0, 4);
-  const completo = anio < hoyY || mesesPeriodo >= 12;
+  const completo = mesesPeriodo >= 12;
   if (desde > 0) {
     const fin = completo ? 11 : mesesPeriodo - 1;
     return desde >= fin ? `de ${MESES[Math.min(desde, 11)]} de ${anio}` : `de ${MESES[desde]} a ${MESES[fin]} de ${anio}`;
@@ -196,12 +196,13 @@ function datosMensaje(f, anio, mesesPeriodo, hoy, data) {
 }
 
 // 6 datos de la plantilla de Meta, en orden
-export function parametrosMeta(f, anio, mesesPeriodo, hoy, data) {
+export function parametrosMeta(f, anio, mesesPeriodo, hoy, data, plural = false) {
   const { reemplazos: r, lineaDetalle } = datosMensaje(f, anio, mesesPeriodo, hoy, data);
-  return [r.nombre, r.periodo, r.total, r.meses, lineaDetalle,
-    r.animo ? `${r.animo} ¡Gracias por tu fidelidad!` : '¡Gracias por tu fidelidad y por sostener la obra del Señor!'];
+  const cierre = r.animo ? `${r.animo} ¡Gracias por tu fidelidad!` : '¡Gracias por tu fidelidad y por sostener la obra del Señor!';
+  return [r.nombre, r.periodo, r.total, r.meses, lineaDetalle, plural ? enPlural(cierre) : cierre];
 }
-export const textoMeta = (params, nombre) => (PLANTILLAS_META[nombre] || PLANTILLA_META).replace(/\{\{(\d)\}\}/g, (m, n) => params[+n - 1] ?? m);
+// plural: la plantilla de los matrimonios es la misma en plural
+export const textoMeta = (params, nombre, plural = false) => (plural ? enPlural(PLANTILLAS_META[nombre] || PLANTILLA_META) : (PLANTILLAS_META[nombre] || PLANTILLA_META)).replace(/\{\{(\d)\}\}/g, (m, n) => params[+n - 1] ?? m);
 
 // A un matrimonio se le habla en plural (Les compartimos… sus diezmos… solo para ustedes)
 const PLURAL = [
@@ -272,7 +273,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
   const marcarEnviado = (k) => { const e = enviados(); e[k] = new Date().toISOString().slice(0, 10); if (!srv.activo) guardar(claveEnviados(), JSON.stringify(e)); };
   const cargarEstado = async () => {
     if (isDemo) return;
-    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; srv.estados = r.estados || {}; srv.plantilla = r.plantilla || ''; srv.sinLeer = r.sinLeer || 0; } catch { srv.activo = false; }
+    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; srv.estados = r.estados || {}; srv.plantilla = r.plantilla || ''; srv.plantillaPlural = r.plantillaPlural || ''; srv.sinLeer = r.sinLeer || 0; } catch { srv.activo = false; }
   };
 
   return modal({
@@ -355,7 +356,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
         lista.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => {
           const x = filaDe(b.dataset.ver);
           vista.hidden = false;
-          const texto = srv.activo ? textoMeta(parametrosMeta(x, anio, mesesPeriodo, data.hoy, data), srv.plantilla) : armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data);
+          const texto = srv.activo ? textoMeta(parametrosMeta(x, anio, mesesPeriodo, data.hoy, data, x.matrimonio && !!srv.plantillaPlural), x.matrimonio && srv.plantillaPlural ? srv.plantillaPlural : srv.plantilla, x.matrimonio && !!srv.plantillaPlural) : armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data);
           vista.innerHTML = `<header><b>Mensaje para ${esc(x.nombre)}</b><button type="button" class="icon-btn sm" data-cerrar-vista aria-label="Cerrar vista previa">${icon('x', 15)}</button></header><pre>${esc(texto)}</pre>`;
           vista.querySelector('[data-cerrar-vista]').addEventListener('click', () => { vista.hidden = true; });
           vista.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -411,7 +412,8 @@ export function abrirReportesWsp(ctx, anioInicial) {
       }
       async function enviarAuto(x, p) {
         const { mesesPeriodo } = filasReporte(data, anio);
-        const r = await call('enviarWhatsapp', { anio, clave: x.id + ':' + p.id, miembroId: p.id, parametros: parametrosMeta(x, anio, mesesPeriodo, data.hoy, data) });
+        const plural = !!(x.matrimonio && srv.plantillaPlural);
+        const r = await call('enviarWhatsapp', { anio, clave: x.id + ':' + p.id, miembroId: p.id, plural, parametros: parametrosMeta(x, anio, mesesPeriodo, data.hoy, data, plural) });
         srv.enviados[x.id + ':' + p.id] = r.fecha || data.hoy;
         delete srv.estados[x.id + ':' + p.id];
       }
