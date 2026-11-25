@@ -1152,3 +1152,8 @@ body.is-login .guia-btn { display: none; }
 .md-mes.on .md-ya { background: var(--gold-2, #e8c26a); }
 @media (max-width: 420px) { .md-grid { grid-template-columns: repeat(4, 1fr); } }
 .md-ya.md-ya-ley { position: static; display: inline-block; vertical-align: middle; margin: 0 2px 1px 4px; }
+
+/* Modales: la columna no se estira con el contenido (unos filtros que no se parten dejaban
+   el modal de WhatsApp más ancho que el celular, con el texto y los botones cortados) */
+.modal-wrap { grid-template-columns: minmax(0, 1fr); }
+.modal .seg-sm { flex-wrap: wrap; max-width: 100%; }

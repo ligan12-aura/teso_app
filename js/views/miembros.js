@@ -293,7 +293,7 @@ function unirMiembro(ctx, m) {
         <div class="field"><span>¿Qué nombre queda?</span>
           <label class="check"><input type="radio" name="nombre" value="${esc(m.nombre)}" checked> <span data-n1>${esc(m.nombre)}</span></label>
           <label class="check"><input type="radio" name="nombre" value="" data-r2> <span data-n2></span></label></div>
-        <div class="note">${icon('sparkle', 16)}<span data-resumen></span></div>
+        <div class="note">${icon('info', 16)}<span data-resumen></span></div>
       </div>`,
     submitLabel: 'Unir fichas',
     onOpen(f) {
@@ -522,7 +522,7 @@ function pintarCompleto(prev, ctx, filas) {
         <div><b>${filas.filter((x) => x.destino === 'nuevo').length}</b><span>se agregan como nuevos</span></div>
         <div><b>${filas.filter((x) => x.destino === 'omitir').length}</b><span>sin cargar</span></div>
       </div>
-      <div class="note">${icon('sparkle', 16)}<span>A quienes ya están en la app solo se les llenan los datos que <b>les faltan</b>; lo que ya tienen no se cambia. Revisa la columna “En la app”: ${usados.filter((x) => x.como === 'corto').length} se reconocieron por su nombre corto${filas.some(revisar) ? ` y ${filas.filter(revisar).length} en amarillo ${filas.filter(revisar).length === 1 ? 'tiene' : 'tienen'} un nombre parecido o más de una opción` : ''}. Si alguien ya está en la app con otro nombre, elige “Buscar otro miembro…”.</span></div>
+      <div class="note">${icon('info', 16)}<span>A quienes ya están en la app solo se les llenan los datos que <b>les faltan</b>; lo que ya tienen no se cambia. Revisa la columna “En la app”: ${usados.filter((x) => x.como === 'corto').length} se reconocieron por su nombre corto${filas.some(revisar) ? ` y ${filas.filter(revisar).length} en amarillo ${filas.filter(revisar).length === 1 ? 'tiene' : 'tienen'} un nombre parecido o más de una opción` : ''}. Si alguien ya está en la app con otro nombre, elige “Buscar otro miembro…”.</span></div>
       ${filas.some((x) => x.rutMalo) ? `<div class="note warn">${icon('alert', 16)}<span>${filas.filter((x) => x.rutMalo).length} RUT de la planilla tienen el dígito verificador malo y no se cargan: ${filas.filter((x) => x.rutMalo).map((x) => `${esc(x.nombre)} (${esc(x.rutMalo)})`).join(', ')}. Corrígelos después en la ficha.</span></div>` : ''}
       ${filas.some((x) => x.como === 'dudoso') ? `<div class="note warn">${icon('alert', 16)}<span>${filas.filter((x) => x.como === 'dudoso').length} persona(s) calzan con más de un miembro: quedaron en “No cargar” hasta que elijas.</span></div>` : ''}
       <div class="imp-opciones">

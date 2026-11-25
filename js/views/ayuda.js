@@ -4,7 +4,7 @@ import { icon, modal } from '../ui.js';
 
 const paso = (n, html) => `<li><span class="hp-n">${n}</span><div>${html}</div></li>`;
 const pasos = (...items) => `<ol class="hp-steps">${items.map((t, i) => paso(i + 1, t)).join('')}</ol>`;
-const tip = (html, cls = '') => `<div class="note ${cls}">${icon(cls === 'warn' ? 'alert' : 'sparkle', 16)}<span>${html}</span></div>`;
+const tip = (html, cls = '') => `<div class="note ${cls}">${icon(cls === 'warn' ? 'alert' : 'info', 16)}<span>${html}</span></div>`;
 const btn = (ico, txt) => `<span class="hp-btn">${icon(ico, 13)} ${txt}</span>`;
 
 const FLUJO = `
@@ -26,7 +26,7 @@ const ESTADOS_HTML = `
 const TEMAS = {
   tesorero: [
     {
-      id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `
+      id: 'bienvenida', titulo: 'Cómo funciona', ico: 'info', html: `
       <p>Esta app reúne en un solo lugar la <b>administración</b> de la iglesia: la <b>tesorería general</b>, el <b>control de los fondos de cada ministerio</b>, la <b>ficha de los miembros</b> y la <b>asistencia</b>. Todo lo que se registra queda guardado en el servidor de la iglesia, y cada noche se copia a la planilla de Google como respaldo.</p>
       <h4>El ciclo de cada mes</h4>${FLUJO}
       <h4>Qué ve cada persona</h4>
@@ -207,7 +207,7 @@ const TEMAS = {
   ],
   lider: [
     {
-      id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `
+      id: 'bienvenida', titulo: 'Cómo funciona', ico: 'info', html: `
       <p>Aquí llevas el control del dinero de <b>tu ministerio</b>: lo que recibes (el ítem mensual y otros ingresos) y lo que gastas, con la foto de cada boleta.</p>
       <h4>El ciclo de cada mes</h4>${FLUJO}
       ${tip('Solo tú y tesorería ven la información de tu ministerio.')}
@@ -286,7 +286,7 @@ TEMAS.pastor = TEMAS.tesorero;
 TEMAS.admin = TEMAS.tesorero;
 TEMAS.secretaria = [
   {
-    id: 'bienvenida', titulo: 'Cómo funciona', ico: 'sparkle', html: `
+    id: 'bienvenida', titulo: 'Cómo funciona', ico: 'info', html: `
     <p>Con tu usuario de <b>Secretaría</b> llevas el registro de los miembros de la iglesia (su estado y sus datos de contacto) y la asistencia a los cultos, los discipulados en hogares y las reuniones de los ministerios.</p>
     <ul class="hp-list">
       <li>Ves los apartados <b>Miembros</b>, <b>Asistencia</b> y <b>Mi cuenta</b>.</li>

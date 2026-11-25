@@ -316,7 +316,7 @@ function renderActividades(root, ctx, m, base, esTes) {
       </div>
       <div class="act-res ${r.resultado < 0 ? 'neg' : ''}"><span>Resultado</span><b>${money(r.resultado)}</b></div>
     </a>`).join('')}</section>`
-    : `<article class="card">${emptyState('Aún no hay actividades. Crea una con <b>Nueva actividad</b>: defines la cuota, eliges a los confirmados y registras quién pagó.', 'sparkle')}</article>`}`;
+    : `<article class="card">${emptyState('Aún no hay actividades. Crea una con <b>Nueva actividad</b>: defines la cuota, eliges a los confirmados y registras quién pagó.', 'calendar')}</article>`}`;
 
   root.querySelector('[data-nueva]').addEventListener('click', () => editarActividad(ctx, m, base));
 }

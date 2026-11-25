@@ -136,7 +136,7 @@ export function importarHistorialDiezmos(ctx) {
           </div>
           ${conError ? `<div class="note warn">${icon('alert', 16)}<span>${conError} fila${conError > 1 ? 's' : ''} no se importará${conError > 1 ? 'n' : ''} por tener datos inválidos: ${filas.filter((x) => x.error).slice(0, 5).map((x) => `fila ${x.fila} (${esc(x.error)})`).join(', ')}${conError > 5 ? '…' : ''}. Corrígelas en el Excel y vuelve a cargarlo.</span></div>` : ''}
           ${pendientes ? `<div class="note warn">${icon('alert', 16)}<span>Elige a qué hermano corresponde cada fila marcada. Las filas sin asignar no se importan.</span></div>` : ''}
-          ${filas.some((x) => x.porFamilia) ? `<div class="note">${icon('sparkle', 16)}<span>Las filas marcadas <b>misma familia</b> se asignaron igual que otra anotación con el mismo nombre en el cuaderno (de este archivo o importada antes). Al elegir un hermano en una fila, las demás de esa familia se actualizan solas.</span></div>` : ''}
+          ${filas.some((x) => x.porFamilia) ? `<div class="note">${icon('info', 16)}<span>Las filas marcadas <b>misma familia</b> se asignaron igual que otra anotación con el mismo nombre en el cuaderno (de este archivo o importada antes). Al elegir un hermano en una fila, las demás de esa familia se actualizan solas.</span></div>` : ''}
           <label class="check saldo-check"><input type="checkbox" data-vincular checked> <span>Registrar como <b>matrimonio</b> en Miembros a las parejas asignadas (si aún no tienen cónyuge)</span></label>
           <div class="table-wrap imp-lista diezmo-imp"><table class="table">
             <thead><tr><th>Fecha</th><th>En el cuaderno</th><th class="num">Monto</th><th>Hermano</th><th>Cónyuge (matrimonio)</th></tr></thead>

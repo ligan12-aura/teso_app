@@ -252,10 +252,10 @@ export function render(root, ctx) {
   </section>
 
   ${!data.miembros.length ? `<div class="note">${icon('users', 16)}<span>Para llevar el control de diezmos primero carga a los hermanos en <a class="link" href="#/miembros">Miembros</a> (puedes importar el listado en Excel).</span></div>` : ''}
-  ${futuro ? `<div class="note">${icon('sparkle', 16)}<span>${nomMes} aún no llega: las cifras del mes aparecerán cuando se registren diezmos.</span></div>` : ''}
+  ${futuro ? `<div class="note">${icon('info', 16)}<span>${nomMes} aún no llega: las cifras del mes aparecerán cuando se registren diezmos.</span></div>` : ''}
 
   <section class="kpis kpis-4">
-    <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (futuro ? 'mes aún no transcurrido' : totalAnt ? '' : 'sin diezmos el mes anterior') : lineaVar(variacion, mesLargo(ant), totalAnt)}${variacionAnio !== null ? `<br>${lineaVar(variacionAnio, mesLargo(antAnio), totalAntAnio)}` : ''}${totalEspMes ? `<br>${icon('sparkle', 12)} además <b>${money(totalEspMes)}</b> en diezmos especiales` : ''}</span></article>
+    <article class="kpi"><span class="kpi-label">${icon('heart', 15)} Diezmado en ${MESES_L[mi].toLowerCase()}</span><strong class="kpi-value">${money(totalMes)}</strong><span class="kpi-sub">${variacion === null ? (futuro ? 'mes aún no transcurrido' : totalAnt ? '' : 'sin diezmos el mes anterior') : lineaVar(variacion, mesLargo(ant), totalAnt)}${variacionAnio !== null ? `<br>${lineaVar(variacionAnio, mesLargo(antAnio), totalAntAnio)}` : ''}${totalEspMes ? `<br>${icon('star', 12)} además <b>${money(totalEspMes)}</b> en diezmos especiales` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.constante.color}"></i> Diezmaron</span><strong class="kpi-value">${diezmaron.length} <small class="kpi-pct">${pctMes}%</small></strong><span class="kpi-sub">de ${elMes.length} hermanos habilitados para diezmar${noHabConDiezmo ? ` · además ${noHabConDiezmo} no habilitado${noHabConDiezmo > 1 ? 's' : ''}` : ''}${fueraConDiezmo ? ` · además ${fueraConDiezmo} fuera de su período (aún no era miembro o no estaba habilitado, o ya no es miembro)` : ''}</span></article>
     <article class="kpi"><span class="kpi-label"><i class="dot" style="background:${CATEG_DIEZMO.sin.color}"></i> No diezmaron</span><strong class="kpi-value">${futuro ? '—' : noDiezmaron.length}</strong><span class="kpi-sub">${futuro ? 'mes por venir' : 'habilitados sin diezmo registrado'}</span></article>
     <article class="kpi"><span class="kpi-label">${icon('receipt', 15)} Promedio por hermano</span><strong class="kpi-value">${money(promedio)}</strong><span class="kpi-sub">${regsMes.length} diezmo${regsMes.length === 1 ? '' : 's'} · por hermano (un matrimonio cuenta como 2)</span></article>
@@ -280,7 +280,7 @@ export function render(root, ctx) {
         <h4 class="dm-tit">Diezmaron <span class="tag tag-verde">${regsMes.length}</span></h4>
         ${regsMes.length ? `<ul class="dm-lista">${regsMes.map(({ d, nombre }) => `<li><button class="link-btn" data-abrir="${d.miembroId}">${d.conyugeId ? '💍 ' : ''}${esc(nombre)}</button><small class="muted">${fecha(d.fecha)}${d.medio ? ` · ${esc(d.medio)}` : ''}</small><b>${money(d.monto)}</b></li>`).join('')}</ul>
         <div class="dm-total"><span>Total del mes</span><b>${money(totalMes)}</b></div>` : emptyState(futuro ? 'Mes por venir' : 'Sin diezmos registrados este mes', 'heart')}
-        ${espMes.length ? `<h4 class="dm-tit dm-tit-esp">${icon('sparkle', 14)} Diezmos especiales <span class="tag tag-ambar">${espMes.length}</span></h4>
+        ${espMes.length ? `<h4 class="dm-tit dm-tit-esp">${icon('star', 14)} Diezmos especiales <span class="tag tag-ambar">${espMes.length}</span></h4>
         <p class="muted small">Ingresos extraordinarios: entran a la caja pero no cuentan en el promedio, las comparaciones ni la constancia.</p>
         <ul class="dm-lista">${espMes.map((d) => `<li><button class="link-btn" data-abrir="${d.miembroId}">${d.conyugeId ? '💍 ' : ''}${esc(nombreReg(d))}</button><small class="muted">${fecha(d.fecha)}${d.notas ? ` · ${esc(d.notas)}` : ''}</small><b>${money(d.monto)}</b></li>`).join('')}</ul>
         <div class="dm-total"><span>Total especiales</span><b>${money(totalEspMes)}</b></div>` : ''}
@@ -409,7 +409,7 @@ function diezmoDelMes(ctx, m, mes, { pareja = false } = {}) {
         <small class="hint" data-reparto></small>
       </div>
       ${conyuge ? `<label class="check pareja-check"><input type="checkbox" name="matrimonio" checked> <span>💍 <b>Diezmo del matrimonio</b> con ${esc(conyuge.nombre)}<br><small class="muted">Cuenta como diezmo de ambos hermanos.</small></span></label>` : ''}
-      <label class="check especial-check"><input type="checkbox" name="especial"> <span>${icon('sparkle', 13)} <b>Diezmo especial</b> (ingreso extraordinario: herencia, bono, venta…)<br><small class="muted">Entra a la caja como “Diezmos especiales”, aparte del diezmo regular: no cuenta en promedios, comparaciones ni constancia. Es de un solo mes.</small></span></label>
+      <label class="check especial-check"><input type="checkbox" name="especial"> <span>${icon('star', 13)} <b>Diezmo especial</b> (ingreso extraordinario: herencia, bono, venta…)<br><small class="muted">Entra a la caja como “Diezmos especiales”, aparte del diezmo regular: no cuenta en promedios, comparaciones ni constancia. Es de un solo mes.</small></span></label>
       <div class="form-row">
         <label class="field"><span>Medio</span><select name="medio">${opcionesMedio(data)}</select></label>
         <label class="field"><span>Nota (opcional)</span><input name="notas" maxlength="200"></label>

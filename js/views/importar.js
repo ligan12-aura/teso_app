@@ -268,7 +268,7 @@ export function renderImportar(body, ctx) {
   else if (estado) pintar(prev, ctx);
 }
 
-const tipNoDuplica = () => `<div class="note" style="margin-top:14px">${icon('sparkle', 16)}<span>Puedes volver a importar el mismo libro cuando agregues meses nuevos: las líneas que ya se importaron se reconocen y <b>no se duplican</b>.</span></div>`;
+const tipNoDuplica = () => `<div class="note" style="margin-top:14px">${icon('info', 16)}<span>Puedes volver a importar el mismo libro cuando agregues meses nuevos: las líneas que ya se importaron se reconocen y <b>no se duplican</b>.</span></div>`;
 
 export async function analizar(fileOrBuffer, data) {
   const XLSX = await loadXLSX();
@@ -455,7 +455,7 @@ function pintarPlanilla(prev, ctx) {
     ${malas.length ? `<div class="note warn" style="margin-top:12px">${icon('alert', 16)}<span>${malas.length} fila${malas.length > 1 ? 's' : ''} no se importará${malas.length > 1 ? 'n' : ''} por tener datos incompletos o inválidos: ${malas.slice(0, 5).map((f) => `fila ${f.fila} (${f.error})`).join(', ')}${malas.length > 5 ? '…' : ''}.</span></div>` : ''}
     <div class="imp-opciones">
       ${opcSaldo ? `<label class="check saldo-check"><input type="checkbox" data-opc-saldo ${marcarSaldo ? 'checked' : ''}> <span>Registrar el saldo al 1 de enero de <b>${money(p.saldoInicial)}</b>${general ? `<br><small class="muted">${saldoGeneralConfigurado ? `Hoy el saldo inicial de caja es ${money(cfg.saldoInicial)}${cfg.fechaSaldoInicial ? ` desde el ${fecha(cfg.fechaSaldoInicial)}` : ''}. Al marcarlo se reemplaza.` : 'Se usará como saldo inicial de caja.'}</small>` : ''}</span></label>` : ''}
-      ${!general && p.saldoInicial > 0 && tieneAntes ? `<div class="note" style="margin-top:10px">${icon('sparkle', 16)}<span>El ministerio ya tiene movimientos anteriores a ${p.anio}, así que su saldo de arrastre ya existe y no se vuelve a registrar.</span></div>` : ''}
+      ${!general && p.saldoInicial > 0 && tieneAntes ? `<div class="note" style="margin-top:10px">${icon('info', 16)}<span>El ministerio ya tiene movimientos anteriores a ${p.anio}, así que su saldo de arrastre ya existe y no se vuelve a registrar.</span></div>` : ''}
       ${arrastre ? `<div class="note ${saldoFinPlanilla !== arrastre.monto ? 'warn' : ''}" style="margin-top:10px">${icon('alert', 16)}<span>El ministerio tiene registrado un saldo al 1 de enero de ${p.anio + 1} de <b>${money(arrastre.monto)}</b>. Con este historial ese saldo ya no hace falta (sale de los movimientos), así que se quitará para no contarlo dos veces. Según esta planilla, el saldo al cierre de ${p.anio} es <b>${money(saldoFinPlanilla)}</b>${saldoFinPlanilla !== arrastre.monto ? ' (no coincide: revisa la diferencia después de importar)' : ' (coincide)'}.</span></div>` : ''}
       ${opcItem ? `<label class="check saldo-check"><input type="checkbox" data-opc-item ${!m.itemMensual ? 'checked' : ''}> <span>Usar el ítem mensual de la planilla: <b>${money(p.item)}</b> <small class="muted">(hoy ${money(m.itemMensual)})</small></span></label>` : ''}
       ${opcPres ? `<label class="check saldo-check"><input type="checkbox" data-opc-pres ${!m.presupuestoMensual ? 'checked' : ''}> <span>Usar el presupuesto mensual de la planilla: <b>${money(p.presupuesto)}</b></span></label>` : ''}

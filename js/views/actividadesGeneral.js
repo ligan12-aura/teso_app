@@ -62,7 +62,7 @@ function renderLista(root, ctx) {
       </div>
       <div class="act-res ${r.resultado < 0 ? 'neg' : ''}"><span>Resultado</span><b>${money(r.resultado)}</b></div>
     </a>`).join('')}</section>`
-    : `<article class="card">${emptyState('Aún no hay actividades de la iglesia. Crea una con <b>Nueva actividad</b> (aniversario, retiro, venta…): defines la cuota, eliges a los miembros confirmados y registras quién pagó. Sus gastos e ingresos quedan en la tesorería general.', 'sparkle')}</article>`}`;
+    : `<article class="card">${emptyState('Aún no hay actividades de la iglesia. Crea una con <b>Nueva actividad</b> (aniversario, retiro, venta…): defines la cuota, eliges a los miembros confirmados y registras quién pagó. Sus gastos e ingresos quedan en la tesorería general.', 'calendar')}</article>`}`;
   root.querySelector('[data-nueva]').addEventListener('click', () => editarActividad(ctx));
 }
 
