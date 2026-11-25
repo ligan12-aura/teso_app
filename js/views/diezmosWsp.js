@@ -2,7 +2,7 @@
 // (un matrimonio recibe un solo resumen, en el celular de cada uno). La página arma el mensaje y abre WhatsApp
 // con el texto listo: quien envía es la persona de tesorería, desde su propio WhatsApp.
 import { icon, esc, money, modal, toast, sinTildes, coincide } from '../ui.js';
-import { resumenDiezmos, esDeMiembro, esEspecial, diezmosRegulares } from './diezmos.js';
+import { resumenDiezmos, esDeMiembro, esEspecial, diezmosRegulares, finEvaluacion } from './diezmos.js';
 import { editarMiembro } from './miembros.js';
 import { call, isDemo } from '../api.js';
 
@@ -135,11 +135,11 @@ function ingresosIglesia(data, anio, n, desde = 0) {
   return (data.movGenerales || []).filter((m) => m.tipo === 'ingreso' && m.mes >= inicio && m.mes <= hasta).reduce((a, m) => a + m.monto, 0);
 }
 
-// Período de una fila: meses evaluados del año (el mes en curso solo si ya tiene diezmo), desde que cuenta
+// Período de una fila: meses evaluados del año (el mes en curso, y el anterior hasta el día 10, solo si ya
+// tienen diezmo: ver finEvaluacion), desde que cuenta
 // (miembro desde / habilitado desde), total y meses con diezmo del período, y lo adelantado aparte
 export function periodoFila(f, anio, mesesPeriodo, hoy) {
-  let evaluados = Math.max(1, Math.min(12, mesesPeriodo));
-  if (anio === +hoy.slice(0, 4) && evaluados > 1 && !f.meses[evaluados - 1]) evaluados--;
+  const evaluados = Math.max(0, Math.min(12, mesesPeriodo, finEvaluacion(f.meses, anio, hoy)));
   const desde = Math.max(0, Math.min(f.desde || 0, evaluados));
   // solo cuentan los meses desde que es miembro o está habilitado (lo anterior no entra en su resumen)
   const enPeriodo = f.meses.slice(0, evaluados);

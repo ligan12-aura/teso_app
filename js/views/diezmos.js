@@ -43,6 +43,21 @@ export const CATEG_DIEZMO = {
 };
 const vista = { filtro: 'todos', inactivos: false, q: '' };
 
+// Hasta qué mes (sin incluirlo, 0-12) se evalúa a un hermano en el año "anio":
+// - el mes en curso solo cuenta si ya tiene diezmo (mientras no termina, no es una falta);
+// - la mayoría diezma con su sueldo, a fin de mes o a principios del siguiente: por eso el mes anterior
+//   tampoco cuenta como falta hasta el día DIA_GRACIA del mes siguiente, salvo que ya tenga diezmo.
+//   Si el mes en curso ya tiene diezmo, el anterior se evalúa normalmente.
+export const DIA_GRACIA = 10;
+export function finEvaluacion(meses, anio, hoy) {
+  const hoyY = Number(hoy.slice(0, 4)), hoyM = Number(hoy.slice(5, 7)), hoyD = Number(hoy.slice(8, 10));
+  const enGracia = hoyD <= DIA_GRACIA;
+  if (anio > hoyY) return 0;
+  if (anio < hoyY) return anio === hoyY - 1 && hoyM === 1 && enGracia && !meses[11] ? 11 : 12;
+  if (meses[hoyM - 1]) return hoyM;
+  return hoyM > 1 && enGracia && !meses[hoyM - 2] ? hoyM - 2 : hoyM - 1;
+}
+
 // Resumen del año: meses transcurridos y categoría de cada miembro
 export function resumenDiezmos(data, anio, incluirInactivos = false) {
   const hoyY = Number(data.hoy.slice(0, 4)), hoyM = Number(data.hoy.slice(5, 7));
@@ -81,10 +96,10 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
       meses[i] += d.monto;
       if (d.conyugeId) pareja[i] = true;
     });
-    // El mes en curso solo cuenta si ya tiene diezmo: mientras no termina, no es una falta
+    // El mes en curso (y el anterior, hasta el día 10) solo cuenta si ya tiene diezmo: ver finEvaluacion
     const activoHasta = mesesActivo(m);
     const activoDesde = mesDesde(m);
-    const finEval = Math.min(anio === hoyY && !meses[hoyM - 1] ? hoyM - 1 : mesesPeriodo, activoHasta);
+    const finEval = Math.min(finEvaluacion(meses, anio, data.hoy), activoHasta);
     const evaluados = Math.max(0, finEval - activoDesde);
     const conDiezmo = meses.slice(activoDesde, Math.max(activoDesde, finEval)).filter((v) => v > 0).length;
     const total = meses.reduce((a, v) => a + v, 0);
@@ -107,7 +122,7 @@ export function resumenDiezmos(data, anio, incluirInactivos = false) {
 function categoriaFila(meses, desde, hasta, anio, hoy) {
   const hoyY = Number(hoy.slice(0, 4)), hoyM = Number(hoy.slice(5, 7));
   const mesesPeriodo = anio < hoyY ? 12 : anio === hoyY ? hoyM : 0;
-  const fin = Math.min(anio === hoyY && !meses[hoyM - 1] ? hoyM - 1 : mesesPeriodo, hasta);
+  const fin = Math.min(finEvaluacion(meses, anio, hoy), mesesPeriodo, hasta);
   const evaluados = Math.max(0, fin - desde);
   const con = meses.slice(desde, Math.max(desde, fin)).filter((v) => v > 0).length;
   let racha = 0;
