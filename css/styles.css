@@ -1128,6 +1128,9 @@ body.is-login .guia-btn { display: none; }
 .wsp-cat.constante { background: var(--green-soft); color: var(--green-ink); }
 .wsp-cat.irregular { background: var(--amber-soft); color: var(--amber-ink); }
 .wsp-cat.sin { background: var(--rose-soft); color: var(--rose-ink); }
+.wsp-est { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; }
+.wsp-est.ok { color: var(--green-ink); }
+.wsp-est.falla { color: var(--rose-ink); max-width: 260px; }
 .wsp-acciones { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .wsp-vista { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface-2, var(--surface)); }
 .wsp-vista header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

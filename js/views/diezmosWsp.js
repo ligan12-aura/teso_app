@@ -223,6 +223,21 @@ export function armarMensaje(plantilla, f, anio, mesesPeriodo, hoy, data) {
     .replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, '\n\n').trim();
 }
 
+// Motivos frecuentes por los que Meta no entrega un mensaje, en palabras simples
+const MOTIVOS_WSP = {
+  131026: 'ese número no tiene WhatsApp o no puede recibir este mensaje',
+  131042: 'hay un problema con el método de pago de la cuenta de WhatsApp',
+  131049: 'Meta lo retuvo para no saturar al destinatario; intenta otro día',
+  131050: 'la persona bloqueó o dejó de recibir mensajes de la iglesia',
+  131053: 'error al enviar el mensaje',
+  132000: 'los datos no calzan con la plantilla',
+  132001: 'la plantilla no existe en ese idioma',
+  132015: 'la plantilla está pausada por baja calidad',
+  368: 'la cuenta de WhatsApp de la iglesia está restringida',
+  131031: 'la cuenta de WhatsApp de la iglesia está bloqueada'
+};
+const motivoWsp = (t) => { const c = +String(t).split(' ')[0]; return MOTIVOS_WSP[c] || String(t).replace(/^\d+\s*/, '') || 'motivo no informado'; };
+
 // Constante / irregular / no diezma en el período, con el mismo criterio que la vista Diezmos
 // (constante = diezmó en al menos el 80 % de los meses evaluados desde que cuenta)
 const CATEGORIAS = [['todos', 'Todos'], ['constante', 'Constantes'], ['irregular', 'Irregulares'], ['sin', 'No diezman']];
@@ -244,12 +259,15 @@ export function abrirReportesWsp(ctx, anioInicial) {
   const sel = new Set(); // filas elegidas para el envío en grupo (modo automático)
   const claveEnviados = () => `teso_wsp_enviados_${anio}`;
   // automático: el servidor envía con la API oficial y guarda los envíos (los ve todo el equipo)
-  const srv = { activo: false, enviados: {} };
-  const enviados = () => { if (srv.activo) return srv.enviados; try { return JSON.parse(leer(claveEnviados(), '{}')) || {}; } catch { return {}; } };
+  const srv = { activo: false, enviados: {}, estados: {} };
+  // un envío que Meta no pudo entregar vuelve a quedar pendiente (se puede reenviar, también en grupo)
+  const enviados = () => {
+    if (srv.activo) return Object.fromEntries(Object.entries(srv.enviados).filter(([k]) => (srv.estados[k] || {}).estado !== 'failed'));
+    try { return JSON.parse(leer(claveEnviados(), '{}')) || {}; } catch { return {}; } };
   const marcarEnviado = (k) => { const e = enviados(); e[k] = new Date().toISOString().slice(0, 10); if (!srv.activo) guardar(claveEnviados(), JSON.stringify(e)); };
   const cargarEstado = async () => {
     if (isDemo) return;
-    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; } catch { srv.activo = false; }
+    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; srv.estados = r.estados || {}; } catch { srv.activo = false; }
   };
 
   return modal({
@@ -323,7 +341,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
           <div class="wsp-acciones">
             <button type="button" class="link-btn" data-ver="${esc(x.id)}">${icon('eye', 14)} Ver</button>
             ${x.personas.map((p) => p.numero
-              ? `<button type="button" class="btn btn-sm ${env[x.id + ':' + p.id] ? 'btn-ghost' : 'btn-soft-green'}" data-enviar="${esc(x.id)}" data-persona="${p.id}" title="${esc(p.celular)}">${env[x.id + ':' + p.id] ? `${icon('check', 14)} Enviado` : `${icon('send', 14)} Enviar`}${x.personas.length > 1 ? ` a ${esc(p.nombre.split(' ')[0])}` : ''}</button>`
+              ? `${estadoEnvio(x.id + ':' + p.id)}<button type="button" class="btn btn-sm ${env[x.id + ':' + p.id] ? 'btn-ghost' : 'btn-soft-green'}" data-enviar="${esc(x.id)}" data-persona="${p.id}" title="${esc(p.celular)}">${env[x.id + ':' + p.id] ? `${icon('check', 14)} Enviado` : `${icon('send', 14)} ${(srv.estados[x.id + ':' + p.id] || {}).estado === 'failed' ? 'Reintentar' : 'Enviar'}`}${x.personas.length > 1 ? ` a ${esc(p.nombre.split(' ')[0])}` : ''}</button>`
               : `<button type="button" class="link-btn falta" data-ficha="${p.id}" title="${p.celular ? 'El celular no tiene un formato válido' : 'Sin celular en su ficha'}">${icon('alert', 13)} ${p.celular ? 'Revisar' : 'Agregar'} celular${x.personas.length > 1 ? ` de ${esc(p.nombre.split(' ')[0])}` : ''}</button>`).join('')}
           </div></li>`).join('') : `<li class="muted">${filas.length ? 'Nadie coincide con la búsqueda' : 'No hay hermanos habilitados con diezmos en este año'}</li>`;
         const filaDe = (id) => filas.find((x) => x.id === id);
@@ -378,10 +396,18 @@ export function abrirReportesWsp(ctx, anioInicial) {
         if (fallas.length) alert('No se enviaron:\n' + fallas.join('\n'));
         pintar();
       }
+      // estado que informa Meta después del envío: entregado, leído o no entregado (con el motivo)
+      function estadoEnvio(k) {
+        const e = srv.activo && srv.estados[k];
+        if (!e || !e.estado || e.estado === 'sent') return '';
+        if (e.estado === 'failed') return `<span class="wsp-est falla" title="${esc(e.error || '')}">${icon('alert', 13)} No entregado${e.error ? `: ${esc(motivoWsp(e.error))}` : ''}</span>`;
+        return `<span class="wsp-est ok">${icon('check', 13)} ${e.estado === 'read' ? 'Leído' : 'Entregado'}</span>`;
+      }
       async function enviarAuto(x, p) {
         const { mesesPeriodo } = filasReporte(data, anio);
         const r = await call('enviarWhatsapp', { anio, clave: x.id + ':' + p.id, miembroId: p.id, parametros: parametrosMeta(x, anio, mesesPeriodo, data.hoy, data) });
         srv.enviados[x.id + ':' + p.id] = r.fecha || data.hoy;
+        delete srv.estados[x.id + ':' + p.id];
       }
       f.querySelector('[data-anio]').addEventListener('change', async (e) => { anio = +e.target.value; vista.hidden = true; sel.clear(); await cargarEstado(); pintar(); });
       const bq = f.querySelector('[data-buscar]');

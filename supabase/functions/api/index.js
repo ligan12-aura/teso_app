@@ -6,7 +6,8 @@
 // la conexión directa a Postgres dejaba algunas consultas colgadas (30-60 s) tras unos segundos sin uso.
 // Escrituras simultáneas: se guarda solo si nadie guardó desde que se leyó (versión); si no, se repite.
 import { createClient } from 'npm:@supabase/supabase-js@2.49.1';
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { createRemoteJWKSet, jwtVerify } from 'npm:jose@5.9.6';
 import TesoCore from './core.js';
 import { crearAlmacen, crearLimites, crearArchivos } from './almacen.js';
@@ -95,6 +96,40 @@ const WSP_PHONE_ID = Deno.env.get('WSP_PHONE_ID') || '';
 const WSP_PLANTILLA = Deno.env.get('WSP_PLANTILLA') || 'resumen_diezmos';
 const WSP_IDIOMA = Deno.env.get('WSP_IDIOMA') || 'es';
 const WSP_ACCIONES = { wspEstado: 1, enviarWhatsapp: 1, wspReiniciar: 1 };
+// Avisos de entrega (webhook de Meta): WSP_VERIFICAR es la clave que se escribe en Meta al conectar el aviso;
+// WSP_APP_SECRET es la clave secreta de la app de Meta, con la que se comprueba que cada aviso viene de Meta.
+const WSP_VERIFICAR = Deno.env.get('WSP_VERIFICAR') || '';
+const WSP_APP_SECRET = Deno.env.get('WSP_APP_SECRET') || '';
+const ORDEN_ESTADO = { sent: 1, delivered: 2, read: 3, failed: 4 };
+
+async function avisoMeta(texto, firma) {
+  if (!WSP_APP_SECRET) { console.error('aviso de WhatsApp ignorado: falta WSP_APP_SECRET'); return; }
+  const esperado = Buffer.from('sha256=' + createHmac('sha256', WSP_APP_SECRET).update(texto, 'utf8').digest('hex'));
+  const recibido = Buffer.from(String(firma || ''));
+  if (recibido.length !== esperado.length || !timingSafeEqual(recibido, esperado)) { console.error('aviso de WhatsApp con firma inválida'); return; }
+  let body; try { body = JSON.parse(texto); } catch { return; }
+  const estados = [];
+  (body.entry || []).forEach((e) => (e.changes || []).forEach((c) => ((c.value && c.value.statuses) || []).forEach((st) => estados.push(st))));
+  if (!estados.length) return;
+  for (let intento = 1; intento <= INTENTOS; intento++) {
+    const { version, version_limites: versionLimites, filas } = await leer();
+    const alm = crearAlmacen(filas);
+    let cambio = false;
+    for (const st of estados) {
+      const r = alm.store.read('_wsp').find((x) => x.wamid && x.wamid === st.id);
+      if (!r) continue;
+      // los avisos pueden llegar desordenados: un estado no retrocede (leído no vuelve a entregado)
+      if ((ORDEN_ESTADO[st.status] || 0) <= (ORDEN_ESTADO[r.estado] || 0)) continue;
+      const err = (st.errors || [])[0];
+      const detalle = err ? `${err.code || ''} ${(err.error_data && err.error_data.details) || err.message || err.title || ''}`.trim().slice(0, 300) : '';
+      if (err) console.error('whatsapp no entregado', JSON.stringify(err));
+      alm.store.update('_wsp', r.id, { ...r, estado: st.status, estadoT: new Date((+st.timestamp || Date.now() / 1000) * 1000).toISOString(), error: detalle });
+      cambio = true;
+    }
+    if (!cambio) return;
+    try { await guardarCambios(version, versionLimites, alm.cambios()); return; } catch (e) { if (e === CONFLICTO && intento < INTENTOS) continue; throw e; }
+  }
+}
 function numeroWsp(cel) {
   const d = String(cel || '').replace(/\D/g, '');
   if (d.length === 11 && d.startsWith('569')) return d;
@@ -129,9 +164,12 @@ async function whatsapp(action, body) {
     const deAnio = alm.store.read('_wsp').filter((x) => x.anio === anio);
 
     if (action === 'wspEstado') {
-      const enviados = {};
-      deAnio.forEach((x) => { enviados[x.clave] = String(x.t || '').slice(0, 10); });
-      return { ok: true, data: { activo, enviados } };
+      const enviados = {}, estados = {};
+      deAnio.forEach((x) => {
+        enviados[x.clave] = String(x.t || '').slice(0, 10);
+        if (x.estado) estados[x.clave] = { estado: x.estado, error: x.error || '' };
+      });
+      return { ok: true, data: { activo, enviados, estados, avisos: !!(WSP_APP_SECRET && WSP_VERIFICAR) } };
     }
     if (action === 'wspReiniciar') {
       deAnio.forEach((x) => alm.store.remove('_wsp', x.id));
@@ -165,7 +203,7 @@ async function whatsapp(action, body) {
       body._wamid = r?.messages?.[0]?.id || '';
     }
     const id = anio + ':' + clave;
-    const reg = { id, anio, clave, miembroId: mb.id, numero: numero.slice(-4), wamid: body._wamid, t: new Date().toISOString(), por: u.id };
+    const reg = { id, anio, clave, miembroId: mb.id, numero: numero.slice(-4), wamid: body._wamid, t: new Date().toISOString(), por: u.id, estado: '', error: '' };
     if (alm.store.read('_wsp').some((x) => x.id === id)) alm.store.update('_wsp', id, reg); else alm.store.insert('_wsp', reg);
     try { await guardarCambios(version, versionLimites, alm.cambios()); } catch (e) { if (e === CONFLICTO && intento < INTENTOS) continue; throw e; }
     return { ok: true, data: { enviado: true, fecha: reg.t.slice(0, 10) } };
@@ -181,9 +219,24 @@ async function descargar(info) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
-  if (req.method === 'GET') return json({ ok: true, data: 'API de Tesorería El Redentor activa' });
+  if (req.method === 'GET') {
+    // Meta comprueba el aviso de entrega con la clave WSP_VERIFICAR
+    const u = new URL(req.url);
+    if (u.searchParams.get('hub.mode') === 'subscribe') {
+      return WSP_VERIFICAR && u.searchParams.get('hub.verify_token') === WSP_VERIFICAR
+        ? new Response(u.searchParams.get('hub.challenge') || '', { headers: { 'Content-Type': 'text/plain' } })
+        : new Response('Clave incorrecta', { status: 403 });
+    }
+    return json({ ok: true, data: 'API de Tesorería El Redentor activa' });
+  }
+  const texto = await req.text();
+  const firmaMeta = req.headers.get('x-hub-signature-256');
+  if (firmaMeta) {
+    try { await avisoMeta(texto, firmaMeta); } catch (e) { console.error('aviso de WhatsApp', e && e.stack ? e.stack : e); }
+    return new Response('ok');
+  }
   let body;
-  try { body = JSON.parse(await req.text()); } catch { return json({ ok: false, error: 'Solicitud inválida' }); }
+  try { body = JSON.parse(texto); } catch { return json({ ok: false, error: 'Solicitud inválida' }); }
   const action = String(body.action || '');
   // identificador de la solicitud (lo manda la página): si una escritura se repite con el mismo id
   // (p. ej. tras un corte por demora), no se vuelve a aplicar
