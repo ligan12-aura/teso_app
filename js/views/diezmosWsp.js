@@ -6,8 +6,8 @@ import { resumenDiezmos, esDeMiembro, esEspecial, diezmosRegulares, finEvaluacio
 import { editarMiembro } from './miembros.js';
 import { call, isDemo } from '../api.js';
 
-// Envío automático (API oficial de WhatsApp): el texto es esta plantilla, aprobada por Meta con el nombre
-// "resumen_diezmos" (idioma español). Cada {{n}} lo completa la página con los datos del hermano.
+// Envío automático (API oficial de WhatsApp): el texto es la plantilla aprobada por Meta que esté en uso
+// (el servidor dice su nombre). Cada {{n}} lo completa la página con los datos del hermano.
 export const PLANTILLA_META = `Hola {{1}}, bendiciones.
 
 Te compartimos el resumen de tus diezmos {{2}} en la Iglesia Bautista El Redentor:
@@ -22,6 +22,11 @@ Te compartimos el resumen de tus diezmos {{2}} en la Iglesia Bautista El Redento
 
 Tesorería · Iglesia Bautista El Redentor
 Mensaje confidencial, solo para ti.`;
+// Versión 2: avisa que es un mensaje automático y a quién consultar
+export const PLANTILLA_META_V2 = `${PLANTILLA_META}
+
+Este es un mensaje automático y las respuestas a este número no se revisan. Ante cualquier duda o consulta, contactar directamente al tesorero Miguel Argomedo: +56 9 8519 5729.`;
+const PLANTILLAS_META = { resumen_diezmos: PLANTILLA_META, resumen_diezmos_es: PLANTILLA_META, resumen_diezmos_v2: PLANTILLA_META_V2 };
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MESES_C = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -196,7 +201,7 @@ export function parametrosMeta(f, anio, mesesPeriodo, hoy, data) {
   return [r.nombre, r.periodo, r.total, r.meses, lineaDetalle,
     r.animo ? `${r.animo} ¡Gracias por tu fidelidad!` : '¡Gracias por tu fidelidad y por sostener la obra del Señor!'];
 }
-export const textoMeta = (params) => PLANTILLA_META.replace(/\{\{(\d)\}\}/g, (m, n) => params[+n - 1] ?? m);
+export const textoMeta = (params, nombre) => (PLANTILLAS_META[nombre] || PLANTILLA_META).replace(/\{\{(\d)\}\}/g, (m, n) => params[+n - 1] ?? m);
 
 // A un matrimonio se le habla en plural (Les compartimos… sus diezmos… solo para ustedes)
 const PLURAL = [
@@ -267,7 +272,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
   const marcarEnviado = (k) => { const e = enviados(); e[k] = new Date().toISOString().slice(0, 10); if (!srv.activo) guardar(claveEnviados(), JSON.stringify(e)); };
   const cargarEstado = async () => {
     if (isDemo) return;
-    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; srv.estados = r.estados || {}; } catch { srv.activo = false; }
+    try { const r = await call('wspEstado', { anio }); srv.activo = !!r.activo; srv.enviados = r.enviados || {}; srv.estados = r.estados || {}; srv.plantilla = r.plantilla || ''; } catch { srv.activo = false; }
   };
 
   return modal({
@@ -349,7 +354,7 @@ export function abrirReportesWsp(ctx, anioInicial) {
         lista.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => {
           const x = filaDe(b.dataset.ver);
           vista.hidden = false;
-          const texto = srv.activo ? textoMeta(parametrosMeta(x, anio, mesesPeriodo, data.hoy, data)) : armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data);
+          const texto = srv.activo ? textoMeta(parametrosMeta(x, anio, mesesPeriodo, data.hoy, data), srv.plantilla) : armarMensaje(plantilla, x, anio, mesesPeriodo, data.hoy, data);
           vista.innerHTML = `<header><b>Mensaje para ${esc(x.nombre)}</b><button type="button" class="icon-btn sm" data-cerrar-vista aria-label="Cerrar vista previa">${icon('x', 15)}</button></header><pre>${esc(texto)}</pre>`;
           vista.querySelector('[data-cerrar-vista]').addEventListener('click', () => { vista.hidden = true; });
           vista.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

@@ -169,7 +169,7 @@ async function whatsapp(action, body) {
         enviados[x.clave] = String(x.t || '').slice(0, 10);
         if (x.estado) estados[x.clave] = { estado: x.estado, error: x.error || '' };
       });
-      return { ok: true, data: { activo, enviados, estados, avisos: !!(WSP_APP_SECRET && WSP_VERIFICAR) } };
+      return { ok: true, data: { activo, enviados, estados, avisos: !!(WSP_APP_SECRET && WSP_VERIFICAR), plantilla: WSP_PLANTILLA } };
     }
     if (action === 'wspReiniciar') {
       deAnio.forEach((x) => alm.store.remove('_wsp', x.id));
