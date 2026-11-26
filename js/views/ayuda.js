@@ -80,6 +80,7 @@ const TEMAS = {
       <h4>Actividades de la iglesia</h4>
       <p>En la pestaña <b>Actividades</b> (arriba, junto a Movimientos) se crean las actividades de la iglesia: aniversario, retiro, venta… Igual que en los ministerios:</p>
       ${pasos(`Presiona ${btn('plus', 'Nueva actividad')}: nombre, fecha y cuota por persona (0 = sin cuota).`, `Con ${btn('users', 'Elegir confirmados')} marca a los <b>miembros</b> que participan.`, `Cuando alguien paga, presiona <b>Registrar pago</b>: entra como ingreso “Actividades” de la tesorería general con esa fecha. Si fue un error, usa <b>Anular</b>.`, `Registra sus gastos (y otros ingresos) con ${btn('camera', 'Gasto')} u <b>Otro ingreso</b> dentro de la actividad, o desde el libro eligiendo la actividad en el formulario. La actividad muestra entradas, salidas y su resultado.`)}
+      ${tip(`Para entregar dinero extra a un ministerio (además de su ítem) presiona ${icon('transfer', 13)} <b>A ministerio</b>: queda como gasto aquí y como ingreso en la caja del ministerio. Si te equivocas, anúlala con el basurero del movimiento.`)}
       ${tip(`Los movimientos con ${icon('lock', 13)} son transferencias de ítems a ministerios, diezmos o cuotas de actividades. No se editan aquí: se corrigen desde el ministerio, el apartado Diezmos o la actividad.`, 'warn')}`
     },
     {

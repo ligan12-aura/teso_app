@@ -100,8 +100,8 @@ function renderInterno(root, ctx) {
       </header>
       ${movs.length ? `<ul class="mov-list">
         ${movs.map((x) => `
-        <li class="${x.origen === 'transferencia' ? 'is-item' : ''}">
-          <span class="ml-ico ${x.tipo}">${icon(x.origen === 'transferencia' ? 'transfer' : x.tipo === 'ingreso' ? 'down' : 'up', 16)}</span>
+        <li class="${x.origen === 'transferencia' || x.origen === 'aporte' ? 'is-item' : ''}">
+          <span class="ml-ico ${x.tipo}">${icon(x.origen === 'transferencia' || x.origen === 'aporte' ? 'transfer' : x.tipo === 'ingreso' ? 'down' : 'up', 16)}</span>
           <div class="ml-main">
             <strong>${esc(x.descripcion || x.categoria)}</strong>
             <span>${esc(x.categoria)} · ${fecha(x.fecha)}${x.actividadId && actNombre[x.actividadId] ? ` · <a class="tag" href="#/${base}/actividad/${x.actividadId}">${icon('calendar', 11)} ${esc(actNombre[x.actividadId])}</a>` : ''}</span>

@@ -82,6 +82,8 @@ var TesoCore = (function () {
   // Categorías que solo se crean automáticamente al transferir un ítem
   var RESERVADAS = { ministerio: 'Ítem mensual', general: 'Asignación ministerios' };
   var SALDO_INICIAL = 'Saldo inicial';
+  // Transferencia extra de la tesorería general a un ministerio (además del ítem): ingreso de esta categoría en el ministerio
+  var APORTE = 'Aporte de tesorería';
   // Las cuotas de actividades se registran solo desde la actividad
   var CUOTA = 'Cuota de actividad';
   // En la tesorería general las cuotas de una actividad entran como ingreso de esta categoría
@@ -801,6 +803,7 @@ var TesoCore = (function () {
       if (!cat) throw TesoError('Selecciona una categoría');
       if (cat === RESERVADAS[ambito] && !permitirReservada) throw TesoError('La categoría "' + cat + '" se registra automáticamente al transferir el ítem.');
       if (ambito === 'ministerio' && cat === CUOTA && !permitirReservada) throw TesoError('Las cuotas se registran desde la actividad (Actividades → registrar pago).');
+      if (ambito === 'ministerio' && cat === APORTE) throw TesoError('La categoría "' + APORTE + '" se registra automáticamente cuando tesorería transfiere al ministerio.');
       if (ambito === 'ministerio' && cat === SALDO_INICIAL && !permitirReservada) throw TesoError('La categoría "' + SALDO_INICIAL + '" solo se crea al importar el historial del ministerio.');
       return { fecha: p.fecha, tipo: tipo, categoria: cat, descripcion: String(p.descripcion || '').trim().slice(0, 300), monto: monto };
     }
@@ -874,6 +877,7 @@ var TesoCore = (function () {
       // Si el ministerio ya no usa actividades, una cuota se puede quitar desde Finanzas (no editar)
       if (mov.origen === 'cuota' && paraBorrar && getMinisterio(mov.ministerioId).actividades !== 'si') return mov;
       if (mov.origen === 'cuota') throw TesoError('Esta cuota se administra desde su actividad: ahí puedes anular el pago.');
+      if (mov.origen === 'aporte') throw TesoError('Este ingreso es una transferencia de la tesorería general; si hubo un error, anúlala desde Tesorería (botón Anular en el movimiento).');
       if (mov.origen === 'transferencia') throw TesoError('El ítem mensual se registra al transferirlo; si hubo un error, anúlalo desde el panel de rendición del ministerio (botón Anular).');
       if (!tesoreriaSobre(user, mov.ministerioId) && (mov.categoria === SALDO_INICIAL || transferenciaDeMov(mov.id))) {
         throw TesoError('El saldo inicial y los ítems recibidos solo los puede corregir el tesorero.', 'FORBIDDEN');
@@ -1343,6 +1347,52 @@ var TesoCore = (function () {
       return { id: t.id };
     }
 
+    // ---------------- Transferencia extra a un ministerio ----------------
+    // Sale de la tesorería general (gasto "Asignación ministerios") y entra en la caja del ministerio (ingreso "Aporte de tesorería").
+    function transferirAMinisterio(user, p) {
+      var m = getMinisterio(p.ministerioId);
+      if (!toBool(m.activo)) throw TesoError(m.nombre + ' está inactivo.');
+      if (lideraMin(user, m.id)) throw TesoError('Lideras ' + m.nombre + ': la transferencia debe registrarla otro tesorero, el pastor o el administrador.');
+      if (!isDate(p.fecha)) throw TesoError('Fecha inválida');
+      if (p.fecha > env.today()) throw TesoError('La fecha no puede ser futura');
+      if (p.fecha < '2000-01-01') throw TesoError('Fecha inválida');
+      var monto = Math.round(Number(p.monto));
+      if (!(monto > 0)) throw TesoError('El monto debe ser mayor a 0');
+      if (monto > MAX_MONTO) throw TesoError('El monto es demasiado grande (máx. $1.000.000.000)');
+      var mes = p.fecha.slice(0, 7);
+      var e = estadoRendicion(m.id, mes);
+      if (e === 'enviada' || e === 'aprobada') throw TesoError('La rendición de ' + labelMes(mes) + ' de ' + m.nombre + ' ya fue ' + (e === 'enviada' ? 'enviada' : 'aprobada') + ': elige una fecha de un mes abierto.');
+      exigirPresupuestoGeneral(mes, monto);
+      var medio = String(p.medio || '').trim();
+      if (MEDIOS.indexOf(medio) < 0) medio = 'Transferencia';
+      var motivo = String(p.descripcion || '').trim().slice(0, 200);
+      var now = env.now();
+      var gid = uid(), mmid = uid();
+      insert('MovimientosMinisterios', {
+        id: mmid, ministerioId: m.id, fecha: p.fecha, mes: mes, tipo: 'ingreso', categoria: APORTE,
+        descripcion: motivo || 'Transferencia de tesorería', monto: monto, origen: 'aporte', refId: gid,
+        archivoId: '', creadoPor: user.id, creadoEn: now, actualizadoEn: now
+      });
+      return insert('MovimientosGenerales', {
+        id: gid, fecha: p.fecha, mes: mes, tipo: 'gasto', categoria: RESERVADAS.general,
+        descripcion: 'Transferencia a ' + m.nombre + (motivo ? ' · ' + motivo : ''), monto: monto, medio: medio, grupo: grupoDe('gasto', RESERVADAS.general),
+        ministerioId: m.id, origen: 'aporte', refId: mmid, creadoPor: user.id, creadoEn: now, actualizadoEn: now
+      });
+    }
+    function anularAporte(user, p) {
+      var g = find('MovimientosGenerales', p.id);
+      if (!g || g.origen !== 'aporte') throw TesoError('Transferencia no encontrada');
+      if (lideraMin(user, g.ministerioId)) throw TesoError('No puedes anular una transferencia a un ministerio que lideras: debe hacerlo otro tesorero, el pastor o el administrador.');
+      var mm = g.refId && find('MovimientosMinisterios', g.refId);
+      if (mm) {
+        var e = estadoRendicion(mm.ministerioId, mm.mes);
+        if (e === 'enviada' || e === 'aprobada') throw TesoError('La rendición de ' + labelMes(mm.mes) + ' del ministerio ya fue ' + (e === 'enviada' ? 'enviada' : 'aprobada') + ' con este ingreso: primero debe quedar observada o retirarse.');
+        remove('MovimientosMinisterios', mm.id);
+      }
+      remove('MovimientosGenerales', g.id);
+      return { id: g.id };
+    }
+
     // ---------------- Tesorería general ----------------
     function datosGeneral(p, permitirReservada) {
       var d = validarMov(p, 'general', permitirReservada);
@@ -1410,6 +1460,7 @@ var TesoCore = (function () {
     function movGeneralManual(id) {
       var mov = find('MovimientosGenerales', id);
       if (!mov) throw TesoError('Movimiento no encontrado');
+      if (mov.origen === 'aporte') throw TesoError('Esta transferencia a un ministerio no se edita: anúlala (botón Anular) y regístrala de nuevo.');
       if (mov.origen === 'transferencia') throw TesoError('Este movimiento es la transferencia de un ítem; anúlalo desde el detalle del ministerio (botón Anular en el panel de rendición).');
       if (mov.origen === 'diezmo') throw TesoError('Este ingreso corresponde a un diezmo registrado por hermano; corrígelo o elimínalo en el apartado Diezmos.');
       if (mov.origen === 'cuota') throw TesoError('Este ingreso es el pago de una cuota: anúlalo desde la actividad (Tesorería → Actividades).');
@@ -2354,6 +2405,8 @@ var TesoCore = (function () {
       revisarRendicion: { fn: revisarRendicion, role: T, write: true },
       transferirItem: { fn: transferirItem, role: T, write: true },
       anularTransferencia: { fn: anularTransferencia, role: T, write: true },
+      transferirAMinisterio: { fn: transferirAMinisterio, role: T, write: true },
+      anularAporte: { fn: anularAporte, role: T, write: true },
       addMovGeneral: { fn: addMovGeneral, role: T, write: true },
       addMovGeneralLote: { fn: addMovGeneralLote, role: T, write: true },
       updateMovGeneral: { fn: updateMovGeneral, role: T, write: true },

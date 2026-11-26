@@ -1,6 +1,6 @@
 import { pesos, formatoPesos, icon, esc, money, moneyShort, cap, mesLargo, mesCorto, fecha, chart, COLOR, monthPicker, bindMonthPicker, modal, formData, toast, confirmar, verArchivo, emptyState, sinTildes, coincide } from '../ui.js';
 import { call } from '../api.js';
-import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe, presupuestoGeneralMensual } from '../calc.js';
+import { split, saldoGeneralHasta, monthsBack, serieGeneral, porGrupo, grupoDe, presupuestoGeneralMensual, lideraMinisterio } from '../calc.js';
 import { PALETA } from '../ui.js';
 import { abrirFormMovimiento } from './movform.js';
 import { renderSeccion as renderActividades, tabsTesoreria, actividadesGenerales } from './actividadesGeneral.js';
@@ -44,6 +44,37 @@ export function registrarCulto(ctx) {
       if (!items.length) throw new Error('Ingresa al menos un monto');
       const r = await call('addMovGeneralLote', { fecha: d.fecha, medio: d.medio, descripcion: d.descripcion, items });
       toast(`${r.creados} ingreso${r.creados > 1 ? 's' : ''} registrado${r.creados > 1 ? 's' : ''}`);
+      await ctx.refresh();
+    }
+  });
+}
+
+// Transferencia extra a un ministerio (además del ítem): gasto en la tesorería general e ingreso en la caja del ministerio
+export function transferirAMinisterio(ctx) {
+  const mins = ctx.data.ministerios.filter((m) => m.activo && !(ctx.user && lideraMinisterio(ctx.user, m.id)));
+  if (!mins.length) return toast('No hay ministerios activos a los que puedas transferir', 'err');
+  return modal({
+    title: 'Transferir a un ministerio',
+    body: `<p class="muted">Registra dinero que la tesorería entrega a un ministerio, además de su ítem mensual. Queda como <b>gasto</b> en la tesorería general y como <b>ingreso</b> en la caja del ministerio.</p>
+      <label class="field"><span>Ministerio</span><select name="ministerioId" required><option value="">Elige un ministerio…</option>${mins.map((m) => `<option value="${esc(m.id)}">${esc(m.icono || '')} ${esc(m.nombre)}</option>`).join('')}</select></label>
+      <div class="form-row">
+        <label class="field"><span>Monto</span><input name="monto" inputmode="numeric" class="input-money" placeholder="0" required></label>
+        <label class="field"><span>Fecha</span><input type="date" name="fecha" value="${ctx.data.hoy}" max="${ctx.data.hoy}" required></label>
+      </div>
+      <div class="form-row">
+        <label class="field"><span>Medio</span><select name="medio">${ctx.data.medios.map((m) => `<option ${m === 'Transferencia' ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+        <label class="field"><span>Motivo (opcional)</span><input name="descripcion" maxlength="200" placeholder="Ej.: apoyo para el campamento"></label>
+      </div>
+      <p class="muted small">Para el ítem mensual usa el botón <b>Ítem</b> del ministerio. Si te equivocas, anula la transferencia desde este libro de movimientos.</p>`,
+    submitLabel: 'Registrar transferencia',
+    onOpen(f) { formatoPesos(f.monto); },
+    async onSubmit(f) {
+      const d = formData(f);
+      if (!d.ministerioId) throw new Error('Elige el ministerio');
+      if (!(pesos(d.monto) > 0)) throw new Error('Ingresa el monto');
+      const m = mins.find((x) => x.id === d.ministerioId);
+      await call('transferirAMinisterio', { ministerioId: d.ministerioId, monto: pesos(d.monto), fecha: d.fecha, medio: d.medio, descripcion: d.descripcion });
+      toast(`Transferencia a ${m ? m.nombre : 'el ministerio'} registrada`);
       await ctx.refresh();
     }
   });
@@ -116,6 +147,7 @@ export function render(root, ctx) {
       <div><h3>Libro de movimientos</h3><p class="muted">${lista.length} movimiento${lista.length === 1 ? '' : 's'}${hayFiltros ? ` de ${periodoMovs.length} · con filtros` : ''}</p></div>
       <div class="head-actions">
         <button class="btn btn-ghost btn-sm" data-culto>${icon('church', 16)} Registrar culto</button>
+        <button class="btn btn-ghost btn-sm" data-aporte>${icon('transfer', 16)} A ministerio</button>
         <button class="btn btn-soft-green btn-sm" data-add="ingreso">${icon('plus', 16)} Ingreso</button>
         <button class="btn btn-soft-rose btn-sm" data-add="gasto">${icon('plus', 16)} Gasto</button>
       </div>
@@ -136,13 +168,13 @@ export function render(root, ctx) {
           <tr>
             <td class="nowrap">${fecha(m.fecha)}</td>
             <td><span class="cat-pill ${m.tipo}">${esc(m.categoria)}</span><small class="grp">${esc(grupoDe(m.tipo, m.categoria))}</small></td>
-            <td class="desc">${esc(m.descripcion)}${m.origen === 'transferencia' && minName[m.ministerioId] ? ` <a class="tag" href="#/ministerio/${m.ministerioId}">${esc(minName[m.ministerioId].icono)} Ítem</a>` : ''}${m.actividadId && actNom[m.actividadId] ? ` <a class="tag" href="#/general/actividad/${m.actividadId}">${icon('calendar', 12)} ${esc(actNom[m.actividadId])}</a>` : ''}</td>
+            <td class="desc">${esc(m.descripcion)}${m.origen === 'transferencia' && minName[m.ministerioId] ? ` <a class="tag" href="#/ministerio/${m.ministerioId}">${esc(minName[m.ministerioId].icono)} Ítem</a>` : ''}${m.origen === 'aporte' && minName[m.ministerioId] ? ` <a class="tag" href="#/ministerio/${m.ministerioId}">${esc(minName[m.ministerioId].icono)} ${esc(minName[m.ministerioId].nombre)}</a>` : ''}${m.actividadId && actNom[m.actividadId] ? ` <a class="tag" href="#/general/actividad/${m.actividadId}">${icon('calendar', 12)} ${esc(actNom[m.actividadId])}</a>` : ''}</td>
             <td class="hide-sm muted">${esc(m.medio)}</td>
             <td class="num ${m.tipo} strong">${m.tipo === 'ingreso' ? '+' : '−'}${money(m.monto)}</td>
             <td class="num hide-sm muted">${saldoTras.has(m.id) ? money(saldoTras.get(m.id)) : ''}</td>
             <td class="row-actions">
               ${m.archivoId ? `<button class="icon-btn sm" data-ver="${m.id}" title="Ver comprobante">${icon('receipt', 16)}</button>` : ''}
-              ${!['transferencia', 'diezmo', 'cuota'].includes(m.origen) ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="${m.origen === 'diezmo' ? 'Diezmo por hermano: se corrige en el apartado Diezmos' : m.origen === 'cuota' ? 'Cuota de una actividad: se anula desde la actividad' : 'Transferencia de ítem: se anula desde el detalle del ministerio'}">${icon('lock', 15)}</span>`}
+              ${m.origen === 'aporte' ? `<button class="icon-btn sm danger" data-anular-aporte="${m.id}" title="Anular transferencia al ministerio">${icon('trash', 16)}</button>` : !['transferencia', 'diezmo', 'cuota'].includes(m.origen) ? `<button class="icon-btn sm" data-edit="${m.id}" title="Editar">${icon('edit', 16)}</button><button class="icon-btn sm danger" data-del="${m.id}" title="Eliminar">${icon('trash', 16)}</button>` : `<span class="icon-btn sm ghost" title="${m.origen === 'diezmo' ? 'Diezmo por hermano: se corrige en el apartado Diezmos' : m.origen === 'cuota' ? 'Cuota de una actividad: se anula desde la actividad' : 'Transferencia de ítem: se anula desde el detalle del ministerio'}">${icon('lock', 15)}</span>`}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -163,6 +195,13 @@ export function render(root, ctx) {
     });
   });
   root.querySelector('[data-culto]').addEventListener('click', () => registrarCulto(ctx));
+  root.querySelector('[data-aporte]').addEventListener('click', () => transferirAMinisterio(ctx));
+  root.querySelectorAll('[data-anular-aporte]').forEach((b) => b.addEventListener('click', async () => {
+    const m = data.movGenerales.find((x) => x.id === b.dataset.anularAporte);
+    const nom = minName[m.ministerioId]?.nombre || 'el ministerio';
+    if (!(await confirmar(`Se eliminará el gasto de <b>${money(m.monto)}</b> en la tesorería general y el ingreso en la caja de <b>${esc(nom)}</b>.`, { titulo: 'Anular transferencia', boton: 'Anular', danger: true }))) return;
+    try { await call('anularAporte', { id: m.id }); toast('Transferencia anulada'); await ctx.refresh(); } catch (e) { toast(e.message, 'err'); }
+  }));
   root.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => nuevoMovGeneral(ctx, b.dataset.add)));
   const byId = (id) => data.movGenerales.find((m) => m.id === id);
   root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => nuevoMovGeneral(ctx, null, byId(b.dataset.edit))));
