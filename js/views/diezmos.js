@@ -5,6 +5,7 @@ import { call } from '../api.js';
 import { editarMiembro, inactivoEnAnio } from './miembros.js';
 import { importarHistorialDiezmos } from './diezmosImportar.js';
 import { abrirReportesWsp } from './diezmosWsp.js';
+import { puntualidad, tarjetaPuntualidad, graficoPuntualidad } from './diezmosPuntualidad.js';
 
 // Un diezmo cuenta para un hermano si lo dio él o su matrimonio
 export const esDeMiembro = (d, mid) => d.miembroId === mid || d.conyugeId === mid;
@@ -41,7 +42,7 @@ export const CATEG_DIEZMO = {
   irregular: { label: 'Irregular', cls: 'st-obs', color: '#d99a1e', desc: 'diezma algunos meses' },
   sin: { label: 'No diezma', cls: 'st-sin', color: '#d4515f', desc: 'sin diezmos en el período' }
 };
-const vista = { filtro: 'todos', inactivos: false, q: '' };
+const vista = { filtro: 'todos', inactivos: false, q: '', punt: '' };
 
 // Hasta qué mes (sin incluirlo, 0-12) se evalúa a un hermano en el año "anio":
 // - el mes en curso solo cuenta si ya tiene diezmo (mientras no termina, no es una falta);
@@ -230,7 +231,10 @@ export function render(root, ctx) {
     } else filasTabla.push({ ...x, nombreFila: x.m.nombre });
   });
   filasTabla.sort((a, b) => a.nombreFila.localeCompare(b.nombreFila, 'es'));
-  const lista = filasTabla.filter((x) => (vista.inactivos || x.enPeriodo) && (vista.filtro === 'todos' || (x.enPeriodo && x.cat === vista.filtro)) && (!q || coincide(x.nombreFila, q)));
+  // puntualidad: cuánto se demoran en entregar el diezmo de cada mes (últimos 12 meses ya vencidos)
+  const punt = puntualidad(data, regulares);
+  filasTabla.forEach((x) => { x.punt = punt.deFila(x.conyuge ? [x.m.id, x.conyuge.id] : [x.m.id]); });
+  const lista = filasTabla.filter((x) => (vista.inactivos || x.enPeriodo) && (vista.filtro === 'todos' || (x.enPeriodo && x.cat === vista.filtro)) && (!vista.punt || (x.punt && (vista.punt === 'puntual') === x.punt.puntual)) && (!q || coincide(x.nombreFila, q)));
   const noHabAnio = todos.filter((x) => !x.habilitado && x.m.estado === 'activo').length;
   const maxCelda = Math.max(1, ...filasTabla.flatMap((x) => x.meses));
   const nomMes = cap(mesLargo(mes));
@@ -273,6 +277,8 @@ export function render(root, ctx) {
     </article>
   </section>
 
+  ${tarjetaPuntualidad(punt)}
+
   <article class="card">
     <header class="card-head wrap"><div><h3>${nomMes}</h3><p class="muted">Toca un nombre para ver, registrar o editar su diezmo de este mes${noHabMes.length ? ` · ${noHabMes.length} hermano${noHabMes.length > 1 ? 's' : ''} no habilitado${noHabMes.length > 1 ? 's' : ''} para diezmar no se cuenta${noHabMes.length > 1 ? 'n' : ''}` : ''}</p></div></header>
     <div class="dm-cols">
@@ -299,6 +305,7 @@ export function render(root, ctx) {
       <div class="seg seg-sm">
         ${[['todos', 'Todos'], ['constante', 'Constantes'], ['irregular', 'Irregulares'], ['sin', 'No diezman']].map(([k, l]) => `<label><input type="radio" name="fcat" value="${k}" ${vista.filtro === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}
       </div>
+      <select data-punt aria-label="Puntualidad"><option value="">Toda puntualidad</option><option value="puntual" ${vista.punt === 'puntual' ? 'selected' : ''}>Puntuales</option><option value="atrasa" ${vista.punt === 'atrasa' ? 'selected' : ''}>Se atrasan</option></select>
       <label class="check"><input type="checkbox" data-inactivos ${vista.inactivos ? 'checked' : ''}> Mostrar inactivos</label>
     </div>
     ${lista.length ? `<div class="table-wrap diezmo-wrap"><table class="table diezmo-grid">
@@ -308,7 +315,7 @@ export function render(root, ctx) {
           <td class="dg-nombre">${x.conyuge ? `💍 <button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button> y <button class="link-btn dg-ficha" data-ficha="${x.conyuge.id}">${esc(x.conyuge.nombre)}</button>` : `<button class="link-btn dg-ficha" data-ficha="${x.m.id}">${esc(x.m.nombre)}</button>`}${x.m.estado === 'activo' && x.habilitado && x.cat !== 'sin' && x.racha >= 2 ? `<small class="dg-racha">${x.racha} meses sin diezmar</small>` : ''}</td>
           ${x.meses.map((v, i) => `<td class="num dg-celda ${i >= mesesPeriodo ? 'futuro' : ''} ${i === mi ? 'sel' : ''} ${(x.inactivoAnio || (x.m.estado !== 'activo' && i >= x.activoHasta) || i < x.activoDesde) && i < mesesPeriodo ? 'baja' : ''} ${v ? 'con' : ''} ${x.pareja[i] ? 'pareja' : ''}" data-celda="${x.m.id}" data-mes="${i + 1}" data-pareja="${x.conyuge ? 1 : 0}" ${v ? `style="--int:${(0.25 + 0.75 * (v / maxCelda)).toFixed(2)}"` : ''} title="${esc(x.m.nombre)} · ${MESES_C[i]}${v ? ': ' + money(v) + (x.pareja[i] ? ' (diezmo del matrimonio)' : '') : ''}">${v ? moneyShort(v) : i < mesesPeriodo ? '·' : ''}</td>`).join('')}
           <td class="num strong">${x.total ? money(x.total) : '—'}</td>
-          <td>${x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : x.inactivoAnio && x.m.estado === 'activo' ? `<span class="badge st-open" title="Marcado como inactivo en ${anio} en su ficha: ese año no se evalúa">Inactivo en ${anio}</span>` : x.m.estado !== 'activo' ? `<span class="badge st-open">${{ trasladado: 'Trasladado', fallecido: 'Fallecido' }[x.m.estado] || 'Inactivo'}</span>` : !x.habilitado ? '<span class="tag tag-gris" title="Estudiante o sin ingresos: no se cuenta en la estadística">No habilitado</span>' : '<span class="muted">—</span>'}${x.bajaEnAnio ? `<small class="dg-baja">${{ trasladado: 'traslado', fallecido: 'fallecimiento' }[x.m.estado] || 'baja'} ${MESES_C[x.bajaEnAnio - 1].toLowerCase()}</small>` : ''}</td>
+          <td>${x.cat ? `<span class="badge ${CATEG_DIEZMO[x.cat].cls}">${CATEG_DIEZMO[x.cat].label}</span>` : x.inactivoAnio && x.m.estado === 'activo' ? `<span class="badge st-open" title="Marcado como inactivo en ${anio} en su ficha: ese año no se evalúa">Inactivo en ${anio}</span>` : x.m.estado !== 'activo' ? `<span class="badge st-open">${{ trasladado: 'Trasladado', fallecido: 'Fallecido' }[x.m.estado] || 'Inactivo'}</span>` : !x.habilitado ? '<span class="tag tag-gris" title="Estudiante o sin ingresos: no se cuenta en la estadística">No habilitado</span>' : '<span class="muted">—</span>'}${x.punt ? `<small class="dg-punt ${x.punt.puntual ? 'ok' : 'tarde'}" title="Mediana de ${x.punt.veces} diezmos de los últimos 12 meses">${x.punt.puntual ? 'Puntual' : `Se atrasa ~${x.punt.dias} días`}</small>` : ''}${x.bajaEnAnio ? `<small class="dg-baja">${{ trasladado: 'traslado', fallecido: 'fallecimiento' }[x.m.estado] || 'baja'} ${MESES_C[x.bajaEnAnio - 1].toLowerCase()}</small>` : ''}</td>
         </tr>`).join('')}</tbody>
       <tfoot><tr><td class="dg-nombre"><b>Total</b></td>${totales.map((v, i) => `<td class="num ${i === mi ? 'sel' : ''}"><b>${v ? moneyShort(v) : ''}</b></td>`).join('')}<td class="num"><b>${money(totalAnio)}</b></td><td></td></tr></tfoot>
     </table></div>` : emptyState(data.miembros.length ? 'Nadie coincide con los filtros' : 'Aún no hay miembros registrados', 'users')}
@@ -332,6 +339,11 @@ export function render(root, ctx) {
     const m = porId[b.dataset.abrir];
     if (m) diezmoDelMes(ctx, m, mes);
   }));
+  root.querySelectorAll('[data-abrir-pend]').forEach((b) => b.addEventListener('click', () => {
+    const m = porId[b.dataset.abrirPend];
+    if (m) diezmoDelMes(ctx, m, punt.mesPrev);
+  }));
+  root.querySelector('[data-punt]')?.addEventListener('change', (e) => { vista.punt = e.target.value; render(root, ctx); });
   root.querySelectorAll('[name=fcat]').forEach((r) => r.addEventListener('change', () => { vista.filtro = r.value; render(root, ctx); }));
   root.querySelector('[data-inactivos]')?.addEventListener('change', (e) => { vista.inactivos = e.target.checked; render(root, ctx); });
   const qi = root.querySelector('[data-q]');
@@ -367,6 +379,7 @@ export function render(root, ctx) {
       }
     }
   });
+  graficoPuntualidad(root.querySelector('#ch-punt'), punt);
   if (activos.length) {
     chart(root.querySelector('#ch-cat'), {
       type: 'doughnut',

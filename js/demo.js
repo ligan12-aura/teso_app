@@ -4,8 +4,8 @@
  * Sirve para probar la app sin configurar Google.
  */
 
-const DB_KEY = 'teso_demo_db_v7';
-try { ['v1', 'v2', 'v3', 'v4', 'v5', 'v6'].forEach((v) => localStorage.removeItem('teso_demo_db_' + v)); } catch (e) { /* sin almacenamiento */ }
+const DB_KEY = 'teso_demo_db_v8';
+try { ['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7'].forEach((v) => localStorage.removeItem('teso_demo_db_' + v)); } catch (e) { /* sin almacenamiento */ }
 const FILES_KEY = 'teso_demo_files_v1';
 const SECRET_KEY = 'teso_demo_secret';
 
@@ -314,7 +314,9 @@ function seed() {
     const base = between(15000, 90000);
     months.filter((mm) => mm.startsWith(curMonth.slice(0, 4))).forEach((mm) => {
       const da = perfil === 'constante' ? rand() > 0.05 : perfil === 'irregular' ? rand() > 0.55 : false;
-      const f = dateIn(mm, 1 + Math.floor(rand() * 26));
+      // la mayoría entrega el diezmo de un mes a fin de ese mes o a principios del siguiente; algunos se atrasan
+      const r = rand(), sig = TesoCore.nextMonth(mm), sig2 = TesoCore.nextMonth(sig);
+      const f = r < 0.2 ? dateIn(mm, 20 + Math.floor(rand() * 9)) : r < (perfil === 'constante' ? 0.85 : 0.6) ? dateIn(sig, 1 + Math.floor(rand() * 10)) : r < 0.93 ? dateIn(sig, 11 + Math.floor(rand() * 17)) : dateIn(sig2, 1 + Math.floor(rand() * 20));
       if (da && notFuture(f)) db.Diezmos.push({ id: id(), miembroId: mid, fecha: f, mes: mm, monto: base, medio: rand() > 0.5 ? 'Efectivo' : 'Transferencia', notas: '', creadoPor: tesoreroId, creadoEn: now, actualizadoEn: now });
     });
   });

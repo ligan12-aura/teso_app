@@ -83,6 +83,7 @@ const PAGINAS = {
     { en: '.kpis', titulo: 'Cifras del mes', texto: 'Total diezmado, cuántos diezmaron y cuántos no, y el promedio por hermano (un matrimonio cuenta como 2).' },
     { en: 't:Mes a mes', titulo: 'Mes a mes', texto: 'Barras = total de cada mes; la línea verde = porcentaje de hermanos habilitados que diezmó.' },
     { en: 't:Hermanos en', titulo: 'Constancia', texto: 'Cuántos diezman de forma constante, irregular o no diezman en el año.' },
+    { en: 't:Puntualidad del diezmo', titulo: 'Puntualidad', texto: 'Cuánto se demoran los hermanos en entregar el diezmo de cada mes: adelantado, puntual (hasta el día 10 del mes siguiente), atrasado o sin entregar. Abajo, quiénes aún no entregan el del mes anterior.' },
     { en: 'b:Reportes por WhatsApp', titulo: 'Reportes por WhatsApp', texto: 'Envía a cada hermano el resumen personal de sus diezmos del año. Puedes filtrar por constantes, irregulares o los que no diezman, editar el mensaje y ver cuáles ya se enviaron.' },
     { en: 't:Diezmos por hermano', titulo: 'Diezmos por hermano', texto: 'Una fila por hermano y una columna por mes. Toca una celda para registrar o corregir su diezmo de ese mes.' },
   ],
